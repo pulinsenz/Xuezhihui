@@ -1,0 +1,65 @@
+server:
+  port: 8123
+  servlet:
+    context-path: /api
+spring:
+  application:
+    name: yu-picture-backend
+  #数据库配置
+  datasource:
+    url: jdbc:mysql://localhost:3306/yu_picture?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: root
+    password: 111111
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  #redis数据库配置
+  redis:
+    database: 0
+    host: 127.0.0.1
+    port: 6379
+    timeout: 5000
+  #session+redis
+  session:
+    store-type: redis
+    timeout: 2592000
+    cookie:
+      max-age: 2592000
+  #文件上传配置
+  servlet:
+    multipart:
+      max-file-size: 10MB
+#
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-value: 1 # 逻辑删除字段值
+      logic-not-delete-value: 0 # 逻辑未删除字段值
+      logic-delete-field: isDeleted # 逻辑删除字段名
+# CORS 配置（生产环境请在 application-prod.yml 中配置前端域名）
+app:
+  cors:
+    allowed-origin-patterns:
+      - http://localhost:5173
+      - http://127.0.0.1:5173
+#接口文档配置（生产环境默认关闭，本地开发在 application-local.yml 中开启）
+knife4j:
+  enable: false
+  openapi:
+    title: 接口文档
+    version: 1.0
+    group:
+      default:
+        api-rule: package
+        api-rule-resources:
+          - com.yupi.yupicturebackend.controller
+#对象存储配置(从腾讯云获取)
+cos:
+  client:
+    host: ${cos.host}
+    secretId: ${cos.secretId}
+    secretKey: ${cos.secretKey}
+    region: ${cos.region}
+    bucket: ${cos.bucket}
+
