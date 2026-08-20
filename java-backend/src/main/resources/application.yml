@@ -17,12 +17,6 @@ spring:
     host: 127.0.0.1
     port: 6379
     timeout: 5000
-  #session+redis
-  session:
-    store-type: redis
-    timeout: 2592000
-    cookie:
-      max-age: 2592000
   #文件上传配置
   servlet:
     multipart:
@@ -53,7 +47,7 @@ knife4j:
       default:
         api-rule: package
         api-rule-resources:
-          - com.yupi.yupicturebackend.controller
+          - com.agent.rag.controller
 #对象存储配置(从腾讯云获取)
 cos:
   client:
@@ -62,4 +56,11 @@ cos:
     secretKey: ${cos.secretKey}
     region: ${cos.region}
     bucket: ${cos.bucket}
+#JWT 鉴权配置（secret 生产环境务必替换）
+jwt:
+  secret: 30ce91e3d1b616c00862ef27fe0f859035470c8091f88caca271613acf66dd80
+  expire-hours: 24
+  header: Authorization
+  token-prefix: "Bearer "
+  redis-prefix: "xzh:login:"
 
