@@ -4,10 +4,10 @@ server:
     context-path: /api
 spring:
   application:
-    name: yu-picture-backend
+    name: xuezhihui-backend
   #数据库配置
   datasource:
-    url: jdbc:mysql://localhost:3306/yu_picture?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    url: jdbc:mysql://localhost:3306/xuezhihui?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
     username: root
     password: 111111
     driver-class-name: com.mysql.cj.jdbc.Driver
