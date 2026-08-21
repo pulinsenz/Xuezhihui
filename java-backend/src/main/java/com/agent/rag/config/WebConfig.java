@@ -26,11 +26,13 @@ public class WebConfig implements WebMvcConfigurer {
                         // 登录注册无需鉴权
                         "/auth/login",
                         "/auth/register",
-                        // 接口文档
+                        // 接口文档 (OpenAPI 3 / Knife4j)
                         "/doc.html",
                         "/webjars/**",
-                        "/v2/api-docs/**",
+                        "/v3/api-docs/**",
                         "/swagger-resources/**",
+                        "/swagger-ui/**",
+                        "/favicon.ico",
                         // 错误页
                         "/error"
                 );

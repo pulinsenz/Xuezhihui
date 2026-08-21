@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * @author pulinsenz
  */
-@SpringBootTest
+@SpringBootTest(properties = "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef")
 @AutoConfigureMockMvc
 class AuthControllerTest {
 

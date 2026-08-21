@@ -53,7 +53,13 @@ public class LoginInterceptor implements HandlerInterceptor {
         }
         // 2. 校验 Redis 白名单（支持强制下线）
         String redisKey = jwtProperties.getRedisPrefix() + token;
-        String userIdStr = stringRedisTemplate.opsForValue().get(redisKey);
+        String userIdStr;
+        try {
+            userIdStr = stringRedisTemplate.opsForValue().get(redisKey);
+        } catch (Exception e) {
+            log.error("Redis 连接失败，无法校验白名单", e);
+            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "Redis 服务异常，请联系管理员");
+        }
         if (StrUtil.isBlank(userIdStr)) {
             throw new BusinessException(ErrorCode.NOT_LOGIN, "登录已失效，请重新登录");
         }

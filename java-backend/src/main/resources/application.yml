@@ -12,11 +12,12 @@ spring:
     password: 111111
     driver-class-name: com.mysql.cj.jdbc.Driver
   #redis数据库配置
-  redis:
-    database: 0
-    host: 127.0.0.1
-    port: 6379
-    timeout: 5000
+  data:
+    redis:
+      database: 0
+      host: 127.0.0.1
+      port: 6379
+      timeout: 5000
   #文件上传配置
   servlet:
     multipart:
@@ -37,17 +38,21 @@ app:
     allowed-origin-patterns:
       - http://localhost:5173
       - http://127.0.0.1:5173
-#接口文档配置（生产环境默认关闭，本地开发在 application-local.yml 中开启）
+  # Python Agent 服务地址（Feign 调用）
+  agent:
+    base-url: http://localhost:8000
+  # 本地文件存储路径（对象存储可替换实现）
+  file:
+    storage:
+      local-path: ./data/files
+#接口文档配置（生产环境默认关闭，本地开发开启增强模式）
 knife4j:
-  enable: false
-  openapi:
-    title: 接口文档
-    version: 1.0
-    group:
-      default:
-        api-rule: package
-        api-rule-resources:
-          - com.agent.rag.controller
+  enable: true
+  setting:
+    language: zh_cn
+springdoc:
+  api-docs:
+    enabled: true
 #对象存储配置(从腾讯云获取)
 cos:
   client:
@@ -56,11 +61,10 @@ cos:
     secretKey: ${cos.secretKey}
     region: ${cos.region}
     bucket: ${cos.bucket}
-#JWT 鉴权配置（secret 生产环境务必替换）
+#JWT 鉴权配置（密钥通过环境变量注入，不落库；本地在 IntelliJ 运行配置设置 JWT_SECRET）
 jwt:
-  secret: 30ce91e3d1b616c00862ef27fe0f859035470c8091f88caca271613acf66dd80
+  secret: ${JWT_SECRET}
   expire-hours: 24
   header: Authorization
   token-prefix: "Bearer "
   redis-prefix: "xzh:login:"
-
