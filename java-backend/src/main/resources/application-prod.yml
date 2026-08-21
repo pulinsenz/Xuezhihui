@@ -1,0 +1,7 @@
+# 生产环境配置，启动时加：--spring.profiles.active=prod
+app:
+  cors:
+    allowed-origin-patterns:
+      - https://your-frontend-domain.com
+knife4j:
+  enable: false
