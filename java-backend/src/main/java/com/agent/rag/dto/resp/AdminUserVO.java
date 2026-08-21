@@ -2,6 +2,8 @@ package com.agent.rag.dto.resp;
 
 import com.agent.rag.entity.User;
 import lombok.Data;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+import com.fasterxml.jackson.databind.ser.std.ToStringSerializer;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -14,6 +16,7 @@ import java.time.LocalDateTime;
 @Data
 public class AdminUserVO implements Serializable {
 
+    @JsonSerialize(using = ToStringSerializer.class)
     private Long id;
 
     private String userAccount;
