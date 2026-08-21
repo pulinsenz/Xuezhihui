@@ -2,6 +2,7 @@ package com.agent.rag.interceptor;
 
 import cn.hutool.core.util.StrUtil;
 import com.agent.rag.common.ErrorCode;
+import com.agent.rag.common.annotation.RequireRole;
 import com.agent.rag.config.JwtProperties;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
@@ -14,6 +15,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerInterceptor;
 
 /**
@@ -69,6 +71,16 @@ public class LoginInterceptor implements HandlerInterceptor {
             throw new BusinessException(ErrorCode.NOT_LOGIN, "用户不存在");
         }
         UserContext.setUser(user);
+        // 4. 角色权限校验：方法/类上的 @RequireRole 注解
+        if (handler instanceof HandlerMethod handlerMethod) {
+            RequireRole requireRole = handlerMethod.getMethodAnnotation(RequireRole.class);
+            if (requireRole == null) {
+                requireRole = handlerMethod.getBeanType().getAnnotation(RequireRole.class);
+            }
+            if (requireRole != null && !requireRole.value().equals(user.getUserRole())) {
+                throw new BusinessException(ErrorCode.NO_AUTH, "无权限，需要角色: " + requireRole.value());
+            }
+        }
         return true;
     }
 

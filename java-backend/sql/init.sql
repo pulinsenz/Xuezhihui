@@ -71,3 +71,8 @@ CREATE TABLE IF NOT EXISTS `knowledge_doc`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='知识库文档';
+
+-- 5. 初始管理员账号（幂等：账号已存在则跳过）
+-- 默认账号：admin  默认密码：admin12345（登录后建议修改）
+INSERT IGNORE INTO `user` (`userAccount`, `userPassword`, `userName`, `userRole`)
+VALUES ('admin', '$2a$10$Db1RZ9oVxgAR4DDhoKY.2uv.OVB/BHkyCN88XCYxG2x1aQKbFLwzO', '管理员', 'admin');
