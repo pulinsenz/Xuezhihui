@@ -10,16 +10,28 @@
     <el-card shadow="never">
       <div class="toolbar">
         <el-input v-model="keyword" placeholder="搜索账号 / 昵称" clearable style="width: 260px" :prefix-icon="Search" @keyup.enter="loadUsers(1)" @clear="loadUsers(1)" />
+        <el-select v-model="deletedFilter" placeholder="用户状态" style="width: 140px" @change="loadUsers(1)">
+          <el-option label="全部用户" :value="null" />
+          <el-option label="正常用户" :value="0" />
+          <el-option label="已删除" :value="1" />
+        </el-select>
         <el-button type="primary" :icon="Search" @click="loadUsers(1)">查询</el-button>
       </div>
 
       <el-table :data="users" stripe v-loading="loading">
         <el-table-column prop="userAccount" label="账号" min-width="140" />
         <el-table-column prop="userName" label="昵称" min-width="140" />
-        <el-table-column label="角色" width="130">
+        <el-table-column label="角色" width="110">
           <template #default="{ row }">
             <el-tag :type="row.userRole === 'admin' ? 'warning' : 'info'" size="small">
               {{ row.userRole === 'admin' ? '管理员' : '普通用户' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.isDelete === 1 ? 'danger' : 'success'" size="small" effect="plain">
+              {{ row.isDelete === 1 ? '已删除' : '正常' }}
             </el-tag>
           </template>
         </el-table-column>
@@ -28,13 +40,23 @@
         </el-table-column>
         <el-table-column label="操作" width="200">
           <template #default="{ row }">
-            <el-button v-if="row.id !== authStore.user?.id" size="small" :icon="Edit" @click="openRoleDialog(row)">
-              {{ row.userRole === 'admin' ? '设为普通用户' : '设为管理员' }}
-            </el-button>
-            <el-button v-if="row.id !== authStore.user?.id" size="small" type="danger" :icon="Delete" @click="handleDelete(row)">
-              删除
-            </el-button>
-            <el-tag v-else size="small" type="info">当前账号</el-tag>
+            <!-- 已删除用户：仅提供恢复 -->
+            <template v-if="row.isDelete === 1">
+              <el-button v-if="row.id !== authStore.user?.id" size="small" type="success" :icon="RefreshLeft" @click="handleRestore(row)">
+                恢复
+              </el-button>
+              <el-tag v-else size="small" type="info">当前账号</el-tag>
+            </template>
+            <!-- 正常用户：改角色 / 删除 -->
+            <template v-else>
+              <el-button v-if="row.id !== authStore.user?.id" size="small" :icon="Edit" @click="openRoleDialog(row)">
+                {{ row.userRole === 'admin' ? '设为普通用户' : '设为管理员' }}
+              </el-button>
+              <el-button v-if="row.id !== authStore.user?.id" size="small" type="danger" :icon="Delete" @click="handleDelete(row)">
+                删除
+              </el-button>
+              <el-tag v-else size="small" type="info">当前账号</el-tag>
+            </template>
           </template>
         </el-table-column>
       </el-table>
@@ -65,13 +87,14 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Edit, Search } from '@element-plus/icons-vue'
-import { listUsers, updateUserRole, deleteUser } from '../api/admin'
+import { Delete, Edit, RefreshLeft, Search } from '@element-plus/icons-vue'
+import { listUsers, updateUserRole, deleteUser, restoreUser } from '../api/admin'
 import { useAuthStore } from '../stores/auth'
 
 const authStore = useAuthStore()
 
 const keyword = ref('')
+const deletedFilter = ref(0) // 默认只看正常用户；null=全部, 0=正常, 1=已删除
 const users = ref([])
 const total = ref(0)
 const pageNum = ref(1)
@@ -87,7 +110,12 @@ const loadUsers = async (page) => {
   if (page) pageNum.value = page
   loading.value = true
   try {
-    const data = await listUsers({ keyword: keyword.value.trim() || undefined, pageNum: pageNum.value, pageSize: pageSize.value })
+    const data = await listUsers({
+      keyword: keyword.value.trim() || undefined,
+      pageNum: pageNum.value,
+      pageSize: pageSize.value,
+      deleted: deletedFilter.value,
+    })
     users.value = data.records || []
     total.value = Number(data.total || 0)
   } finally {
@@ -120,6 +148,15 @@ const handleDelete = async (row) => {
   })
   await deleteUser(row.id)
   ElMessage.success('已删除')
+  loadUsers()
+}
+
+const handleRestore = async (row) => {
+  await ElMessageBox.confirm(`确定恢复用户「${row.userAccount}」吗？恢复后其可重新登录。`, '恢复确认', {
+    type: 'info',
+  })
+  await restoreUser(row.id)
+  ElMessage.success('已恢复')
   loadUsers()
 }
 

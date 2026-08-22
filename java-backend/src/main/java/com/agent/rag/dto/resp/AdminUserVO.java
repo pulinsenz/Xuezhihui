@@ -29,6 +29,11 @@ public class AdminUserVO implements Serializable {
 
     private String userRole;
 
+    /**
+     * 是否删除：0=正常、1=已删除
+     */
+    private Integer isDelete;
+
     private LocalDateTime createTime;
 
     private static final long serialVersionUID = 1L;
@@ -41,6 +46,7 @@ public class AdminUserVO implements Serializable {
         vo.setUserAvatar(user.getUserAvatar());
         vo.setUserProfile(user.getUserProfile());
         vo.setUserRole(user.getUserRole());
+        vo.setIsDelete(user.getIsDelete());
         vo.setCreateTime(user.getCreateTime());
         return vo;
     }

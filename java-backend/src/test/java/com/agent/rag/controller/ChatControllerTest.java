@@ -1,0 +1,130 @@
+package com.agent.rag.controller;
+
+import com.agent.rag.client.PythonAgentClient;
+import com.agent.rag.common.Result;
+import com.agent.rag.config.JwtProperties;
+import com.agent.rag.dto.resp.ChatResponse;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
+
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+
+/**
+ * 对话接口集成测试（ChatService 普通对话 mock PythonAgentClient）
+ * <p>
+ * SSE 透传的 Python 调用在联调阶段验证（依赖 Python Agent 运行）
+ *
+ * @author pulinsenz
+ */
+@SpringBootTest(properties = "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef")
+@AutoConfigureMockMvc
+class ChatControllerTest {
+
+    @Autowired
+    private MockMvc mockMvc;
+    @Autowired
+    private ObjectMapper objectMapper;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private JwtProperties jwtProperties;
+    @MockBean
+    private PythonAgentClient pythonAgentClient;
+
+    private final List<String> createdTokens = new ArrayList<>();
+
+    @AfterEach
+    void tearDown() {
+        createdTokens.forEach(token ->
+                stringRedisTemplate.delete(jwtProperties.getRedisPrefix() + token));
+        createdTokens.clear();
+        jdbcTemplate.update("DELETE FROM user WHERE userAccount LIKE 'test_%'");
+    }
+
+    private String registerAndLogin() throws Exception {
+        String account = "test_" + System.currentTimeMillis();
+        String pass = "pass12345";
+        mockMvc.perform(post("/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("userAccount", account, "userPassword", pass, "checkPassword", pass))))
+                .andReturn();
+        String login = mockMvc.perform(post("/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                Map.of("userAccount", account, "userPassword", pass))))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        String token = objectMapper.readTree(login).get("data").get("token").asText();
+        createdTokens.add(token);
+        return token;
+    }
+
+    @Test
+    void chat_returnsAnswer() throws Exception {
+        String token = registerAndLogin();
+        ChatResponse resp = new ChatResponse();
+        resp.setAnswer("你好！我是学智汇助手，有什么可以帮你？");
+        resp.setRoute("chitchat");
+        resp.setSessionId("s1");
+        when(pythonAgentClient.chat(any())).thenReturn(Result.success(resp));
+
+        String body = mockMvc.perform(post("/chat")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"你好\"}"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode node = objectMapper.readTree(body);
+        assertEquals(0, node.get("code").asInt());
+        assertEquals("你好！我是学智汇助手，有什么可以帮你？", node.get("data").get("answer").asText());
+        assertEquals("chitchat", node.get("data").get("route").asText());
+    }
+
+    @Test
+    void chat_blankQuery_returnsParamsError() throws Exception {
+        String token = registerAndLogin();
+        String body = mockMvc.perform(post("/chat")
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"  \"}"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40000, objectMapper.readTree(body).get("code").asInt());
+    }
+
+    @Test
+    void chat_requiresLogin() throws Exception {
+        String body = mockMvc.perform(post("/chat")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"你好\"}"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40100, objectMapper.readTree(body).get("code").asInt());
+    }
+
+    @Test
+    void stream_requiresLogin() throws Exception {
+        String body = mockMvc.perform(get("/chat/stream")
+                        .param("query", "你好"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40100, objectMapper.readTree(body).get("code").asInt());
+    }
+}

@@ -32,6 +32,7 @@ import java.util.List;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -92,12 +93,23 @@ class AdminServiceTest {
         u.setUserRole(RoleConstant.USER);
         Page<User> page = new Page<>(1, 10, 1);
         page.setRecords(List.of(u));
-        when(userMapper.selectPage(any(), any())).thenReturn(page);
+        when(userMapper.selectUserPage(any(Page.class), any(), any())).thenReturn(page);
 
         Page<AdminUserVO> result = adminService.listUsers(new UserQueryRequest());
 
         assertEquals(1, result.getTotal());
         assertEquals("bob", result.getRecords().get(0).getUserAccount());
+    }
+
+    @Test
+    void listUsers_passesDeletedFilter() {
+        when(userMapper.selectUserPage(any(Page.class), any(), eq(1))).thenReturn(new Page<>(1, 10, 0));
+
+        UserQueryRequest req = new UserQueryRequest();
+        req.setDeleted(1); // 只查已删除
+        adminService.listUsers(req);
+
+        verify(userMapper).selectUserPage(any(Page.class), any(), eq(1));
     }
 
     // ---------- 修改角色 ----------
@@ -181,5 +193,21 @@ class AdminServiceTest {
         verify(userMapper).deleteById(7L);
         verify(stringRedisTemplate).delete("xzh:login:tokenA");
         verify(stringRedisTemplate, never()).delete("xzh:login:tokenB");
+    }
+
+    // ---------- 恢复用户 ----------
+
+    @Test
+    void restoreUser_success() {
+        when(userMapper.restoreDeleted(7L)).thenReturn(1);
+        adminService.restoreUser(7L);
+        verify(userMapper).restoreDeleted(7L);
+    }
+
+    @Test
+    void restoreUser_notDeleted_throws() {
+        when(userMapper.restoreDeleted(7L)).thenReturn(0);
+        BusinessException e = assertThrows(BusinessException.class, () -> adminService.restoreUser(7L));
+        assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
     }
 }

@@ -14,7 +14,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 public interface AdminService {
 
     /**
-     * 用户分页列表（关键词搜索账号/昵称）
+     * 用户分页列表（关键词搜索账号/昵称，deleted 过滤：null=全部/0=正常/1=已删除）
      */
     Page<AdminUserVO> listUsers(UserQueryRequest request);
 
@@ -27,6 +27,11 @@ public interface AdminService {
      * 删除用户：逻辑删除 + 清理其 Redis 白名单 token 强制下线
      */
     void deleteUser(Long userId);
+
+    /**
+     * 恢复已删除用户（isDelete 置 0）
+     */
+    void restoreUser(Long userId);
 
     /**
      * 全局知识库分页列表（管理员视角）

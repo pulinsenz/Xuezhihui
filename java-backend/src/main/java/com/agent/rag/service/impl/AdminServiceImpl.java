@@ -18,6 +18,7 @@ import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.AdminService;
 import com.agent.rag.util.UserContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -56,13 +57,11 @@ public class AdminServiceImpl implements AdminService {
     public Page<AdminUserVO> listUsers(UserQueryRequest request) {
         long pageNum = normalizePageNum(request);
         long pageSize = normalizePageSize(request);
-        LambdaQueryWrapper<User> wrapper = new LambdaQueryWrapper<User>()
-                .and(StrUtil.isNotBlank(request.getKeyword()), w -> w
-                        .like(User::getUserAccount, request.getKeyword())
-                        .or()
-                        .like(User::getUserName, request.getKeyword()))
-                .orderByDesc(User::getCreateTime);
-        Page<User> userPage = userMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
+        // 手写 SQL 分页：deleted 可查已删除用户（BaseMapper 会强制过滤 isDelete=0）
+        IPage<User> userPage = userMapper.selectUserPage(
+                new Page<>(pageNum, pageSize),
+                request.getKeyword(),
+                request.getDeleted());
         List<AdminUserVO> records = userPage.getRecords().stream()
                 .map(AdminUserVO::from)
                 .toList();
@@ -111,6 +110,18 @@ public class AdminServiceImpl implements AdminService {
         // 清理该用户全部登录 token，强制下线
         evictLoginTokens(userId);
         log.info("删除用户成功: userId={}", userId);
+    }
+
+    @Override
+    public void restoreUser(Long userId) {
+        if (userId == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
+        }
+        int rows = userMapper.restoreDeleted(userId);
+        if (rows == 0) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "用户不存在或未被删除");
+        }
+        log.info("恢复用户成功: userId={}", userId);
     }
 
     @Override

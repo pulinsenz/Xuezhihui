@@ -57,6 +57,15 @@ public class AdminController {
     }
 
     /**
+     * 恢复已删除用户
+     */
+    @PutMapping("/user/{id}/restore")
+    public Result<Boolean> restoreUser(@PathVariable Long id) {
+        adminService.restoreUser(id);
+        return Result.success(true);
+    }
+
+    /**
      * 全局知识库列表
      */
     @GetMapping("/knowledge/list")

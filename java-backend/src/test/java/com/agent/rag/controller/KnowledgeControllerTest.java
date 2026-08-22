@@ -167,10 +167,14 @@ class KnowledgeControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(1, objectMapper.readTree(docs).get("data").size());
 
-        // 等待异步向量化完成：Python 未启动 → 优雅降级为 FAILED
+        // 等待异步向量化完成：Python 未启动 → 优雅降级 FAILED；Python 运行中 → SUCCESS
         KnowledgeDoc doc = waitForVectorStatus(docId, 8000);
-        assertEquals(VectorStatus.FAILED.name(), doc.getVectorStatus());
-        assertTrue(StringUtils.hasText(doc.getErrorMsg()), "应记录失败原因");
+        String status = doc.getVectorStatus();
+        assertTrue(VectorStatus.SUCCESS.name().equals(status) || VectorStatus.FAILED.name().equals(status),
+                "向量化应结束（SUCCESS 或 FAILED），实际: " + status);
+        if (VectorStatus.FAILED.name().equals(status)) {
+            assertTrue(StringUtils.hasText(doc.getErrorMsg()), "失败时应记录原因");
+        }
 
         // 删除知识库
         String del = mockMvc.perform(delete("/knowledge/{id}", knowledgeId)

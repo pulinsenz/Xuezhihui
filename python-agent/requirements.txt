@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+langgraph
+langchain-openai
+langchain-community
+pymilvus
+redis
+rank_bm25
+sentence-transformers
+python-dotenv
+pydantic

@@ -8,37 +8,26 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 
 /**
- * 文档向量化请求（Java → Python Agent，字段名与 Python 契约对齐）
+ * 删除向量请求（Java → Python Agent）
  *
  * @author pulinsenz
  */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
-public class VectorizeRequest implements Serializable {
+public class DeleteVectorRequest implements Serializable {
 
     /**
      * 知识库 id
      */
     @JsonProperty("knowledge_id")
-    private Long knowledgeId;
+    private String knowledgeId;
 
     /**
-     * 文档 id
+     * 文档 id（可空，空则删整个知识库）
      */
     @JsonProperty("doc_id")
-    private Long docId;
-
-    /**
-     * 文件存储地址
-     */
-    @JsonProperty("file_url")
-    private String fileUrl;
-
-    /**
-     * 文件名
-     */
-    private String name;
+    private String docId;
 
     private static final long serialVersionUID = 1L;
 }

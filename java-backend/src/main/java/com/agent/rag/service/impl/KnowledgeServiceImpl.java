@@ -6,6 +6,7 @@ import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.common.VectorStatus;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
+import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.req.VectorizeRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
@@ -101,8 +102,14 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         knowledgeMapper.deleteById(knowledgeId);
         knowledgeDocMapper.delete(new LambdaQueryWrapper<KnowledgeDoc>()
                 .eq(KnowledgeDoc::getKnowledgeId, knowledgeId));
+        // 清理向量库（Python Agent），降级：失败不影响元数据删除
+        try {
+            pythonAgentClient.deleteKnowledge(new DeleteVectorRequest(String.valueOf(knowledgeId), null));
+            log.info("向量库清理成功: knowledgeId={}", knowledgeId);
+        } catch (Exception e) {
+            log.warn("向量库清理失败（已降级）: knowledgeId={}, error={}", knowledgeId, e.getMessage());
+        }
         log.info("删除知识库成功: knowledgeId={}", knowledgeId);
-        // 注：向量库数据清理由 Python Agent 的删除接口负责（后续接入）
     }
 
     @Override

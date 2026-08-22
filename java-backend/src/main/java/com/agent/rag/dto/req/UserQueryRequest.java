@@ -27,5 +27,10 @@ public class UserQueryRequest implements Serializable {
      */
     private Long pageSize = 10L;
 
+    /**
+     * 逻辑删除过滤：null=全部、0=正常、1=已删除（管理员查看被删用户用）
+     */
+    private Integer deleted;
+
     private static final long serialVersionUID = 1L;
 }

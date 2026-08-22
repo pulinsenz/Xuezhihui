@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -159,5 +160,47 @@ class AdminControllerTest {
         String resp = mockMvc.perform(get("/admin/user/list"))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(40100, objectMapper.readTree(resp).get("code").asInt());
+    }
+
+    @Test
+    void admin_canSeeAndRestoreDeletedUsers() throws Exception {
+        String adminToken = createAdminAndLogin();
+        String victimAccount = "test_" + System.currentTimeMillis();
+        long victimId = registerUser(victimAccount, "pass12345");
+        login(victimAccount, "pass12345");
+
+        // 删除用户
+        mockMvc.perform(delete("/admin/user/{id}", victimId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andReturn();
+
+        // 正常列表（deleted=0）看不到已删除用户
+        String normalList = mockMvc.perform(get("/admin/user/list")
+                        .param("deleted", "0")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertFalse(objectMapper.readTree(normalList).get("data").get("records").toString().contains(victimAccount));
+
+        // deleted=1 列表能看到已删除用户
+        String deletedList = mockMvc.perform(get("/admin/user/list")
+                        .param("deleted", "1")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertTrue(objectMapper.readTree(deletedList).get("data").get("records").toString().contains(victimAccount));
+
+        // 恢复用户
+        String restore = mockMvc.perform(put("/admin/user/{id}/restore", victimId)
+                        .header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, objectMapper.readTree(restore).get("code").asInt());
+        assertEquals("0",
+                jdbcTemplate.queryForObject("SELECT isDelete FROM user WHERE id=?", String.class, victimId));
+
+        // 恢复后 deleted=1 列表不再包含
+        String deletedList2 = mockMvc.perform(get("/admin/user/list")
+                        .param("deleted", "1")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertFalse(objectMapper.readTree(deletedList2).get("data").get("records").toString().contains(victimAccount));
     }
 }

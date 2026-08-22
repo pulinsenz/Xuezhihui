@@ -9,5 +9,8 @@ export const updateUserRole = (id, data) => request.put(`/admin/user/${id}/role`
 /** 删除用户 */
 export const deleteUser = (id) => request.delete(`/admin/user/${id}`)
 
+/** 恢复已删除用户 */
+export const restoreUser = (id) => request.put(`/admin/user/${id}/restore`)
+
 /** 全局知识库分页列表 */
 export const listAllKnowledge = (params) => request.get('/admin/knowledge/list', { params })
