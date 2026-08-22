@@ -26,6 +26,8 @@ public class WebConfig implements WebMvcConfigurer {
                         // 登录注册无需鉴权
                         "/auth/login",
                         "/auth/register",
+                        // 内部接口：Python Agent 工具回调，无 JWT，改由 X-Agent-Token 在 Controller 内校验
+                        "/internal/**",
                         // 接口文档 (OpenAPI 3 / Knife4j)
                         "/doc.html",
                         "/webjars/**",

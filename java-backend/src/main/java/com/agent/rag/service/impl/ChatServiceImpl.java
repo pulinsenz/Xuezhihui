@@ -6,8 +6,10 @@ import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.dto.req.ChatRequest;
 import com.agent.rag.dto.resp.ChatResponse;
+import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.service.ChatService;
+import com.agent.rag.util.UserContext;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -49,6 +51,7 @@ public class ChatServiceImpl implements ChatService {
         if (StrUtil.isBlank(request.getSessionId())) {
             request.setSessionId(IdUtil.fastSimpleUUID());
         }
+        fillUserId(request);
         com.agent.rag.common.Result<ChatResponse> resp = pythonAgentClient.chat(request);
         if (resp == null || resp.getCode() != 0) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR,
@@ -117,6 +120,22 @@ public class ChatServiceImpl implements ChatService {
         }
     }
 
+    /**
+     * 注入受信用户身份：userId 只能来自登录态（JWT → ThreadLocal），
+     * 前端传的 user_id 一律以当前登录用户为准，杜绝身份伪造后回调他人数据
+     */
+    private void fillUserId(ChatRequest request) {
+        User user = UserContext.getUser();
+        if (user != null) {
+            request.setUserId(String.valueOf(user.getId()));
+        }
+    }
+
+    private String currentUserId() {
+        User user = UserContext.getUser();
+        return user == null ? null : String.valueOf(user.getId());
+    }
+
     private String buildStreamUrl(ChatRequest request) {
         StringBuilder url = new StringBuilder(agentBaseUrl)
                 .append("/api/agent/stream?")
@@ -124,6 +143,11 @@ public class ChatServiceImpl implements ChatService {
                 .append("&query=").append(urlEncode(request.getQuery()));
         if (StrUtil.isNotBlank(request.getKnowledgeId())) {
             url.append("&knowledge_id=").append(urlEncode(request.getKnowledgeId()));
+        }
+        // 受信身份随 SSE 透传：工具 Agent 回调业务数据需要
+        String userId = currentUserId();
+        if (userId != null) {
+            url.append("&user_id=").append(urlEncode(userId));
         }
         return url.toString();
     }

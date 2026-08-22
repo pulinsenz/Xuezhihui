@@ -9,6 +9,7 @@ import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.req.VectorizeRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
+import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
 import com.agent.rag.entity.KnowledgeDoc;
@@ -137,6 +138,49 @@ public class KnowledgeServiceImpl implements KnowledgeService {
                 .eq(KnowledgeDoc::getKnowledgeId, knowledgeId)
                 .orderByDesc(KnowledgeDoc::getCreateTime));
         return docs.stream().map(KnowledgeDocVO::from).toList();
+    }
+
+    @Override
+    public UserStatsVO getUserStats(Long userId) {
+        if (userId == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户 id 不能为空");
+        }
+        // 工具回调场景无登录态，必须按 userId 精确过滤，防止越权查他人数据
+        List<Knowledge> knowledgeList = knowledgeMapper.selectList(new LambdaQueryWrapper<Knowledge>()
+                .eq(Knowledge::getUserId, userId));
+        List<Long> knowledgeIds = knowledgeList.stream().map(Knowledge::getId).toList();
+
+        UserStatsVO vo = new UserStatsVO();
+        vo.setUserId(userId);
+        vo.setKnowledgeCount((long) knowledgeIds.size());
+        if (knowledgeIds.isEmpty()) {
+            vo.setDocCount(0L);
+            vo.setVectorSuccess(0L);
+            vo.setVectorPending(0L);
+            vo.setVectorFailed(0L);
+            return vo;
+        }
+        LambdaQueryWrapper<KnowledgeDoc> inDocs = new LambdaQueryWrapper<KnowledgeDoc>()
+                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds);
+        vo.setDocCount(knowledgeDocMapper.selectCount(inDocs));
+        vo.setVectorSuccess(knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
+                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds)
+                .eq(KnowledgeDoc::getVectorStatus, VectorStatus.SUCCESS.name())));
+        vo.setVectorPending(knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
+                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds)
+                .eq(KnowledgeDoc::getVectorStatus, VectorStatus.PENDING.name())));
+        vo.setVectorFailed(knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
+                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds)
+                .eq(KnowledgeDoc::getVectorStatus, VectorStatus.FAILED.name())));
+        // 最近上传时间：取该用户最近一条文档的创建时间
+        KnowledgeDoc latest = knowledgeDocMapper.selectOne(new LambdaQueryWrapper<KnowledgeDoc>()
+                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds)
+                .orderByDesc(KnowledgeDoc::getCreateTime)
+                .last("LIMIT 1"));
+        if (latest != null) {
+            vo.setLastUploadTime(latest.getCreateTime());
+        }
+        return vo;
     }
 
     /**

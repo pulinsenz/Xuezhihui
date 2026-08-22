@@ -2,6 +2,7 @@ package com.agent.rag.service;
 
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
+import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
 import org.springframework.web.multipart.MultipartFile;
@@ -44,4 +45,9 @@ public interface KnowledgeService {
      * 知识库文档列表
      */
     List<KnowledgeDocVO> listDocs(Long knowledgeId);
+
+    /**
+     * 用户业务数据统计（工具 Agent 回调），跨用户时按 userId 精确过滤
+     */
+    UserStatsVO getUserStats(Long userId);
 }

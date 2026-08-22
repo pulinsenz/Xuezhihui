@@ -30,5 +30,11 @@ public class ChatRequest implements Serializable {
     @JsonProperty("knowledge_id")
     private String knowledgeId;
 
+    /**
+     * 用户 id（受信字段：仅 Java 从 JWT 解析后注入，前端传值会被覆盖，杜绝伪造身份）
+     */
+    @JsonProperty("user_id")
+    private String userId;
+
     private static final long serialVersionUID = 1L;
 }

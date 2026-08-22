@@ -90,7 +90,12 @@ class MockLLM:
 
     def _guess_route(self, messages) -> str:
         query = self._last_user(messages).lower()
-        return "chitchat" if any(g in query for g in self.GREETINGS) else "kb"
+        if any(g in query for g in self.GREETINGS):
+            return "chitchat"
+        # 业务数据：询问「我的知识库/文档/统计」概况
+        if "我的" in query and any(k in query for k in ("几个", "多少", "统计", "上传", "文档", "知识库", "状态")):
+            return "business"
+        return "kb"
 
     def _echo(self, messages) -> str:
         query = self._last_user(messages)

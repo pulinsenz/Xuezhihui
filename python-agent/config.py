@@ -41,6 +41,11 @@ class Settings:
     # ---- 内部鉴权（Java 调用时带 X-Agent-Token）----
     agent_token: str = os.getenv("AGENT_TOKEN", "")
 
+    # ---- Java 业务服务回调（工具 Agent 获取业务数据；Python 不直接访问 MySQL）----
+    java_base_url: str = os.getenv("JAVA_BASE_URL", "http://localhost:8123/api")
+    # 出站内部鉴权：显式 JAVA_TOKEN 优先，缺省复用 AGENT_TOKEN（同一信任域双向一把钥匙）
+    java_token: str = os.getenv("JAVA_TOKEN", "") or os.getenv("AGENT_TOKEN", "")
+
     # ---- 日志 ----
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
 

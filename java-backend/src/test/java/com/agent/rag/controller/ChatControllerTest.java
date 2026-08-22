@@ -3,11 +3,13 @@ package com.agent.rag.controller;
 import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.Result;
 import com.agent.rag.config.JwtProperties;
+import com.agent.rag.dto.req.ChatRequest;
 import com.agent.rag.dto.resp.ChatResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -24,6 +26,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -63,13 +66,22 @@ class ChatControllerTest {
     }
 
     private String registerAndLogin() throws Exception {
+        return registerAndLoginWithId().token;
+    }
+
+    private record LoginResult(String token, long userId) {
+    }
+
+    /** 注册 + 登录，返回 token 与 userId（断言身份透传用） */
+    private LoginResult registerAndLoginWithId() throws Exception {
         String account = "test_" + System.currentTimeMillis();
         String pass = "pass12345";
-        mockMvc.perform(post("/auth/register")
+        String reg = mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 Map.of("userAccount", account, "userPassword", pass, "checkPassword", pass))))
-                .andReturn();
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        long uid = objectMapper.readTree(reg).get("data").asLong();
         String login = mockMvc.perform(post("/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
@@ -77,7 +89,7 @@ class ChatControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         String token = objectMapper.readTree(login).get("data").get("token").asText();
         createdTokens.add(token);
-        return token;
+        return new LoginResult(token, uid);
     }
 
     @Test
@@ -126,5 +138,26 @@ class ChatControllerTest {
                         .param("query", "你好"))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(40100, objectMapper.readTree(body).get("code").asInt());
+    }
+
+    @Test
+    void chat_forwardsUserIdFromContext() throws Exception {
+        // 工具 Agent 回调业务数据依赖受信 userId：应由 Java 从登录态注入，前端不可伪造
+        LoginResult login = registerAndLoginWithId();
+        ChatResponse resp = new ChatResponse();
+        resp.setAnswer("你有 2 个知识库。");
+        resp.setSessionId("s1");
+        when(pythonAgentClient.chat(any())).thenReturn(Result.success(resp));
+
+        mockMvc.perform(post("/chat")
+                        .header("Authorization", "Bearer " + login.token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"我的知识库有几个\"}"))
+                .andReturn();
+
+        ArgumentCaptor<ChatRequest> captor = ArgumentCaptor.forClass(ChatRequest.class);
+        verify(pythonAgentClient).chat(captor.capture());
+        assertEquals(String.valueOf(login.userId), captor.getValue().getUserId(),
+                "受信 userId 应透传给 Python Agent，供工具回调业务数据");
     }
 }

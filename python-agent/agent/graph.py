@@ -1,6 +1,7 @@
 """
 LangGraph 状态图构建：
-router → (kb) retrieve → reflect →(不足且未达上限) retrieve / (足够) answer
+router → (business) tool → answer                    （工具回调 Java 业务数据）
+      → (kb) retrieve → reflect →(不足且未达上限) retrieve / (足够) answer
       → (闲聊/其他) answer
 支持证据不足时的循环重试（最多 max_retries 次检索）。
 """
@@ -10,6 +11,7 @@ from agent.nodes.answer_agent import answer_agent
 from agent.nodes.reflect_agent import reflect_agent
 from agent.nodes.retrieve_agent import retrieve_agent
 from agent.nodes.router_agent import router_agent
+from agent.nodes.tool_agent import tool_agent
 from agent.state import AgentState
 
 MAX_RETRIES = 2
@@ -18,17 +20,19 @@ MAX_RETRIES = 2
 def build_graph():
     graph = StateGraph(AgentState)
     graph.add_node("router", router_agent)
+    graph.add_node("tool", tool_agent)
     graph.add_node("retrieve", retrieve_agent)
     graph.add_node("reflect", reflect_agent)
     graph.add_node("answer", answer_agent)
 
     graph.add_edge(START, "router")
-    # 路由：知识库问答 → 检索；闲聊/其他 → 直接回答
+    # 路由：业务数据 → 工具回调；知识库问答 → 检索；闲聊/其他 → 直接回答
     graph.add_conditional_edges(
         "router",
         _route_next,
-        {"retrieve": "retrieve", "answer": "answer"},
+        {"tool": "tool", "retrieve": "retrieve", "answer": "answer"},
     )
+    graph.add_edge("tool", "answer")
     graph.add_edge("retrieve", "reflect")
     # 反思：证据不足且未达重试上限 → 二次检索（形成闭环）
     graph.add_conditional_edges(
@@ -52,8 +56,11 @@ def get_graph():
 
 
 def _route_next(state):
+    route = state.get("route")
+    if route == "business":
+        return "tool"
     # 知识库问答且指定了知识库 → 检索；否则（闲聊/其他/无知识库）直接回答，避免无效循环
-    if state.get("route") == "kb" and state.get("knowledge_id"):
+    if route == "kb" and state.get("knowledge_id"):
         return "retrieve"
     return "answer"
 

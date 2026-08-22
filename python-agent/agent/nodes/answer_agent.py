@@ -21,13 +21,27 @@ CHITCHAT_SYSTEM = (
 )
 
 
+TOOL_SYSTEM_TEMPLATE = (
+    "你是校园知识库问答助手「学智汇」。用户刚才查询了自己的业务数据，"
+    "请根据以下系统统计数据如实转述，不要编造或夸大数字。\n\n"
+    "业务数据：\n{context}"
+)
+
+
 def answer_agent(state):
     query = state["query"]
     context = state.get("retrieval_context", "").strip()
+    tool_context = state.get("tool_context", "").strip()
     history = state.get("history", [])
     llm = state["llm"]
 
-    system = ANSWER_SYSTEM_TEMPLATE.format(context=context) if context else CHITCHAT_SYSTEM
+    # 上下文优先级：工具业务数据 > 知识库检索证据 > 无上下文（闲聊）
+    if tool_context:
+        system = TOOL_SYSTEM_TEMPLATE.format(context=tool_context)
+    elif context:
+        system = ANSWER_SYSTEM_TEMPLATE.format(context=context)
+    else:
+        system = CHITCHAT_SYSTEM
     messages = [{"role": "system", "content": system}]
     # 窗口裁剪：最多带 6 条历史
     messages.extend(history[-6:])
