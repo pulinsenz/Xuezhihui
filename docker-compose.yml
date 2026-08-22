@@ -1,0 +1,123 @@
+# 学智汇 多 Agent 协同 RAG 系统 一键编排
+# 用法：
+#   1. export DEEPSEEK_API_KEY=sk-xxx AGENT_TOKEN=<强随机值> JWT_SECRET=<强随机值>
+#   2. docker compose up -d --build
+#
+# 说明：agent 服务生产默认 VECTOR_STORE=milvus（持久化向量库）
+
+services:
+  # ---------------- 中间件 ----------------
+  mysql:
+    image: mysql:8.0
+    container_name: xzh-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-111111}
+      MYSQL_DATABASE: xuezhihui
+    ports:
+      # 宿主 3307（避开本机 MySQL 占用的 3306；容器间仍走 mysql:3306）
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./java-backend/sql:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: xzh-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.14
+    container_name: xzh-etcd
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: revision
+      ETCD_AUTO_COMPACTION_RETENTION: '1000'
+      ETCD_QUOTA_BACKEND_BYTES: '4294967296'
+    command: etcd -advertise-client-urls=http://etcd:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    volumes:
+      - etcd-data:/etcd
+
+  minio:
+    image: minio/minio:RELEASE.2024-08-03T04-33-23Z
+    container_name: xzh-minio
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/minio_data
+
+  milvus:
+    image: milvusdb/milvus:v2.4.4
+    container_name: xzh-milvus
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    ports:
+      - "19530:19530"
+    volumes:
+      - milvus-data:/var/lib/milvus
+    depends_on:
+      - etcd
+      - minio
+
+  # ---------------- 应用 ----------------
+  java-backend:
+    build: ./java-backend
+    container_name: xzh-java
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/xuezhihui?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-111111}
+      SPRING_DATA_REDIS_HOST: redis
+      APP_AGENT_BASE_URL: http://python-agent:8000
+      APP_AGENT_TOKEN: ${AGENT_TOKEN}
+    volumes:
+      # 上传文件与 python-agent 共享（生产可换 COS 对象存储）
+      - file-data:/app/data/files
+    ports:
+      - "8123:8123"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  python-agent:
+    build: ./python-agent
+    container_name: xzh-python-agent
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      AGENT_TOKEN: ${AGENT_TOKEN}
+      VECTOR_STORE: milvus
+      MILVUS_URI: http://milvus:19530
+      REDIS_HOST: redis
+      LOG_LEVEL: INFO
+    volumes:
+      # 读取 Java 上传的文件（共享卷）
+      - file-data:/app/data/files
+    ports:
+      - "8000:8000"
+    depends_on:
+      - milvus
+      - redis
+
+volumes:
+  mysql-data:
+  redis-data:
+  etcd-data:
+  minio-data:
+  milvus-data:
+  file-data:

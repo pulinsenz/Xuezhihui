@@ -6,6 +6,10 @@
         <span>学智汇</span>
       </div>
       <el-menu router :default-active="activeMenu" class="menu">
+        <el-menu-item index="/chat">
+          <el-icon><ChatDotRound /></el-icon>
+          <span>对话</span>
+        </el-menu-item>
         <el-menu-item index="/knowledge">
           <el-icon><Folder /></el-icon>
           <span>知识库</span>
@@ -59,6 +63,7 @@ const router = useRouter()
 const activeMenu = computed(() => {
   const path = router.currentRoute.value.path
   if (path.startsWith('/admin')) return path
+  if (path.startsWith('/chat')) return '/chat'
   if (path.startsWith('/knowledge')) return '/knowledge'
   return path
 })

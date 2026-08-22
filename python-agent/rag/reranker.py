@@ -11,9 +11,9 @@ logger = get_logger("reranker")
 
 
 class Reranker:
-    def __init__(self):
+    def __init__(self, model_name: str = None):
         self._model = None
-        model_name = os.getenv("RERANKER_MODEL", "").strip()
+        model_name = model_name or os.getenv("RERANKER_MODEL", "").strip()
         if model_name:
             try:
                 from sentence_transformers import CrossEncoder

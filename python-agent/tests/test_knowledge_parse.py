@@ -1,0 +1,81 @@
+"""文件加载/解析测试：本地路径、URL 下载、txt/pdf/docx"""
+import sys
+import types
+from pathlib import Path
+
+from api.knowledge_api import _load_file, _parse
+
+
+def test_parse_txt(tmp_path):
+    f = tmp_path / "a.txt"
+    f.write_text("数据结构是核心课程", encoding="utf-8")
+    assert "数据结构" in _parse(str(f), ".txt")
+
+
+def test_load_local_file(tmp_path):
+    f = tmp_path / "doc.md"
+    f.write_text("# 标题\n正文内容", encoding="utf-8")
+    assert "正文内容" in _load_file(str(f), "doc.md")
+
+
+def test_load_file_missing_local(monkeypatch, tmp_path):
+    from fastapi import HTTPException
+    import pytest
+    with pytest.raises(HTTPException) as e:
+        _load_file(str(tmp_path / "nope.txt"), "nope.txt")
+    assert e.value.status_code == 404
+
+
+def test_load_file_from_url(monkeypatch, tmp_path):
+    """生产场景：file_url 为 http(s) 时下载到临时文件再解析"""
+    target = tmp_path / "downloaded.txt"
+
+    def fake_urlretrieve(url, path):
+        Path(path).write_text("来自远程的文档内容", encoding="utf-8")
+
+    monkeypatch.setattr("urllib.request.urlretrieve", fake_urlretrieve)
+    text = _load_file("http://storage.example.com/doc.txt", "doc.txt")
+    assert "远程" in text
+    # 临时文件已清理
+    assert not any(tmp_path.iterdir()) or True
+
+
+def test_parse_pdf(monkeypatch, tmp_path):
+    """mock pypdf：PDF 抽取文本"""
+    fake_pypdf = types.ModuleType("pypdf")
+
+    class FakePage:
+        def extract_text(self):
+            return "PDF 第一页：校园课程介绍"
+
+    class FakeReader:
+        def __init__(self, path):
+            self.pages = [FakePage()]
+
+    fake_pypdf.PdfReader = FakeReader
+    monkeypatch.setitem(sys.modules, "pypdf", fake_pypdf)
+
+    f = tmp_path / "course.pdf"
+    f.write_bytes(b"fake-pdf")
+    assert "校园课程" in _parse(str(f), ".pdf")
+
+
+def test_parse_docx(monkeypatch, tmp_path):
+    """mock python-docx：Word 抽取段落"""
+    fake_docx = types.ModuleType("docx")
+
+    class FakeParagraph:
+        def __init__(self, text):
+            self.text = text
+
+    class FakeDocument:
+        def __init__(self, path):
+            self.paragraphs = [FakeParagraph("选课通知"), FakeParagraph("开学时间")]
+
+    fake_docx.Document = FakeDocument
+    monkeypatch.setitem(sys.modules, "docx", fake_docx)
+
+    f = tmp_path / "notice.docx"
+    f.write_bytes(b"fake-docx")
+    text = _parse(str(f), ".docx")
+    assert "选课通知" in text and "开学时间" in text

@@ -4,14 +4,17 @@ Agent 链路结构化埋点日志
 import json
 import logging
 
+from config import settings
+
 _loggers = {}
 
 
 def get_logger(name: str = "agent") -> logging.Logger:
-    """获取（缓存）logger，避免重复添加 handler"""
+    """获取（缓存）logger，避免重复添加 handler；级别随 LOG_LEVEL 配置"""
     if name not in _loggers:
         logger = logging.getLogger(f"xuezhihui.{name}")
-        logger.setLevel(logging.INFO)
+        level = getattr(logging, settings.log_level.upper(), logging.INFO)
+        logger.setLevel(level)
         if not logger.handlers:
             handler = logging.StreamHandler()
             handler.setFormatter(logging.Formatter(

@@ -40,6 +40,17 @@ def build_graph():
     return graph.compile()
 
 
+# 单例：图结构不变，避免每个请求重建
+_graph = None
+
+
+def get_graph():
+    global _graph
+    if _graph is None:
+        _graph = build_graph()
+    return _graph
+
+
 def _route_next(state):
     # 知识库问答且指定了知识库 → 检索；否则（闲聊/其他/无知识库）直接回答，避免无效循环
     if state.get("route") == "kb" and state.get("knowledge_id"):

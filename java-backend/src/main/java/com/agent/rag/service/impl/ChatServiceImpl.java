@@ -40,6 +40,9 @@ public class ChatServiceImpl implements ChatService {
     @Value("${app.agent.base-url}")
     private String agentBaseUrl;
 
+    @Value("${app.agent.token:}")
+    private String agentToken;
+
     @Override
     public ChatResponse chat(ChatRequest request) {
         validate(request);
@@ -67,11 +70,15 @@ public class ChatServiceImpl implements ChatService {
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(5))
                 .build();
-        HttpRequest httpRequest = HttpRequest.newBuilder()
+        HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(URI.create(url))
                 .timeout(Duration.ofSeconds(120))
-                .GET()
-                .build();
+                .GET();
+        // 内部鉴权：Python Agent 侧校验
+        if (StrUtil.isNotBlank(agentToken)) {
+            requestBuilder.header("X-Agent-Token", agentToken);
+        }
+        HttpRequest httpRequest = requestBuilder.build();
 
         client.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofLines())
                 .thenAccept(response -> {

@@ -86,7 +86,7 @@ const registerRules = {
   ],
 }
 
-const redirectTo = () => route.query.redirect || '/knowledge'
+const redirectTo = () => route.query.redirect || '/chat'
 
 const handleLogin = async () => {
   loading.value = true

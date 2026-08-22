@@ -1,6 +1,8 @@
 """
 知识库接口：文档向量化入库 / 删除向量（被 Java 调用）
 """
+import tempfile
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
@@ -30,26 +32,65 @@ class DeleteRequest(BaseModel):
     doc_id: Optional[str] = None
 
 
-def _read_file(file_url: str, name: str) -> str:
-    """读取本地文件文本（LocalFileStorageService 存的是绝对路径）"""
-    path = Path(file_url)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail=f"文件不存在: {file_url}")
+def _load_file(file_url: str, name: str) -> str:
+    """加载文件文本：支持本地路径（开发）与 http(s) URL（生产 COS/对象存储）"""
     ext = Path(name).suffix.lower()
+    local_path = file_url
+    downloaded = file_url.startswith(("http://", "https://"))
+    if downloaded:
+        local_path = _download(file_url)
+    elif not Path(file_url).exists():
+        raise HTTPException(status_code=404, detail=f"文件不存在: {file_url}")
+    try:
+        return _parse(local_path, ext)
+    finally:
+        if downloaded:
+            Path(local_path).unlink(missing_ok=True)
+
+
+def _download(url: str) -> str:
+    """下载远程文件到临时文件"""
+    tmp = tempfile.NamedTemporaryFile(suffix=".download", delete=False)
+    tmp.close()
+    try:
+        urllib.request.urlretrieve(url, tmp.name)
+    except Exception as e:
+        Path(tmp.name).unlink(missing_ok=True)
+        raise HTTPException(status_code=502, detail=f"下载文件失败: {e}") from e
+    return tmp.name
+
+
+def _parse(path: str, ext: str) -> str:
+    """按文件类型解析文本"""
     if ext in TEXT_EXTS:
-        return path.read_text(encoding="utf-8", errors="ignore")
-    # 其他格式（pdf/docx 等）：先尝试按 utf-8 解码文本，未支持格式由上层提示
-    data = path.read_bytes()
-    return data.decode("utf-8", errors="ignore")
+        return Path(path).read_text(encoding="utf-8", errors="ignore")
+    if ext == ".pdf":
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(path)
+            return "\n".join(page.extract_text() or "" for page in reader.pages)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"PDF 解析失败: {e}") from e
+    if ext in (".docx",):
+        try:
+            from docx import Document
+            doc = Document(path)
+            return "\n".join(p.text for p in doc.paragraphs if p.text)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Word 解析失败: {e}") from e
+    # 其他格式：尝试 utf-8 解码
+    return Path(path).read_bytes().decode("utf-8", errors="ignore")
 
 
 @router.post("/vectorize")
 def vectorize(req: VectorizeRequest):
     """文档向量化入库：读文件 → 分块 → BM25 + 向量双索引"""
     try:
-        text = _read_file(req.file_url, req.name)
+        text = _load_file(req.file_url, req.name)
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"读取文件失败: {e}") from e
     if not text.strip():
         raise HTTPException(status_code=400, detail="文件内容为空")
     chunk_count = runtime.retriever.add_document(req.knowledge_id, req.doc_id, text)

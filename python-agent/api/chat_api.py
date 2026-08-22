@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from agent import runtime
-from agent.graph import build_graph
+from agent.graph import get_graph
 from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("chat_api")
@@ -58,7 +58,7 @@ def chat(req: ChatRequest):
     if not req.session_id or not req.query.strip():
         raise HTTPException(status_code=400, detail="session_id 和 query 不能为空")
     history = runtime.redis_store.get_history(req.session_id)
-    graph = build_graph()
+    graph = get_graph()
     result = graph.invoke(_build_state(req.query, req.session_id, req.knowledge_id, history))
     answer = result.get("answer", "")
     _save_session(req.session_id, req.query, answer)
@@ -80,7 +80,7 @@ def stream(session_id: str, query: str, knowledge_id: str = None):
         raise HTTPException(status_code=400, detail="session_id 和 query 不能为空")
     history = runtime.redis_store.get_history(session_id)
     state = _build_state(query, session_id, knowledge_id, history)
-    graph = build_graph()
+    graph = get_graph()
 
     def sse_event(payload: dict) -> str:
         return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
