@@ -128,9 +128,10 @@ const handleSend = async () => {
       while ((idx = buffer.indexOf('\n\n')) >= 0) {
         const event = buffer.slice(0, idx)
         buffer = buffer.slice(idx + 2)
-        const dataLine = event.split('\n').find((l) => l.startsWith('data: '))
+        const dataLine = event.split('\n').find((l) => l.startsWith('data:'))
         if (!dataLine) continue
-        const payload = JSON.parse(dataLine.slice(6))
+        // 兼容 Spring SseEmitter 输出 `data:{json}` 与 Python 输出 `data: {json}`
+        const payload = JSON.parse(dataLine.slice(5).trim())
         if (payload.type === 'token') {
           curMsg.content += payload.content
           scrollToBottom()

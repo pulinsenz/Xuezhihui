@@ -1,9 +1,20 @@
 """
 集中配置：环境变量 → Settings 快照。
+自动加载 .env（环境变量优先，不覆盖已设置的）：
+  1) python-agent/.env —— 本地默认（AGENT_TOKEN、ALLOW_MOCK_LLM、VECTOR_STORE 等）
+  2) 项目根 .env —— 部署密钥（DEEPSEEK_API_KEY、AGENT_TOKEN、JWT_SECRET）
 生产启动校验在 main.py 的 validate_settings 执行。
 """
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+_BASE = Path(__file__).resolve().parent
+# 先本地默认，后项目根密钥；override=False 保证环境变量/docker 注入不被覆盖
+load_dotenv(_BASE / ".env", override=False)
+load_dotenv(_BASE.parent / ".env", override=False)
 
 
 @dataclass
