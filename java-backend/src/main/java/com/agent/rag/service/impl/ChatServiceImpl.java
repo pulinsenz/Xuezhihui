@@ -6,8 +6,11 @@ import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.dto.req.ChatRequest;
 import com.agent.rag.dto.resp.ChatResponse;
+import com.agent.rag.dto.resp.HistoryMessageVO;
+import com.agent.rag.dto.resp.SessionVO;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
+import com.agent.rag.service.ChatHistoryService;
 import com.agent.rag.service.ChatService;
 import com.agent.rag.util.UserContext;
 import jakarta.annotation.Resource;
@@ -23,6 +26,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.List;
 
 /**
  * 对话服务实现
@@ -39,6 +43,9 @@ public class ChatServiceImpl implements ChatService {
     @Resource
     private PythonAgentClient pythonAgentClient;
 
+    @Resource
+    private ChatHistoryService chatHistoryService;
+
     @Value("${app.agent.base-url}")
     private String agentBaseUrl;
 
@@ -51,6 +58,8 @@ public class ChatServiceImpl implements ChatService {
         if (StrUtil.isBlank(request.getSessionId())) {
             request.setSessionId(IdUtil.fastSimpleUUID());
         }
+        // 写侧越权防护：会话已存在则必须属于当前用户
+        chatHistoryService.checkAccess(request.getSessionId(), requireUserId());
         fillUserId(request);
         com.agent.rag.common.Result<ChatResponse> resp = pythonAgentClient.chat(request);
         if (resp == null || resp.getCode() != 0) {
@@ -66,6 +75,8 @@ public class ChatServiceImpl implements ChatService {
         if (StrUtil.isBlank(request.getSessionId())) {
             request.setSessionId(IdUtil.fastSimpleUUID());
         }
+        // 写侧越权防护：会话已存在则必须属于当前用户
+        chatHistoryService.checkAccess(request.getSessionId(), requireUserId());
         SseEmitter emitter = new SseEmitter(300_000L);
         String url = buildStreamUrl(request);
         log.info("SSE 透传开始: sessionId={}, pythonUrl={}", request.getSessionId(), url);
@@ -114,6 +125,21 @@ public class ChatServiceImpl implements ChatService {
         return emitter;
     }
 
+    @Override
+    public List<SessionVO> listSessions() {
+        return chatHistoryService.listSessions(requireUserId());
+    }
+
+    @Override
+    public List<HistoryMessageVO> getSessionHistory(String sessionId) {
+        return chatHistoryService.getHistory(sessionId, requireUserId());
+    }
+
+    @Override
+    public void deleteSession(String sessionId) {
+        chatHistoryService.deleteSession(sessionId, requireUserId());
+    }
+
     private void validate(ChatRequest request) {
         if (request == null || StrUtil.isBlank(request.getQuery())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "问题内容不能为空");
@@ -134,6 +160,17 @@ public class ChatServiceImpl implements ChatService {
     private String currentUserId() {
         User user = UserContext.getUser();
         return user == null ? null : String.valueOf(user.getId());
+    }
+
+    /**
+     * 当前登录用户 id（/chat/** 已被拦截器保护，正常必有登录态）
+     */
+    private Long requireUserId() {
+        User user = UserContext.getUser();
+        if (user == null) {
+            throw new BusinessException(ErrorCode.NOT_LOGIN, "未登录");
+        }
+        return user.getId();
     }
 
     private String buildStreamUrl(ChatRequest request) {

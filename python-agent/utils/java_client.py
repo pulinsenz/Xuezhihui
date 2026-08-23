@@ -47,3 +47,33 @@ def fetch_user_stats(user_id) -> Optional[dict]:
         # 网络异常 / Java 未启动：不阻断对话，降级为无业务数据
         logger.warning("工具回调异常（降级为无数据）: %s", e)
         return None
+
+
+def persist_chat(session_id, user_id, query, answer) -> bool:
+    """回调 Java 持久化一轮对话（会话 + 消息，MySQL）。失败降级 False，不阻断对话。"""
+    if not session_id or not user_id:
+        return False
+    if not settings.java_token:
+        logger.warning("JAVA_TOKEN 未配置，对话历史不落库")
+        return False
+    url = f"{settings.java_base_url.rstrip('/')}/internal/agent/chat-save"
+    try:
+        resp = httpx.post(url, json={
+            "session_id": str(session_id),
+            "user_id": str(user_id),
+            "query": query,
+            "answer": answer,
+        }, headers=_headers(), timeout=_TIMEOUT, trust_env=False)
+        if resp.status_code != 200:
+            logger.warning("对话落库失败: status=%s", resp.status_code)
+            return False
+        body = resp.json()
+        if body.get("code") != 0:
+            logger.warning("对话落库业务失败: %s", body.get("message"))
+            return False
+        agent_event(logger, "chat_persisted", session_id=str(session_id))
+        return True
+    except Exception as e:
+        # 网络异常 / Java 未启动：不阻断对话，历史缺该轮（可接受）
+        logger.warning("对话落库异常（降级，不阻断）: %s", e)
+        return False

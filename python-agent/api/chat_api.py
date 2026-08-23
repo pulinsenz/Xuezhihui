@@ -11,6 +11,7 @@ from pydantic import BaseModel
 
 from agent import runtime
 from agent.graph import get_graph
+from utils.java_client import persist_chat
 from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("chat_api")
@@ -51,9 +52,12 @@ def _build_state(query: str, session_id: str, knowledge_id: str, history: list, 
     }
 
 
-def _save_session(session_id: str, query: str, answer: str):
+def _save_session(session_id: str, query: str, answer: str, user_id: str = None):
+    # Redis 会话记忆（LLM 上下文，窗口裁剪）
     runtime.redis_store.append_message(session_id, "user", query)
     runtime.redis_store.append_message(session_id, "assistant", answer)
+    # MySQL 持久化历史（回调 Java 落库），失败降级不阻断对话
+    persist_chat(session_id, user_id, query, answer)
 
 
 @router.post("/chat")
@@ -65,7 +69,7 @@ def chat(req: ChatRequest):
     graph = get_graph()
     result = graph.invoke(_build_state(req.query, req.session_id, req.knowledge_id, history, req.user_id))
     answer = result.get("answer", "")
-    _save_session(req.session_id, req.query, answer)
+    _save_session(req.session_id, req.query, answer, req.user_id)
     return {
         "code": 0, "message": "ok",
         "data": ChatResponse(
@@ -111,7 +115,7 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
             # 会话记忆（流式用缓存 token 拼完整回答）
             if not final_answer:
                 final_answer = "".join(tokens)
-            _save_session(session_id, query, final_answer)
+            _save_session(session_id, query, final_answer, user_id)
             yield sse_event({"type": "done", "answer": final_answer, "sources": sources})
         except Exception as e:
             logger.error("流式对话异常: %s", e)

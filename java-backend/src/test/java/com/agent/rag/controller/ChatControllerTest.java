@@ -26,8 +26,10 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
@@ -159,5 +161,124 @@ class ChatControllerTest {
         verify(pythonAgentClient).chat(captor.capture());
         assertEquals(String.valueOf(login.userId), captor.getValue().getUserId(),
                 "受信 userId 应透传给 Python Agent，供工具回调业务数据");
+    }
+
+    // ---------- 对话历史（会话列表 / 历史 / 删除） ----------
+
+    @Test
+    void sessions_requiresLogin() throws Exception {
+        String body = mockMvc.perform(get("/chat/sessions"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40100, objectMapper.readTree(body).get("code").asInt());
+    }
+
+    @Test
+    void sessions_returnsListForLoggedInUser() throws Exception {
+        LoginResult login = registerAndLoginWithId();
+        String sid = "sess_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO chat_session (sessionId, userId, title, createTime, updateTime) VALUES (?, ?, '你好', NOW(), NOW())",
+                sid, login.userId);
+        jdbcTemplate.update("INSERT INTO chat_message (id, sessionId, userId, role, content, createTime) VALUES (?, ?, ?, 'user', '你好', NOW())",
+                System.nanoTime(), sid, login.userId);
+        try {
+            String body = mockMvc.perform(get("/chat/sessions")
+                            .header("Authorization", "Bearer " + login.token))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            JsonNode node = objectMapper.readTree(body);
+            assertEquals(0, node.get("code").asInt());
+            JsonNode first = node.get("data").get(0);
+            assertEquals(sid, first.get("session_id").asText());
+            assertEquals("你好", first.get("title").asText());
+            assertEquals(1, first.get("message_count").asInt());
+        } finally {
+            jdbcTemplate.update("DELETE FROM chat_message WHERE sessionId = ?", sid);
+            jdbcTemplate.update("DELETE FROM chat_session WHERE sessionId = ?", sid);
+        }
+    }
+
+    @Test
+    void history_returnsMessagesInOrder() throws Exception {
+        LoginResult login = registerAndLoginWithId();
+        String sid = "hist_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO chat_session (sessionId, userId, title, createTime, updateTime) VALUES (?, ?, '你好', NOW(), NOW())",
+                sid, login.userId);
+        jdbcTemplate.update("INSERT INTO chat_message (id, sessionId, userId, role, content, createTime) VALUES (?, ?, ?, 'user', '你好', NOW())",
+                System.nanoTime(), sid, login.userId);
+        jdbcTemplate.update("INSERT INTO chat_message (id, sessionId, userId, role, content, createTime) VALUES (?, ?, ?, 'assistant', '你好呀', NOW())",
+                System.nanoTime(), sid, login.userId);
+        try {
+            String body = mockMvc.perform(get("/chat/sessions/" + sid + "/history")
+                            .header("Authorization", "Bearer " + login.token))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            JsonNode node = objectMapper.readTree(body);
+            assertEquals(0, node.get("code").asInt());
+            assertEquals(2, node.get("data").size());
+            assertEquals("user", node.get("data").get(0).get("role").asText());
+            assertEquals("你好呀", node.get("data").get(1).get("content").asText());
+        } finally {
+            jdbcTemplate.update("DELETE FROM chat_message WHERE sessionId = ?", sid);
+            jdbcTemplate.update("DELETE FROM chat_session WHERE sessionId = ?", sid);
+        }
+    }
+
+    @Test
+    void history_foreignSession_returnsNotFound() throws Exception {
+        LoginResult owner = registerAndLoginWithId();
+        LoginResult intruder = registerAndLoginWithId();
+        String sid = "foreign_hist_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO chat_session (sessionId, userId, title, createTime, updateTime) VALUES (?, ?, '别人的', NOW(), NOW())",
+                sid, owner.userId);
+        try {
+            String body = mockMvc.perform(get("/chat/sessions/" + sid + "/history")
+                            .header("Authorization", "Bearer " + intruder.token))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(40400, objectMapper.readTree(body).get("code").asInt());
+        } finally {
+            jdbcTemplate.update("DELETE FROM chat_session WHERE sessionId = ?", sid);
+        }
+    }
+
+    @Test
+    void deleteSession_success_removesRows() throws Exception {
+        LoginResult login = registerAndLoginWithId();
+        String sid = "del_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO chat_session (sessionId, userId, title, createTime, updateTime) VALUES (?, ?, '你好', NOW(), NOW())",
+                sid, login.userId);
+        jdbcTemplate.update("INSERT INTO chat_message (id, sessionId, userId, role, content, createTime) VALUES (?, ?, ?, 'user', '你好', NOW())",
+                System.nanoTime(), sid, login.userId);
+        String body = mockMvc.perform(delete("/chat/sessions/" + sid)
+                        .header("Authorization", "Bearer " + login.token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, objectMapper.readTree(body).get("code").asInt());
+        assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM chat_session WHERE sessionId = ?", Integer.class, sid));
+        assertEquals(0, jdbcTemplate.queryForObject("SELECT COUNT(*) FROM chat_message WHERE sessionId = ?", Integer.class, sid));
+    }
+
+    @Test
+    void deleteSession_requiresLogin() throws Exception {
+        String body = mockMvc.perform(delete("/chat/sessions/whatever"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40100, objectMapper.readTree(body).get("code").asInt());
+    }
+
+    @Test
+    void chat_writeRejectsForeignSession() throws Exception {
+        // 写侧越权防护：会话已存在但属主不是当前用户 → 拒绝且不调 Python
+        LoginResult owner = registerAndLoginWithId();
+        LoginResult intruder = registerAndLoginWithId();
+        String sid = "owned_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO chat_session (sessionId, userId, title, createTime, updateTime) VALUES (?, ?, '别人的', NOW(), NOW())",
+                sid, owner.userId);
+        try {
+            String body = mockMvc.perform(post("/chat")
+                            .header("Authorization", "Bearer " + intruder.token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"session_id\":\"" + sid + "\",\"query\":\"你好\"}"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(40101, objectMapper.readTree(body).get("code").asInt());
+            verify(pythonAgentClient, never()).chat(any());
+        } finally {
+            jdbcTemplate.update("DELETE FROM chat_session WHERE sessionId = ?", sid);
+        }
     }
 }

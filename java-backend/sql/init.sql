@@ -72,7 +72,39 @@ CREATE TABLE IF NOT EXISTS `knowledge_doc`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='知识库文档';
 
--- 5. 初始管理员账号（幂等：账号已存在则跳过）
+-- 5. 创建对话会话表（若不存在）
+-- 历史持久化到 MySQL（唯一事实源）；Redis 仅作 LLM 滚动上下文
+-- 列名用 camelCase：项目 map-underscore-to-camel-case=false，MyBatis-Plus 按字段名原样映射
+CREATE TABLE IF NOT EXISTS `chat_session`
+(
+    `sessionId`  varchar(64) NOT NULL COMMENT '会话id(UUID)',
+    `userId`     bigint      NOT NULL COMMENT '所属用户id',
+    `title`      varchar(64) NOT NULL COMMENT '会话标题(首条用户消息截断，Java 写入)',
+    `createTime` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updateTime` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`sessionId`),
+    KEY `idx_user_update` (`userId`, `updateTime`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='对话会话';
+
+-- 6. 创建对话消息表（若不存在）
+CREATE TABLE IF NOT EXISTS `chat_message`
+(
+    `id`         bigint      NOT NULL COMMENT '消息id(雪花)',
+    `sessionId`  varchar(64) NOT NULL COMMENT '会话id',
+    `userId`     bigint      NOT NULL COMMENT '所属用户id',
+    `role`       varchar(16) NOT NULL COMMENT '角色: user/assistant',
+    `content`    text        NOT NULL COMMENT '消息内容',
+    `createTime` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_session` (`sessionId`),
+    KEY `idx_user` (`userId`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='对话消息';
+
+-- 7. 初始管理员账号（幂等：账号已存在则跳过）
 -- 默认账号：admin  默认密码：admin12345（登录后建议修改）
 INSERT IGNORE INTO `user` (`userAccount`, `userPassword`, `userName`, `userRole`)
 VALUES ('admin', '$2a$10$Db1RZ9oVxgAR4DDhoKY.2uv.OVB/BHkyCN88XCYxG2x1aQKbFLwzO', '管理员', 'admin');

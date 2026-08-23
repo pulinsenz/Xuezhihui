@@ -15,57 +15,88 @@
       </el-select>
     </div>
 
-    <!-- 消息区 -->
-    <div ref="messageAreaRef" class="message-area">
-      <el-empty v-if="messages.length === 0" description="你好，我是学智汇 AI 助手，有问题尽管问～" />
+    <div class="chat-body">
+      <!-- 左侧：会话历史 -->
+      <aside class="session-panel">
+        <el-button type="primary" class="new-chat-btn" :icon="Plus" :disabled="chat.sending" @click="handleNewSession">
+          新对话
+        </el-button>
 
-      <div v-for="(msg, idx) in messages" :key="idx" class="msg-row" :class="msg.role">
-        <el-avatar :size="34" class="msg-avatar" :class="msg.role">
-          {{ msg.role === 'user' ? '我' : 'AI' }}
-        </el-avatar>
-        <div class="msg-bubble" :class="msg.role">
-          <span v-if="msg.role === 'assistant' && msg.streaming" class="typing-cursor" />
-          <span class="msg-text" v-html="renderText(msg.content)" />
+        <template v-if="authStore.isLogin">
+          <div v-if="chat.sessions.length" class="session-list">
+            <div
+              v-for="s in chat.sessions"
+              :key="s.session_id"
+              class="session-item"
+              :class="{ active: s.session_id === chat.activeSessionId }"
+              @click="handleOpenSession(s)"
+            >
+              <div class="session-title">{{ s.title }}</div>
+              <div class="session-sub">{{ formatTime(s.update_time) }} · {{ s.message_count }} 条</div>
+              <el-icon v-if="!chat.sending" class="session-del" title="删除会话" @click.stop="handleDeleteSession(s)">
+                <Delete />
+              </el-icon>
+            </div>
+          </div>
+          <div v-else class="panel-tip">暂无会话，开始新对话吧</div>
+        </template>
+        <div v-else class="panel-tip login" @click="uiStore.openLogin()">登录后查看会话记录</div>
+      </aside>
+
+      <!-- 右侧：对话区 -->
+      <div class="chat-column">
+        <!-- 消息区 -->
+        <div ref="messageAreaRef" class="message-area">
+          <el-empty v-if="chat.messages.length === 0" description="你好，我是学智汇 AI 助手，有问题尽管问～" />
+
+          <div v-for="(msg, idx) in chat.messages" :key="idx" class="msg-row" :class="msg.role">
+            <el-avatar :size="34" class="msg-avatar" :class="msg.role">
+              {{ msg.role === 'user' ? '我' : 'AI' }}
+            </el-avatar>
+            <div class="msg-bubble" :class="msg.role">
+              <span v-if="msg.role === 'assistant' && msg.streaming" class="typing-cursor" />
+              <span class="msg-text" v-html="renderText(msg.content)" />
+            </div>
+          </div>
+        </div>
+
+        <!-- 输入区 -->
+        <div class="chat-input">
+          <el-input
+            v-model="inputText"
+            type="textarea"
+            :rows="2"
+            resize="none"
+            placeholder="输入你的问题，Enter 发送，Shift+Enter 换行"
+            :disabled="chat.sending"
+            @keydown.enter.exact.prevent="handleSend"
+          />
+          <el-button type="primary" :icon="Promotion" :loading="chat.sending" @click="handleSend">
+            {{ chat.sending ? '回答中' : '发送' }}
+          </el-button>
         </div>
       </div>
-    </div>
-
-    <!-- 输入区 -->
-    <div class="chat-input">
-      <el-input
-        v-model="inputText"
-        type="textarea"
-        :rows="2"
-        resize="none"
-        placeholder="输入你的问题，Enter 发送，Shift+Enter 换行"
-        :disabled="sending"
-        @keydown.enter.exact.prevent="handleSend"
-      />
-      <el-button type="primary" :icon="Promotion" :loading="sending" @click="handleSend">
-        {{ sending ? '回答中' : '发送' }}
-      </el-button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, nextTick, watch } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Promotion } from '@element-plus/icons-vue'
+import { onMounted, ref, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Delete, Plus, Promotion } from '@element-plus/icons-vue'
 import { listMyKnowledge } from '../api/knowledge'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
+import { useChatStore } from '../stores/chat'
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
+const chat = useChatStore()
+const route = useRoute()
+const router = useRouter()
 
-// 会话 id：本地生成并持久化，跨刷新延续（Python 侧存会话记忆）
-const sessionId = ref(localStorage.getItem('chat_session_id') || crypto.randomUUID())
-localStorage.setItem('chat_session_id', sessionId.value)
-
-const messages = ref([])
 const inputText = ref('')
-const sending = ref(false)
 const knowledgeId = ref('')
 const kbList = ref([])
 const kbLoading = ref(false)
@@ -99,7 +130,7 @@ const loadKnowledge = async () => {
 
 const handleSend = async () => {
   const text = inputText.value.trim()
-  if (!text || sending.value) return
+  if (!text || chat.sending) return
 
   // 未登录 → 弹出登录弹窗，不发起对话请求
   if (!authStore.isLogin) {
@@ -108,18 +139,16 @@ const handleSend = async () => {
   }
   inputText.value = ''
 
-  // 追加用户消息
-  messages.value.push({ role: 'user', content: text })
-  // 追加 assistant 占位（流式追加）
-  messages.value.push({ role: 'assistant', content: '', streaming: true })
-  sending.value = true
+  chat.pushUserMessage(text)
+  chat.pushAssistantPlaceholder()
+  chat.sending = true
   scrollToBottom()
 
-  const curMsg = messages.value[messages.value.length - 1]
   // 构建 SSE URL（token 走 header，不放进 URL，避免泄露）
-  const params = new URLSearchParams({ session_id: sessionId.value, query: text })
+  const params = new URLSearchParams({ session_id: chat.activeSessionId, query: text })
   if (knowledgeId.value) params.set('knowledge_id', knowledgeId.value)
 
+  let finished = false
   try {
     const resp = await fetch(`/api/chat/stream?${params.toString()}`, {
       headers: { Authorization: `Bearer ${authStore.token}` },
@@ -143,41 +172,103 @@ const handleSend = async () => {
         // 兼容 Spring SseEmitter 输出 `data:{json}` 与 Python 输出 `data: {json}`
         const payload = JSON.parse(dataLine.slice(5).trim())
         if (payload.type === 'token') {
-          curMsg.content += payload.content
+          chat.appendToken(payload.content)
           scrollToBottom()
         } else if (payload.type === 'done') {
-          if (!curMsg.content) curMsg.content = payload.answer || ''
-          curMsg.streaming = false
+          finished = true
+          await chat.finishStream(payload.answer || '')
           scrollToBottom()
         } else if (payload.type === 'error') {
           throw new Error(payload.message || '对话出错')
         }
       }
     }
-    curMsg.streaming = false
-    if (!curMsg.content) {
-      curMsg.content = '（无回答）'
-    }
+    // 未收到 done 事件时兜底收尾
+    if (!finished) await chat.finishStream('')
   } catch (e) {
-    curMsg.streaming = false
-    curMsg.content = curMsg.content || `⚠️ ${e.message}`
+    chat.failStream(e.message || '对话失败，请稍后再试')
     ElMessage.error(e.message || '对话失败，请稍后再试')
   } finally {
-    sending.value = false
+    chat.sending = false
     scrollToBottom()
+  }
+}
+
+// ---- 会话管理 ----
+const handleNewSession = () => {
+  if (chat.sending) return
+  chat.newSession()
+}
+
+const handleOpenSession = (s) => {
+  if (chat.sending) return
+  chat.openSession(s.session_id)
+}
+
+const handleDeleteSession = async (s) => {
+  if (chat.sending) return
+  await ElMessageBox.confirm(`确定删除会话「${s.title}」吗？历史将不可恢复。`, '删除确认', { type: 'warning' })
+  await chat.deleteSession(s.session_id)
+}
+
+const formatTime = (epochSec) => {
+  if (!epochSec) return ''
+  const d = new Date(Number(epochSec) * 1000)
+  const now = new Date()
+  const pad = (n) => String(n).padStart(2, '0')
+  if (d.toDateString() === now.toDateString()) return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  return `${d.getMonth() + 1}月${d.getDate()}日`
+}
+
+// ---- 初始化与路由同步 ----
+const initLoggedIn = async () => {
+  await chat.loadSessions()
+  const id = route.params.sessionId || localStorage.getItem('chat_session_id')
+  if (id && chat.sessions.some((s) => s.session_id === id)) {
+    await chat.openSession(id)
+  } else {
+    chat.newSession()
   }
 }
 
 onMounted(() => {
   loadKnowledge()
   scrollToBottom()
+  if (authStore.isLogin) initLoggedIn()
+  else chat.resetForGuest()
 })
 
-// 登录成功后补充加载知识库列表
+// 登录态变化：登录则加载历史，退出则重置为访客
 watch(
   () => authStore.isLogin,
   (login) => {
-    if (login) loadKnowledge()
+    if (login) {
+      initLoggedIn()
+      loadKnowledge()
+    } else {
+      chat.resetForGuest()
+    }
+  }
+)
+
+// 会话切换后同步 URL → /chat/{sessionId}
+watch(
+  () => chat.activeSessionId,
+  (id) => {
+    if (id && route.params.sessionId !== id) {
+      router.replace({ name: 'Chat', params: { sessionId: id } })
+    }
+  }
+)
+
+// 反向：URL 变化（粘贴他人/未知会话链接）→ 属主会话则打开，否则新建
+watch(
+  () => route.params.sessionId,
+  async (id) => {
+    if (!id || id === chat.activeSessionId || chat.sending) return
+    const known = chat.sessions.some((s) => s.session_id === id)
+    if (known) await chat.openSession(id)
+    else chat.newSession()
   }
 )
 </script>
@@ -189,13 +280,13 @@ watch(
   flex-direction: column;
   background: #fff;
   border-radius: 8px;
-  padding: 0 20px;
+  overflow: hidden;
 }
 .chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 0;
+  padding: 14px 20px;
   border-bottom: 1px solid var(--el-border-color-light);
 }
 .chat-header h2 {
@@ -203,6 +294,87 @@ watch(
 }
 .kb-select {
   width: 280px;
+}
+.chat-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+/* 会话面板 */
+.session-panel {
+  width: 250px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--el-border-color-light);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  background: #fafbfc;
+}
+.new-chat-btn {
+  width: 100%;
+}
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.session-item {
+  position: relative;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.session-item:hover {
+  background: #f0f2f5;
+}
+.session-item.active {
+  background: #ecf5ff;
+}
+.session-title {
+  font-size: 13px;
+  color: #303133;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 20px;
+}
+.session-sub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: #909399;
+}
+.session-del {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #c0c4cc;
+  font-size: 14px;
+}
+.session-del:hover {
+  color: #f56c6c;
+}
+.panel-tip {
+  padding: 20px 8px;
+  font-size: 13px;
+  color: #909399;
+  text-align: center;
+}
+.panel-tip.login {
+  cursor: pointer;
+}
+.panel-tip.login:hover {
+  color: #409eff;
+}
+/* 对话列 */
+.chat-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 20px;
 }
 .message-area {
   flex: 1;
