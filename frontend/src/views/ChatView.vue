@@ -49,13 +49,15 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, nextTick } from 'vue'
+import { computed, onMounted, ref, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Promotion } from '@element-plus/icons-vue'
 import { listMyKnowledge } from '../api/knowledge'
 import { useAuthStore } from '../stores/auth'
+import { useUiStore } from '../stores/ui'
 
 const authStore = useAuthStore()
+const uiStore = useUiStore()
 
 // 会话 id：本地生成并持久化，跨刷新延续（Python 侧存会话记忆）
 const sessionId = ref(localStorage.getItem('chat_session_id') || crypto.randomUUID())
@@ -85,6 +87,8 @@ const renderText = (text) => {
 }
 
 const loadKnowledge = async () => {
+  // 未登录时知识库接口会被拦截（401），且访客无权查看个人知识库，跳过加载
+  if (!authStore.isLogin) return
   kbLoading.value = true
   try {
     kbList.value = await listMyKnowledge()
@@ -96,6 +100,12 @@ const loadKnowledge = async () => {
 const handleSend = async () => {
   const text = inputText.value.trim()
   if (!text || sending.value) return
+
+  // 未登录 → 弹出登录弹窗，不发起对话请求
+  if (!authStore.isLogin) {
+    uiStore.openLogin()
+    return
+  }
   inputText.value = ''
 
   // 追加用户消息
@@ -162,6 +172,14 @@ onMounted(() => {
   loadKnowledge()
   scrollToBottom()
 })
+
+// 登录成功后补充加载知识库列表
+watch(
+  () => authStore.isLogin,
+  (login) => {
+    if (login) loadKnowledge()
+  }
+)
 </script>
 
 <style scoped>

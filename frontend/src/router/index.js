@@ -32,21 +32,24 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
-  // 公开页（登录）直接放行
+  // 公开页（登录页）直接放行
   if (to.meta.public) {
     next()
     return
   }
-  // 未登录 → 登录页，并记录来源
-  if (!authStore.isLogin) {
-    next({ path: '/login', query: { redirect: to.fullPath } })
-    return
-  }
-  // 管理员专属页 → 校验角色
-  if (to.meta.admin && !authStore.isAdmin) {
-    ElMessage.error('无权限访问该页面')
-    next('/knowledge')
-    return
+  // 默认聊天界面：未登录也可浏览，登录通过右上角弹窗完成
+  // 管理员专属页 → 未登录或非管理员均拦截
+  if (to.meta.admin) {
+    if (!authStore.isLogin) {
+      ElMessage.warning('请先登录')
+      next('/chat')
+      return
+    }
+    if (!authStore.isAdmin) {
+      ElMessage.error('无权限访问该页面')
+      next('/knowledge')
+      return
+    }
   }
   next()
 })

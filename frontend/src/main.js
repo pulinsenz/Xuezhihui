@@ -19,5 +19,5 @@ for (const [name, component] of Object.entries(ElementPlusIconsVue)) {
 }
 app.mount('#app')
 
-// 全局登录失效事件：由 axios 响应拦截器触发，跳转登录页
-window.addEventListener('auth:expired', () => router.push('/login'))
+// 全局登录失效事件：由 axios 响应拦截器触发，回到默认聊天页
+window.addEventListener('auth:expired', () => router.push('/chat'))
