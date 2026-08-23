@@ -1,7 +1,20 @@
 """长任务 worker 测试：消费队列执行向量化、状态流转、回调 Java 回写"""
 from config import settings
 
+from storage.task_store import TaskStore
 from worker.vectorize_worker import VectorizeWorker
+
+
+def test_task_store_socket_timeout_greater_than_brpop():
+    """回归：redis-py 8.x 默认 socket_timeout=5 恰好等于 BRPOP timeout=5，
+    空轮询会卡 ~60s 抛 'Timeout reading from socket'（本机旧版 Redis 实测复现）。
+    socket_timeout 必须大于 brpop timeout，否则队列空时 worker 每轮阻塞近一分钟。"""
+    ts = TaskStore()
+    kwargs = ts.client.connection_pool.connection_kwargs
+    brpop_timeout = 5  # task_store.brpop 的默认 timeout
+    assert kwargs.get("socket_timeout", 0) > brpop_timeout, (
+        f"socket_timeout={kwargs.get('socket_timeout')} 必须 > brpop timeout={brpop_timeout}"
+    )
 
 
 class FakeTaskStore:

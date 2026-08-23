@@ -23,6 +23,10 @@ class TaskStore:
             db=0,
             decode_responses=True,
             protocol=2,  # 兼容旧版 Redis（RESP2）
+            # 必须 > brpop 的 timeout(5)：redis-py 8.x 默认 socket_timeout=5，
+            # 恰好等于 BRPOP 服务端超时，空轮询会卡 ~60s 再抛
+            # "Timeout reading from socket"（踩坑见 改错.md 长任务消息队列）
+            socket_timeout=10,
         )
 
     def brpop(self, queue: str, timeout: int = 5) -> Optional[dict]:
