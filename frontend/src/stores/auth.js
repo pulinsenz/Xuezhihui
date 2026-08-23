@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import {
   login as apiLogin,
   register as apiRegister,
@@ -50,3 +50,8 @@ export const useAuthStore = defineStore('auth', {
     },
   },
 })
+
+// 支持 HMR：热更新 store 定义
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useAuthStore, import.meta.hot))
+}

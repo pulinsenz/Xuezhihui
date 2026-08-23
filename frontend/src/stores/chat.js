@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+import { defineStore, acceptHMRUpdate } from 'pinia'
 import { listSessions, getSessionHistory, deleteSession } from '../api/chat'
 
 /**
@@ -98,3 +98,8 @@ export const useChatStore = defineStore('chat', {
     },
   },
 })
+
+// 支持 HMR：vite 热更新 store 时正确替换定义，避免运行中的 store 持有旧 action
+if (import.meta.hot) {
+  import.meta.hot.accept(acceptHMRUpdate(useChatStore, import.meta.hot))
+}
