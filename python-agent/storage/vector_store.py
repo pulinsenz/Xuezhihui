@@ -80,7 +80,7 @@ class LocalVectorStore(VectorStore):
         scored = []
         for v in candidates:
             score = _cosine(q_vec, v["vec"])
-            scored.append({"text": v["text"], "score": score})
+            scored.append({"text": v["text"], "score": score, "doc_id": v["doc_id"]})
         scored.sort(key=lambda x: -x["score"])
         return scored[:top_k]
 

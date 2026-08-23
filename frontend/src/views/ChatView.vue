@@ -79,6 +79,7 @@
                 <ol class="refs-list">
                   <li v-for="(s, i) in msg.sources" :key="i">
                     <span class="refs-num">[{{ i + 1 }}]</span>
+                    <span v-if="s.doc_name" class="refs-doc">📄 {{ s.doc_name }}</span>
                     <span class="refs-text">{{ truncateText(s.text) }}</span>
                   </li>
                 </ol>
@@ -112,7 +113,7 @@ import { onMounted, ref, nextTick, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Promotion } from '@element-plus/icons-vue'
-import { listMyKnowledge } from '../api/knowledge'
+import { listMyKnowledge, listDocs } from '../api/knowledge'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import { useChatStore } from '../stores/chat'
@@ -161,6 +162,31 @@ const provenanceOf = (msg) => {
 const truncateText = (text, max = 120) => {
   text = (text || '').replace(/\s+/g, ' ').trim()
   return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+// 来源文档名：按知识库缓存 { knowledge_id: { doc_id: 文件名 } }，供参考文献标注来源文档
+const docNameMaps = ref({})
+
+const ensureDocNames = async (knowledgeId) => {
+  if (!knowledgeId || docNameMaps.value[knowledgeId]) return docNameMaps.value[knowledgeId]
+  try {
+    const docs = await listDocs(knowledgeId, 0)
+    const map = {}
+    for (const d of docs) map[d.id] = d.name
+    docNameMaps.value[knowledgeId] = map
+    return map
+  } catch (e) {
+    return {}
+  }
+}
+
+// 为消息的 sources 补上来源文档名（done 后调用）
+const enrichSourceNames = async (msg) => {
+  if (!msg?.sources?.length || !msg.knowledge_id) return
+  const map = await ensureDocNames(msg.knowledge_id)
+  for (const s of msg.sources) {
+    if (s.doc_id && map[s.doc_id]) s.doc_name = map[s.doc_id]
+  }
 }
 
 const loadKnowledge = async () => {
@@ -225,6 +251,7 @@ const handleSend = async () => {
         } else if (payload.type === 'done') {
           finished = true
           await chat.finishStream(payload)
+          await enrichSourceNames(chat.messages[chat.messages.length - 1])
           scrollToBottom()
         } else if (payload.type === 'error') {
           throw new Error(payload.message || '对话出错')
@@ -519,8 +546,14 @@ watch(
   color: #409eff;
   font-weight: 600;
 }
+.refs-doc {
+  color: #606266;
+  font-weight: 600;
+  margin-right: 6px;
+}
 .msg-bubble.user .refs-title,
-.msg-bubble.user .refs-num {
+.msg-bubble.user .refs-num,
+.msg-bubble.user .refs-doc {
   color: #e0f0ff;
 }
 .msg-bubble.user .refs-list {

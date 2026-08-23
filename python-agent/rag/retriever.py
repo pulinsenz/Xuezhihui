@@ -88,13 +88,14 @@ class HybridRetriever:
         return [{"text": docs[i], "score": float(scores[i])} for i in ranked if scores[i] > 0]
 
     def _fuse(self, vector_results, bm25_results, top_k: int) -> List[dict]:
-        """按 text 去重，各自归一化后加权融合"""
+        """按 text 去重，各自归一化后加权融合（保留 doc_id 供前端展示来源文档）"""
         items: dict[str, dict] = {}
         for r in vector_results:
-            item = items.setdefault(r["text"], {"text": r["text"], "v": r["score"], "b": 0.0})
+            item = items.setdefault(r["text"], {"text": r["text"], "v": r["score"], "b": 0.0, "doc_id": r.get("doc_id")})
             item["v"] = r["score"]
+            item["doc_id"] = r.get("doc_id") or item["doc_id"]
         for r in bm25_results:
-            item = items.setdefault(r["text"], {"text": r["text"], "v": 0.0, "b": r["score"]})
+            item = items.setdefault(r["text"], {"text": r["text"], "v": 0.0, "b": r["score"], "doc_id": None})
             item["b"] = r["score"]
 
         v_scores = [i["v"] for i in items.values()]
@@ -108,4 +109,4 @@ class HybridRetriever:
             item["score"] = VECTOR_WEIGHT * v_norm + BM25_WEIGHT * b_norm
 
         ranked = sorted(items.values(), key=lambda x: -x["score"])[:top_k]
-        return [{"text": r["text"], "score": round(r["score"], 4)} for r in ranked]
+        return [{"text": r["text"], "score": round(r["score"], 4), "doc_id": r.get("doc_id")} for r in ranked]

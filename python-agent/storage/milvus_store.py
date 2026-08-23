@@ -68,8 +68,9 @@ class MilvusStore(VectorStore):
         q_vec = self.embedding.embed_query(query)
         expr = f'knowledge_id == "{knowledge_id}"' if knowledge_id is not None else None
         results = self.client.search(
-            self.collection, data=[q_vec], limit=top_k, output_fields=["text"],
+            self.collection, data=[q_vec], limit=top_k, output_fields=["text", "doc_id"],
             filter=expr, metric_type="COSINE",
         )
         hits = results[0] if results else []
-        return [{"text": h["entity"]["text"], "score": float(h["distance"])} for h in hits]
+        return [{"text": h["entity"]["text"], "score": float(h["distance"]),
+                 "doc_id": h["entity"].get("doc_id")} for h in hits]
