@@ -73,21 +73,20 @@
                 </ul>
               </details>
 
-              <!-- 参考文献（使用了知识库才显示，可折叠，默认按设置折叠） -->
-              <details
-                v-if="msg.role === 'assistant' && msg.sources?.length && !msg.streaming"
-                class="msg-refs"
-                :open="!refsCollapsedDefault"
-              >
-                <summary class="refs-title">📚 参考文献（{{ msg.sources.length }}）</summary>
-                <ol class="refs-list">
+              <!-- 参考文献（使用了知识库才显示，可折叠；默认按设置折叠） -->
+              <div v-if="msg.role === 'assistant' && msg.sources?.length && !msg.streaming" class="msg-refs">
+                <div class="refs-title" @click="toggleRefs(msg)">
+                  📚 参考文献（{{ msg.sources.length }}）
+                  <span class="refs-arrow">{{ refsOpenOf(msg) ? '▾' : '▸' }}</span>
+                </div>
+                <ol v-if="refsOpenOf(msg)" class="refs-list">
                   <li v-for="(s, i) in msg.sources" :key="i">
                     <span class="refs-num">[{{ i + 1 }}]</span>
                     <span v-if="s.doc_name" class="refs-doc">📄 {{ s.doc_name }}</span>
                     <span class="refs-text">{{ truncateText(s.text) }}</span>
                   </li>
                 </ol>
-              </details>
+              </div>
             </div>
           </div>
         </div>
@@ -196,6 +195,13 @@ const enrichSourceNames = async (msg) => {
   }
 }
 
+// 参考文献展开状态：消息自带 refsOpen 则用之，否则取设置默认（折叠=关）
+const refsOpenOf = (msg) => (msg.refsOpen !== undefined ? msg.refsOpen : !refsCollapsedDefault.value)
+
+const toggleRefs = (msg) => {
+  msg.refsOpen = !refsOpenOf(msg)
+}
+
 // 历史消息加载后补充来源文档名（重载历史时还原参考文献的来源文档）
 const enrichHistorySources = async () => {
   await Promise.all(
@@ -295,6 +301,7 @@ const handleOpenSession = async (s) => {
   if (chat.sending) return
   await chat.openSession(s.session_id)
   enrichHistorySources()
+  scrollToBottom()
 }
 
 const handleDeleteSession = async (s) => {
@@ -302,6 +309,7 @@ const handleDeleteSession = async (s) => {
   await ElMessageBox.confirm(`确定删除会话「${s.title}」吗？历史将不可恢复。`, '删除确认', { type: 'warning' })
   await chat.deleteSession(s.session_id)
   enrichHistorySources()
+  scrollToBottom()
 }
 
 const formatTime = (epochSec) => {
@@ -327,6 +335,7 @@ const initLoggedIn = async () => {
   if (id && chat.sessions.some((s) => s.session_id === id)) {
     await chat.openSession(id)
     enrichHistorySources()
+    scrollToBottom()
   } else {
     chat.newSession()
   }
@@ -371,6 +380,7 @@ watch(
     if (known) {
       await chat.openSession(id)
       enrichHistorySources()
+      scrollToBottom()
     } else {
       chat.newSession()
     }
@@ -568,7 +578,8 @@ watch(
   cursor: pointer;
   user-select: none;
 }
-.refs-title::-webkit-details-marker {
+.refs-arrow {
+  font-size: 11px;
   color: #909399;
 }
 .refs-list {
