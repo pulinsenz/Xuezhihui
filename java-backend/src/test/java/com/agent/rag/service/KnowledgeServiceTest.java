@@ -162,9 +162,9 @@ class KnowledgeServiceTest {
         doc.setKnowledgeId(5L);
         doc.setName("a.txt");
         doc.setVectorStatus(VectorStatus.PENDING.name());
-        when(knowledgeDocMapper.selectList(any())).thenReturn(List.of(doc));
+        when(knowledgeDocMapper.selectDocsByFilter(eq(5L), any())).thenReturn(List.of(doc));
 
-        assertEquals(1, knowledgeService.listDocs(5L).size());
+        assertEquals(1, knowledgeService.listDocs(5L, 0).size());
     }
 
     // ---------- 上传（提交向量化任务到消息队列） ----------

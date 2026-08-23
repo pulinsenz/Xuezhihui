@@ -38,3 +38,9 @@ export const reVectorizeDoc = (knowledgeId, docId) => request.post(`/admin/knowl
 
 /** 移除文档入库（删向量，保留文档记录） */
 export const adminRemoveDocVector = (knowledgeId, docId) => request.post(`/admin/knowledge/${knowledgeId}/docs/${docId}/remove-vector`)
+
+/** 批量移除入库：删除所选文档向量（保留文档记录），返回处理数量 */
+export const adminBatchRemoveVector = (knowledgeId, docIds) => request.post(`/admin/knowledge/${knowledgeId}/docs/batch-remove-vector`, { docIds })
+
+/** 批量删除文档（逻辑删除 + 删各文档向量），返回删除数量 */
+export const adminBatchDeleteDocs = (knowledgeId, docIds) => request.post(`/admin/knowledge/${knowledgeId}/docs/batch-delete`, { docIds })

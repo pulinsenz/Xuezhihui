@@ -62,9 +62,10 @@ CREATE TABLE IF NOT EXISTS `knowledge_doc`
     `fileUrl`      varchar(1024) DEFAULT NULL COMMENT '文件存储地址',
     `fileSize`     bigint       DEFAULT NULL COMMENT '文件大小(字节)',
     `fileType`     varchar(64)  DEFAULT NULL COMMENT '文件类型',
-    `vectorStatus` varchar(16)  NOT NULL DEFAULT 'PENDING' COMMENT '向量化状态: PENDING/SUCCESS/FAILED/SKIPPED',
+    `vectorStatus` varchar(16)  NOT NULL DEFAULT 'PENDING' COMMENT '向量化状态: PENDING/SUCCESS/FAILED/SKIPPED/REMOVED',
     `errorMsg`     varchar(512) DEFAULT NULL COMMENT '向量化失败原因',
     `fileHash`     varchar(64)  DEFAULT NULL COMMENT '文件内容SHA-256(上传去重用)',
+    `deleteSource` varchar(16)  DEFAULT NULL COMMENT '删除来源: user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传',
     `createTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updateTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `isDelete`     tinyint      NOT NULL DEFAULT 0 COMMENT '是否删除',
@@ -126,3 +127,11 @@ SET @ddl2 = IF(@col2 = 0,
                'ALTER TABLE `user` ADD COLUMN defaultVectorize tinyint NOT NULL DEFAULT 1 COMMENT ''上传文档是否默认入库: 1=是 0=否''',
                'SELECT 1');
 PREPARE s2 FROM @ddl2; EXECUTE s2; DEALLOCATE PREPARE s2;
+
+-- 10. 兼容旧库：knowledge_doc 补 deleteSource 列（已存在则跳过，幂等）
+SET @col3 = (SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_doc' AND COLUMN_NAME = 'deleteSource');
+SET @ddl3 = IF(@col3 = 0,
+               'ALTER TABLE knowledge_doc ADD COLUMN deleteSource varchar(16) DEFAULT NULL COMMENT ''删除来源: user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传''',
+               'SELECT 1');
+PREPARE s3 FROM @ddl3; EXECUTE s3; DEALLOCATE PREPARE s3;

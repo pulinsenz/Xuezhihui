@@ -2,6 +2,7 @@ package com.agent.rag.controller;
 
 import com.agent.rag.common.Result;
 import com.agent.rag.common.annotation.RequireRole;
+import com.agent.rag.dto.req.BatchDocRequest;
 import com.agent.rag.dto.req.UpdateUserRoleRequest;
 import com.agent.rag.dto.req.UserQueryRequest;
 import com.agent.rag.dto.resp.AdminUserVO;
@@ -142,5 +143,21 @@ public class AdminController {
     public Result<Boolean> removeDocVector(@PathVariable Long id, @PathVariable Long docId) {
         adminService.removeDocVector(id, docId);
         return Result.success(true);
+    }
+
+    /**
+     * 批量移除入库：删除所选文档向量（保留文档记录），返回处理数量
+     */
+    @PostMapping("/knowledge/{id}/docs/batch-remove-vector")
+    public Result<Integer> batchRemoveDocVector(@PathVariable Long id, @RequestBody BatchDocRequest request) {
+        return Result.success(adminService.batchRemoveDocVector(id, request.getDocIds()));
+    }
+
+    /**
+     * 批量删除文档：逻辑删除 + 删除各文档向量，返回删除数量
+     */
+    @PostMapping("/knowledge/{id}/docs/batch-delete")
+    public Result<Integer> batchDeleteDocs(@PathVariable Long id, @RequestBody BatchDocRequest request) {
+        return Result.success(adminService.batchDeleteDocs(id, request.getDocIds()));
     }
 }

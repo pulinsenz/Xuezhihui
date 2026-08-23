@@ -183,10 +183,9 @@ public class AdminServiceImpl implements AdminService {
     @Transactional
     public void deleteKnowledgeByAdmin(Long knowledgeId) {
         getKnowledgeAny(knowledgeId);
-        // 逻辑删除知识库 + 全部当前正常文档（已删除的保持删除）
+        // 逻辑删除知识库 + 全部当前正常文档（来源=admin，用户不可恢复该文件）
         knowledgeMapper.deleteById(knowledgeId);
-        knowledgeDocMapper.delete(new LambdaQueryWrapper<KnowledgeDoc>()
-                .eq(KnowledgeDoc::getKnowledgeId, knowledgeId));
+        knowledgeDocMapper.markDeletedByKnowledgeId(knowledgeId, "admin");
         // 清理向量库（Python Agent），降级：失败不影响元数据删除
         deleteVectorsBestEffort(String.valueOf(knowledgeId), null);
         log.info("管理员删除知识库: knowledgeId={}", knowledgeId);
@@ -217,7 +216,8 @@ public class AdminServiceImpl implements AdminService {
     @Transactional
     public void deleteDocByAdmin(Long knowledgeId, Long docId) {
         KnowledgeDoc doc = getDocAny(knowledgeId, docId);
-        knowledgeDocMapper.deleteById(docId);
+        // 管理员删除：记录来源为 admin，用户不可恢复该文件且禁止再上传
+        knowledgeDocMapper.markDeleted(docId, "admin");
         // 删除该文档向量（Python Agent），降级：失败不影响元数据删除
         deleteVectorsBestEffort(String.valueOf(knowledgeId), String.valueOf(docId));
         log.info("管理员删除文档: knowledgeId={}, docId={}", knowledgeId, docId);
@@ -263,6 +263,55 @@ public class AdminServiceImpl implements AdminService {
         update.setErrorMsg("已从索引移除，可点击重新入库");
         knowledgeDocMapper.updateById(update);
         log.info("管理员移除文档入库: knowledgeId={}, docId={}", knowledgeId, docId);
+    }
+
+    @Override
+    public int batchRemoveDocVector(Long knowledgeId, List<Long> docIds) {
+        if (docIds == null || docIds.isEmpty()) {
+            return 0;
+        }
+        int removed = 0;
+        for (Long docId : docIds) {
+            KnowledgeDoc doc = knowledgeDocMapper.selectAnyById(docId);
+            if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+                continue;
+            }
+            if (!"SUCCESS".equals(doc.getVectorStatus())) {
+                continue;
+            }
+            deleteVectorsBestEffort(String.valueOf(knowledgeId), String.valueOf(docId));
+            KnowledgeDoc update = new KnowledgeDoc();
+            update.setId(docId);
+            update.setVectorStatus("REMOVED");
+            update.setErrorMsg("已从索引移除，可点击重新入库");
+            knowledgeDocMapper.updateById(update);
+            removed++;
+        }
+        log.info("管理员批量移除入库: knowledgeId={}, count={}", knowledgeId, removed);
+        return removed;
+    }
+
+    @Override
+    public int batchDeleteDocs(Long knowledgeId, List<Long> docIds) {
+        if (docIds == null || docIds.isEmpty()) {
+            return 0;
+        }
+        int deleted = 0;
+        for (Long docId : docIds) {
+            KnowledgeDoc doc = knowledgeDocMapper.selectAnyById(docId);
+            if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+                continue;
+            }
+            if (doc.getIsDelete() == 1) {
+                continue;
+            }
+            // 管理员批量删除：来源=admin
+            knowledgeDocMapper.markDeleted(docId, "admin");
+            deleteVectorsBestEffort(String.valueOf(knowledgeId), String.valueOf(docId));
+            deleted++;
+        }
+        log.info("管理员批量删除文档: knowledgeId={}, count={}", knowledgeId, deleted);
+        return deleted;
     }
 
     /**

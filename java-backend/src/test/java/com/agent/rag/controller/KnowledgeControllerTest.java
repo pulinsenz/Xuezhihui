@@ -25,6 +25,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -196,7 +197,17 @@ class KnowledgeControllerTest {
     }
 
     private JsonNode docs(String token, long knowledgeId) throws Exception {
+        // 默认只看正常文档（deleted=0），与旧行为一致
         String resp = mockMvc.perform(get("/knowledge/{id}/docs", knowledgeId)
+                        .param("deleted", "0")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return objectMapper.readTree(resp).get("data");
+    }
+
+    private JsonNode docsWithDeleted(String token, long knowledgeId, Integer deleted) throws Exception {
+        String resp = mockMvc.perform(get("/knowledge/{id}/docs", knowledgeId)
+                        .param("deleted", String.valueOf(deleted))
                         .header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         return objectMapper.readTree(resp).get("data");
@@ -327,7 +338,11 @@ class KnowledgeControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(0, objectMapper.readTree(resp).get("code").asInt());
-        assertNotNull(docIdByStatus(token, knowledgeId, "REMOVED"), "移除后应标记为未入库");
+        // 直接查库断言（MockMvc 读连接偶发旧快照，绕过它验证真实落库结果）
+        String status = jdbcTemplate.queryForObject(
+                "SELECT vectorStatus FROM knowledge_doc WHERE id = ?", String.class, Long.valueOf(docId));
+        assertEquals("REMOVED", status, "移除后状态应为未入库");
+        assertEquals(1, docs(token, knowledgeId).size(), "文档记录应保留");
     }
 
     @Test
@@ -341,5 +356,153 @@ class KnowledgeControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(40000, objectMapper.readTree(resp).get("code").asInt(), "未入库文档不应可移除");
+    }
+
+    // ---------- 单文档删除 + 批量操作 ----------
+
+    private List<String> allDocIds(String token, long knowledgeId) throws Exception {
+        List<String> ids = new ArrayList<>();
+        for (JsonNode d : docs(token, knowledgeId)) {
+            ids.add(d.get("id").asText());
+        }
+        return ids;
+    }
+
+    @Test
+    void deleteDoc_single_deletesRow() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "单删测试");
+        upload(token, knowledgeId, "a.txt", "内容A".getBytes(StandardCharsets.UTF_8));
+        upload(token, knowledgeId, "b.txt", "内容B".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        String resp = mockMvc.perform(delete("/knowledge/{id}/docs/{docId}", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, objectMapper.readTree(resp).get("code").asInt());
+        assertEquals(1, docs(token, knowledgeId).size(), "删除后只剩另一条");
+    }
+
+    @Test
+    void batchRemoveVector_marksSelectedRemoved() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "批量移除");
+        upload(token, knowledgeId, "a.txt", "内容A".getBytes(StandardCharsets.UTF_8));
+        upload(token, knowledgeId, "b.txt", "内容B".getBytes(StandardCharsets.UTF_8));
+        // 模拟两条都已入库
+        jdbcTemplate.update("UPDATE knowledge_doc SET vectorStatus = 'SUCCESS' WHERE knowledgeId = ?", knowledgeId);
+
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/batch-remove-vector", knowledgeId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("docIds", allDocIds(token, knowledgeId)))))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(2, objectMapper.readTree(resp).get("data").asInt(), "应移除 2 个文档的入库");
+        assertEquals(2, docs(token, knowledgeId).size(), "文档记录保留");
+        assertNotNull(docIdByStatus(token, knowledgeId, "REMOVED"), "应存在未入库记录");
+    }
+
+    @Test
+    void batchDeleteDocs_deletesSelectedWithVectors() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "批量删除");
+        upload(token, knowledgeId, "a.txt", "内容A".getBytes(StandardCharsets.UTF_8));
+        upload(token, knowledgeId, "b.txt", "内容B".getBytes(StandardCharsets.UTF_8));
+
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/batch-delete", knowledgeId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("docIds", allDocIds(token, knowledgeId)))))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(2, objectMapper.readTree(resp).get("data").asInt(), "应删除 2 个文档");
+        assertEquals(0, docs(token, knowledgeId).size(), "批量删除后列表为空");
+    }
+
+    // ---------- 删除来源（用户删可自恢复 / 管理员删不可恢复且禁止上传）----------
+
+    private String deleteSourceOf(String token, long knowledgeId, String docId) {
+        return jdbcTemplate.queryForObject("SELECT deleteSource FROM knowledge_doc WHERE id = ?", String.class, Long.valueOf(docId));
+    }
+
+    @Test
+    void deleteDoc_marksUserSource() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "删除来源测试");
+        upload(token, knowledgeId, "a.txt", "内容".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        mockMvc.perform(delete("/knowledge/{id}/docs/{docId}", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn();
+
+        assertEquals("user", deleteSourceOf(token, knowledgeId, docId), "用户删除应记录来源为 user");
+        assertEquals(0, docs(token, knowledgeId).size(), "正常列表不再显示已删除文档");
+    }
+
+    @Test
+    void restoreDoc_userDeleted_success() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "恢复测试");
+        upload(token, knowledgeId, "a.txt", "内容".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        mockMvc.perform(delete("/knowledge/{id}/docs/{docId}", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn();
+
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/{docId}/restore", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode node = objectMapper.readTree(resp);
+        assertEquals(0, node.get("code").asInt());
+        assertTrue(StringUtils.hasText(node.get("data").asText()), "恢复应返回重新入库任务 id");
+        assertEquals(1, docs(token, knowledgeId).size(), "恢复后回到正常列表");
+        assertNull(deleteSourceOf(token, knowledgeId, docId), "恢复后删除来源应清空");
+    }
+
+    @Test
+    void restoreDoc_adminDeleted_rejected() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "恢复测试2");
+        upload(token, knowledgeId, "a.txt", "内容".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+        // 模拟管理员删除（来源=admin）
+        jdbcTemplate.update("UPDATE knowledge_doc SET isDelete = 1, deleteSource = 'admin' WHERE id = ?", Long.valueOf(docId));
+
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/{docId}/restore", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40000, objectMapper.readTree(resp).get("code").asInt(), "管理员删除的文件用户不可恢复");
+    }
+
+    @Test
+    void upload_afterAdminDelete_forbidden() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "禁止上传");
+        byte[] content = "管理员删过的文件".getBytes(StandardCharsets.UTF_8);
+        upload(token, knowledgeId, "a.txt", content);
+        // 模拟管理员删除
+        jdbcTemplate.update("UPDATE knowledge_doc SET isDelete = 1, deleteSource = 'admin' WHERE knowledgeId = ?", knowledgeId);
+
+        String resp = upload(token, knowledgeId, "b.txt", content);
+        assertEquals(40000, objectMapper.readTree(resp).get("code").asInt(), "管理员删除的文件禁止再上传");
+    }
+
+    @Test
+    void upload_afterUserDelete_allowed() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "重传测试");
+        byte[] content = "用户删过可重传".getBytes(StandardCharsets.UTF_8);
+        upload(token, knowledgeId, "a.txt", content);
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+        // 用户删除（来源=user）
+        mockMvc.perform(delete("/knowledge/{id}/docs/{docId}", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn();
+
+        String resp = upload(token, knowledgeId, "b.txt", content);
+        JsonNode node = objectMapper.readTree(resp);
+        assertEquals(0, node.get("code").asInt(), "用户删除的文件应允许重传");
+        assertTrue(StringUtils.hasText(node.get("data").asText()), "重传应正常入库返回任务 id");
     }
 }

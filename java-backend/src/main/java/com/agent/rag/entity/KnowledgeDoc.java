@@ -68,6 +68,11 @@ public class KnowledgeDoc implements Serializable {
     private String fileHash;
 
     /**
+     * 删除来源：user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传
+     */
+    private String deleteSource;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

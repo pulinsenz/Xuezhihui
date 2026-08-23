@@ -293,7 +293,7 @@ class AdminServiceTest {
         adminService.deleteKnowledgeByAdmin(10L);
 
         verify(knowledgeMapper).deleteById(10L);
-        verify(knowledgeDocMapper).delete(any(LambdaQueryWrapper.class));
+        verify(knowledgeDocMapper).markDeletedByKnowledgeId(eq(10L), eq("admin"));
         ArgumentCaptor<DeleteVectorRequest> captor = ArgumentCaptor.forClass(DeleteVectorRequest.class);
         verify(pythonAgentClient).deleteKnowledge(captor.capture());
         assertEquals("10", captor.getValue().getKnowledgeId());
@@ -385,7 +385,7 @@ class AdminServiceTest {
 
         adminService.deleteDocByAdmin(10L, 101L);
 
-        verify(knowledgeDocMapper).deleteById(101L);
+        verify(knowledgeDocMapper).markDeleted(eq(101L), eq("admin"));
         ArgumentCaptor<DeleteVectorRequest> captor = ArgumentCaptor.forClass(DeleteVectorRequest.class);
         verify(pythonAgentClient).deleteKnowledge(captor.capture());
         assertEquals("101", captor.getValue().getDocId());
@@ -494,5 +494,46 @@ class AdminServiceTest {
 
         BusinessException e = assertThrows(BusinessException.class, () -> adminService.removeDocVector(10L, 101L));
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+    }
+
+    // ---------- 批量移除入库 / 批量删除 ----------
+
+    @Test
+    void batchRemoveDocVector_countsSuccessDocsOnly() {
+        KnowledgeDoc success = new KnowledgeDoc();
+        success.setId(101L);
+        success.setKnowledgeId(10L);
+        success.setVectorStatus("SUCCESS");
+        KnowledgeDoc pending = new KnowledgeDoc();
+        pending.setId(102L);
+        pending.setKnowledgeId(10L);
+        pending.setVectorStatus("PENDING");
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(success);
+        when(knowledgeDocMapper.selectAnyById(102L)).thenReturn(pending);
+
+        int count = adminService.batchRemoveDocVector(10L, List.of(101L, 102L));
+
+        assertEquals(1, count, "只处理已入库的文档");
+        verify(pythonAgentClient, times(1)).deleteKnowledge(any(DeleteVectorRequest.class));
+    }
+
+    @Test
+    void batchDeleteDocs_deletesAllSelected() {
+        KnowledgeDoc d1 = new KnowledgeDoc();
+        d1.setId(101L);
+        d1.setKnowledgeId(10L);
+        d1.setIsDelete(0);
+        KnowledgeDoc d2 = new KnowledgeDoc();
+        d2.setId(102L);
+        d2.setKnowledgeId(10L);
+        d2.setIsDelete(0);
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(d1);
+        when(knowledgeDocMapper.selectAnyById(102L)).thenReturn(d2);
+
+        int count = adminService.batchDeleteDocs(10L, List.of(101L, 102L));
+
+        assertEquals(2, count, "两条都应删除");
+        // count 已证明 deleteById 各执行一次；此处验证向量删除也各执行一次
+        verify(pythonAgentClient, times(2)).deleteKnowledge(any(DeleteVectorRequest.class));
     }
 }

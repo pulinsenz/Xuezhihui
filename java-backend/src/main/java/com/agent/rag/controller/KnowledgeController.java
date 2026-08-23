@@ -1,6 +1,7 @@
 package com.agent.rag.controller;
 
 import com.agent.rag.common.Result;
+import com.agent.rag.dto.req.BatchDocRequest;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
@@ -13,6 +14,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -92,10 +94,44 @@ public class KnowledgeController {
     }
 
     /**
-     * 知识库文档列表
+     * 删除单个文档：逻辑删除（来源=用户）+ 删除该文档向量，用户可自恢复
+     */
+    @DeleteMapping("/{id}/docs/{docId}")
+    public Result<Boolean> deleteDoc(@PathVariable Long id, @PathVariable Long docId) {
+        knowledgeService.deleteDoc(id, docId);
+        return Result.success(true);
+    }
+
+    /**
+     * 恢复用户自己删除的文档（管理员删除的拒绝），恢复后重新入库
+     */
+    @PostMapping("/{id}/docs/{docId}/restore")
+    public Result<String> restoreDoc(@PathVariable Long id, @PathVariable Long docId) {
+        return Result.success(knowledgeService.restoreDoc(id, docId));
+    }
+
+    /**
+     * 批量移除入库：删除所选文档向量（保留文档记录），返回处理数量
+     */
+    @PostMapping("/{id}/docs/batch-remove-vector")
+    public Result<Integer> batchRemoveVector(@PathVariable Long id, @RequestBody BatchDocRequest request) {
+        return Result.success(knowledgeService.batchRemoveVector(id, request.getDocIds()));
+    }
+
+    /**
+     * 批量删除文档：逻辑删除 + 删除各文档向量，返回删除数量
+     */
+    @PostMapping("/{id}/docs/batch-delete")
+    public Result<Integer> batchDelete(@PathVariable Long id, @RequestBody BatchDocRequest request) {
+        return Result.success(knowledgeService.batchDeleteDocs(id, request.getDocIds()));
+    }
+
+    /**
+     * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除，用户可查看自己删除的文档并恢复）
      */
     @GetMapping("/{id}/docs")
-    public Result<List<KnowledgeDocVO>> docs(@PathVariable Long id) {
-        return Result.success(knowledgeService.listDocs(id));
+    public Result<List<KnowledgeDocVO>> docs(@PathVariable Long id,
+                                             @RequestParam(required = false) Integer deleted) {
+        return Result.success(knowledgeService.listDocs(id, deleted));
     }
 }

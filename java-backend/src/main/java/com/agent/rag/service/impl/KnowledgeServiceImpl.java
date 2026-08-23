@@ -120,6 +120,11 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         getOwnedKnowledge(knowledgeId);
         // 计算文件内容 SHA-256（先算哈希再落盘，供同文件去重）
         String fileHash = computeFileHash(file);
+        // 该文件曾被管理员删除 → 禁止用户再上传
+        Long adminDeleted = knowledgeDocMapper.countAdminDeletedByHash(knowledgeId, fileHash);
+        if (adminDeleted != null && adminDeleted > 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "该文件已被管理员删除，禁止上传");
+        }
         boolean duplicate = knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
                 .eq(KnowledgeDoc::getKnowledgeId, knowledgeId)
                 .eq(KnowledgeDoc::getFileHash, fileHash)) > 0;
@@ -157,21 +162,123 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     @Override
     public void removeVector(Long knowledgeId, Long docId) {
+        KnowledgeDoc doc = getDocInKnowledge(knowledgeId, docId);
+        if (!VectorStatus.SUCCESS.name().equals(doc.getVectorStatus())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档未入库，无需移除");
+        }
+        // 删除该文档向量（Python Agent），降级容忍
+        deleteVectorsBestEffort(knowledgeId, docId);
+        markRemoved(docId);
+    }
+
+    @Override
+    public void deleteDoc(Long knowledgeId, Long docId) {
+        getDocInKnowledge(knowledgeId, docId);
+        // 用户删除：记录删除来源为 user（用户可自恢复）
+        knowledgeDocMapper.markDeleted(docId, "user");
+        deleteVectorsBestEffort(knowledgeId, docId);
+        log.info("删除文档: knowledgeId={}, docId={}", knowledgeId, docId);
+    }
+
+    @Override
+    public String restoreDoc(Long knowledgeId, Long docId) {
+        getOwnedKnowledge(knowledgeId);
+        KnowledgeDoc doc = knowledgeDocMapper.selectAnyById(docId);
+        if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在");
+        }
+        if (doc.getIsDelete() == 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档未被删除");
+        }
+        // 管理员删除的文档用户不可恢复
+        if ("admin".equals(doc.getDeleteSource())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "该文件已被管理员删除，无法恢复");
+        }
+        int rows = knowledgeDocMapper.restoreDeleted(docId);
+        if (rows == 0) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在或未被删除");
+        }
+        // 恢复后重新入库（删除时向量已清除），并发布向量化任务
+        KnowledgeDoc update = new KnowledgeDoc();
+        update.setId(docId);
+        update.setVectorStatus(VectorStatus.PENDING.name());
+        update.setErrorMsg(null);
+        knowledgeDocMapper.updateById(update);
+        return taskService.publishVectorize(knowledgeId, doc.getId(), doc.getFileUrl(), doc.getName());
+    }
+
+    @Override
+    public int batchRemoveVector(Long knowledgeId, List<Long> docIds) {
+        getOwnedKnowledge(knowledgeId);
+        if (docIds == null || docIds.isEmpty()) {
+            return 0;
+        }
+        int removed = 0;
+        for (Long docId : docIds) {
+            KnowledgeDoc doc = knowledgeDocMapper.selectById(docId);
+            if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+                continue;
+            }
+            if (!VectorStatus.SUCCESS.name().equals(doc.getVectorStatus())) {
+                continue;
+            }
+            deleteVectorsBestEffort(knowledgeId, docId);
+            markRemoved(docId);
+            removed++;
+        }
+        log.info("批量移除入库: knowledgeId={}, count={}", knowledgeId, removed);
+        return removed;
+    }
+
+    @Override
+    public int batchDeleteDocs(Long knowledgeId, List<Long> docIds) {
+        getOwnedKnowledge(knowledgeId);
+        if (docIds == null || docIds.isEmpty()) {
+            return 0;
+        }
+        int deleted = 0;
+        for (Long docId : docIds) {
+            KnowledgeDoc doc = knowledgeDocMapper.selectById(docId);
+            if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+                continue;
+            }
+            // 用户批量删除：记录删除来源为 user
+            knowledgeDocMapper.markDeleted(docId, "user");
+            deleteVectorsBestEffort(knowledgeId, docId);
+            deleted++;
+        }
+        log.info("批量删除文档: knowledgeId={}, count={}", knowledgeId, deleted);
+        return deleted;
+    }
+
+    /**
+     * 查询文档且校验属于该知识库
+     */
+    private KnowledgeDoc getDocInKnowledge(Long knowledgeId, Long docId) {
         getOwnedKnowledge(knowledgeId);
         KnowledgeDoc doc = knowledgeDocMapper.selectById(docId);
         if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在");
         }
-        if (!VectorStatus.SUCCESS.name().equals(doc.getVectorStatus())) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档未入库，无需移除");
-        }
-        // 删除该文档向量（Python Agent），降级容忍
+        return doc;
+    }
+
+    /**
+     * 调 Python 删该文档向量，失败降级容忍
+     */
+    private void deleteVectorsBestEffort(Long knowledgeId, Long docId) {
         try {
             pythonAgentClient.deleteKnowledge(new DeleteVectorRequest(String.valueOf(knowledgeId), String.valueOf(docId)));
-            log.info("文档向量移除成功: knowledgeId={}, docId={}", knowledgeId, docId);
+            log.info("文档向量删除成功: knowledgeId={}, docId={}", knowledgeId, docId);
         } catch (Exception e) {
-            log.warn("文档向量移除失败（已降级）: knowledgeId={}, docId={}, error={}", knowledgeId, docId, e.getMessage());
+            log.warn("文档向量删除失败（已降级）: knowledgeId={}, docId={}, error={}", knowledgeId, docId, e.getMessage());
         }
+    }
+
+    /**
+     * 将文档状态置为未入库（REMOVED）
+     */
+    private void markRemoved(Long docId) {
         KnowledgeDoc update = new KnowledgeDoc();
         update.setId(docId);
         update.setVectorStatus(VectorStatus.REMOVED.name());
@@ -205,11 +312,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     @Override
-    public List<KnowledgeDocVO> listDocs(Long knowledgeId) {
+    public List<KnowledgeDocVO> listDocs(Long knowledgeId, Integer deleted) {
         getOwnedKnowledge(knowledgeId);
-        List<KnowledgeDoc> docs = knowledgeDocMapper.selectList(new LambdaQueryWrapper<KnowledgeDoc>()
-                .eq(KnowledgeDoc::getKnowledgeId, knowledgeId)
-                .orderByDesc(KnowledgeDoc::getCreateTime));
+        List<KnowledgeDoc> docs = knowledgeDocMapper.selectDocsByFilter(knowledgeId, deleted);
         return docs.stream().map(KnowledgeDocVO::from).toList();
     }
 

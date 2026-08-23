@@ -26,7 +26,17 @@
         <el-button type="primary" :icon="Search" @click="loadDocs(1)">查询</el-button>
       </div>
 
-      <el-table :data="docs" stripe>
+      <div class="batch-toolbar">
+        <el-button size="small" :disabled="!selectedRows.length" :icon="RefreshLeft" @click="handleBatchRemoveVector">
+          批量移除入库
+        </el-button>
+        <el-button size="small" type="danger" :disabled="!selectedRows.length" :icon="Delete" @click="handleBatchDelete">
+          批量删除
+        </el-button>
+      </div>
+
+      <el-table :data="docs" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column label="文件名" min-width="220">
           <template #default="{ row }">
             <el-icon class="file-icon"><Document /></el-icon>
@@ -113,7 +123,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Delete, Document, Refresh, RefreshLeft, RefreshRight, Search } from '@element-plus/icons-vue'
-import { adminGetKnowledge, adminDeleteDoc, adminRemoveDocVector, listAllDocs, restoreDoc, reVectorizeDoc } from '../api/admin'
+import { adminBatchDeleteDocs, adminBatchRemoveVector, adminGetKnowledge, adminDeleteDoc, adminRemoveDocVector, listAllDocs, restoreDoc, reVectorizeDoc } from '../api/admin'
 import { getTask } from '../api/knowledge'
 
 const route = useRoute()
@@ -130,6 +140,7 @@ const loading = ref(false)
 const keyword = ref('')
 const deletedFilter = ref(0) // 默认只看正常文档；null=全部, 0=正常, 1=已删除
 const busyIds = ref([]) // 正在重新入库的文档 id，禁用按钮防重复提交
+const selectedRows = ref([]) // 勾选的行，用于批量操作
 
 // 追踪进行中的轮询定时器，组件卸载时统一清理，防止 setInterval 泄漏
 const pollTimers = new Set()
@@ -209,6 +220,34 @@ const handleRemoveVector = async (row) => {
   loadDocs()
 }
 
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
+// 批量移除入库：勾选的已入库文档删除向量、保留记录
+const handleBatchRemoveVector = async () => {
+  const ids = selectedRows.value.map((r) => r.id)
+  if (!ids.length) return
+  await ElMessageBox.confirm(`确定将选中的 ${ids.length} 个文档移出入库吗？将删除其向量，文档记录保留。`, '批量移除入库', {
+    type: 'warning',
+  })
+  const count = await adminBatchRemoveVector(knowledgeId, ids)
+  ElMessage.success(`已移除 ${count} 个文档的入库`)
+  loadDocs()
+}
+
+// 批量删除文档（同时删各文档向量）
+const handleBatchDelete = async () => {
+  const ids = selectedRows.value.map((r) => r.id)
+  if (!ids.length) return
+  await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 个文档吗？将同时删除其向量，之后不可恢复。`, '批量删除', {
+    type: 'warning',
+  })
+  const count = await adminBatchDeleteDocs(knowledgeId, ids)
+  ElMessage.success(`已删除 ${count} 个文档`)
+  loadDocs()
+}
+
 const handleRestore = async (row) => {
   await ElMessageBox.confirm(`确定恢复文档「${row.name}」吗？将重新向量化入库。`, '恢复确认', { type: 'info' })
   await runVectorize(row, (r) => restoreDoc(knowledgeId, r.id))
@@ -264,6 +303,11 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
+}
+.batch-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 .file-icon {
   margin-right: 6px;

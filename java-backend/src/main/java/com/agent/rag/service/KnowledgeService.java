@@ -53,9 +53,31 @@ public interface KnowledgeService {
     void removeVector(Long knowledgeId, Long docId);
 
     /**
-     * 知识库文档列表
+     * 删除单个文档：逻辑删除（来源=用户）+ 删除该文档向量，用户可自恢复
      */
-    List<KnowledgeDocVO> listDocs(Long knowledgeId);
+    void deleteDoc(Long knowledgeId, Long docId);
+
+    /**
+     * 恢复用户自己删除的文档：仅 user 来源可恢复，管理员删除的拒绝；恢复后重新入库
+     *
+     * @return 重新入库的任务 id
+     */
+    String restoreDoc(Long knowledgeId, Long docId);
+
+    /**
+     * 批量移除入库：删除所选文档向量（保留文档记录），返回成功处理的文档数
+     */
+    int batchRemoveVector(Long knowledgeId, List<Long> docIds);
+
+    /**
+     * 批量删除文档：逻辑删除（来源=用户）+ 删除各文档向量，返回成功删除的文档数
+     */
+    int batchDeleteDocs(Long knowledgeId, List<Long> docIds);
+
+    /**
+     * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除）
+     */
+    List<KnowledgeDocVO> listDocs(Long knowledgeId, Integer deleted);
 
     /**
      * 用户业务数据统计（工具 Agent 回调），跨用户时按 userId 精确过滤

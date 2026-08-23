@@ -86,4 +86,14 @@ public interface AdminService {
      * 移除入库：删除文档向量（保留文档记录），状态置为 REMOVED（未入库）
      */
     void removeDocVector(Long knowledgeId, Long docId);
+
+    /**
+     * 批量移除入库：删除所选文档向量（保留文档记录），返回处理数量
+     */
+    int batchRemoveDocVector(Long knowledgeId, List<Long> docIds);
+
+    /**
+     * 批量删除文档：逻辑删除 + 删除各文档向量，返回删除数量
+     */
+    int batchDeleteDocs(Long knowledgeId, List<Long> docIds);
 }
