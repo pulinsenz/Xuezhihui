@@ -37,9 +37,15 @@ public interface KnowledgeService {
     void deleteKnowledge(Long knowledgeId);
 
     /**
-     * 上传文档：存文件 + 记元数据 + 提交向量化任务（Redis 消息队列），返回任务 id 供前端轮询
+     * 上传文档：存文件 + 记元数据 + 提交向量化任务（Redis 消息队列），返回任务 id 供前端轮询。
+     * 同知识库内存在相同内容文件时：创建记录但跳过向量化（SKIPPED），返回 null 提示重复。
      */
     String uploadDoc(Long knowledgeId, MultipartFile file);
+
+    /**
+     * 文档强制/重新入库（SKIPPED 重复文件强制向量化、FAILED/PENDING 重试），返回任务 id
+     */
+    String reVectorizeDoc(Long knowledgeId, Long docId);
 
     /**
      * 知识库文档列表

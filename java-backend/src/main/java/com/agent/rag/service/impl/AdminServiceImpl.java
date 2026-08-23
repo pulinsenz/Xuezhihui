@@ -243,8 +243,9 @@ public class AdminServiceImpl implements AdminService {
         if (doc.getIsDelete() == 1) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档已删除，请先恢复");
         }
-        if (!"FAILED".equals(doc.getVectorStatus()) && !"PENDING".equals(doc.getVectorStatus())) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "仅支持对失败或待处理文档重新入库");
+        if (!"FAILED".equals(doc.getVectorStatus()) && !"PENDING".equals(doc.getVectorStatus())
+                && !"SKIPPED".equals(doc.getVectorStatus())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "仅支持对未入库或失败的文档重新入库");
         }
         return taskService.publishVectorize(knowledgeId, doc.getId(), doc.getFileUrl(), doc.getName());
     }

@@ -61,8 +61,9 @@ CREATE TABLE IF NOT EXISTS `knowledge_doc`
     `fileUrl`      varchar(1024) DEFAULT NULL COMMENT '文件存储地址',
     `fileSize`     bigint       DEFAULT NULL COMMENT '文件大小(字节)',
     `fileType`     varchar(64)  DEFAULT NULL COMMENT '文件类型',
-    `vectorStatus` varchar(16)  NOT NULL DEFAULT 'PENDING' COMMENT '向量化状态: PENDING/SUCCESS/FAILED',
+    `vectorStatus` varchar(16)  NOT NULL DEFAULT 'PENDING' COMMENT '向量化状态: PENDING/SUCCESS/FAILED/SKIPPED',
     `errorMsg`     varchar(512) DEFAULT NULL COMMENT '向量化失败原因',
+    `fileHash`     varchar(64)  DEFAULT NULL COMMENT '文件内容SHA-256(上传去重用)',
     `createTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updateTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `isDelete`     tinyint      NOT NULL DEFAULT 0 COMMENT '是否删除',
@@ -108,3 +109,11 @@ CREATE TABLE IF NOT EXISTS `chat_message`
 -- 默认账号：admin  默认密码：admin12345（登录后建议修改）
 INSERT IGNORE INTO `user` (`userAccount`, `userPassword`, `userName`, `userRole`)
 VALUES ('admin', '$2a$10$Db1RZ9oVxgAR4DDhoKY.2uv.OVB/BHkyCN88XCYxG2x1aQKbFLwzO', '管理员', 'admin');
+
+-- 8. 兼容旧库：knowledge_doc 补 fileHash 列（已存在则跳过，幂等）
+SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_doc' AND COLUMN_NAME = 'fileHash');
+SET @ddl = IF(@col = 0,
+              'ALTER TABLE knowledge_doc ADD COLUMN fileHash varchar(64) DEFAULT NULL COMMENT ''文件内容SHA-256(上传去重用)''',
+              'SELECT 1');
+PREPARE s FROM @ddl; EXECUTE s; DEALLOCATE PREPARE s;

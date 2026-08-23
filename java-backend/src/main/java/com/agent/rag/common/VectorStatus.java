@@ -20,5 +20,10 @@ public enum VectorStatus {
     /**
      * 向量化失败
      */
-    FAILED
+    FAILED,
+
+    /**
+     * 重复文件，默认跳过向量化（未入库，可强制入库）
+     */
+    SKIPPED
 }

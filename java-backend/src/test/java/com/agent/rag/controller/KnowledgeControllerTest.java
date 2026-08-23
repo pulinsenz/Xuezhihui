@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -182,5 +183,111 @@ class KnowledgeControllerTest {
                         .header("Authorization", "Bearer " + tokenB))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(40101, objectMapper.readTree(resp).get("code").asInt(), "跨用户访问应无权限");
+    }
+
+    // ---------- 同文件去重（SHA-256）----------
+
+    private String upload(String token, long knowledgeId, String filename, byte[] content) throws Exception {
+        MockMultipartFile file = new MockMultipartFile("file", filename, "text/plain", content);
+        return mockMvc.perform(multipart("/knowledge/{id}/upload", knowledgeId)
+                        .file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    }
+
+    private JsonNode docs(String token, long knowledgeId) throws Exception {
+        String resp = mockMvc.perform(get("/knowledge/{id}/docs", knowledgeId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return objectMapper.readTree(resp).get("data");
+    }
+
+    private String docIdByStatus(String token, long knowledgeId, String status) throws Exception {
+        for (JsonNode d : docs(token, knowledgeId)) {
+            if (status.equals(d.get("vectorStatus").asText())) {
+                return d.get("id").asText();
+            }
+        }
+        return null;
+    }
+
+    @Test
+    void upload_duplicateContent_skipsVectorization() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "去重测试");
+
+        byte[] content = "同一份内容，重复上传".getBytes(StandardCharsets.UTF_8);
+        String first = upload(token, knowledgeId, "a.txt", content);
+        assertTrue(StringUtils.hasText(objectMapper.readTree(first).get("data").asText()), "首次上传应返回任务 id");
+
+        // 二次上传同内容（不同文件名）：创建 SKIPPED 记录，data 为 null 表示跳过入库
+        String second = upload(token, knowledgeId, "b.txt", content);
+        JsonNode secondNode = objectMapper.readTree(second);
+        assertEquals(0, secondNode.get("code").asInt());
+        assertTrue(secondNode.get("data").isNull(), "重复文件应返回 null 表示默认未入库");
+
+        assertEquals(2, docs(token, knowledgeId).size(), "重复文件仍应创建文档记录");
+        assertNotNull(docIdByStatus(token, knowledgeId, "SKIPPED"), "应存在 SKIPPED 记录");
+    }
+
+    @Test
+    void upload_sameNameDifferentContent_allowed() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "去重测试2");
+
+        String first = upload(token, knowledgeId, "note.txt", "内容A".getBytes(StandardCharsets.UTF_8));
+        String second = upload(token, knowledgeId, "note.txt", "内容B不一样".getBytes(StandardCharsets.UTF_8));
+        assertTrue(StringUtils.hasText(objectMapper.readTree(first).get("data").asText()));
+        assertTrue(StringUtils.hasText(objectMapper.readTree(second).get("data").asText()), "同名不同内容应正常入库");
+        assertEquals(2, docs(token, knowledgeId).size());
+    }
+
+    @Test
+    void upload_afterDelete_reUploadAllowed() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "去重测试3");
+        byte[] content = "删除后可重传".getBytes(StandardCharsets.UTF_8);
+        upload(token, knowledgeId, "a.txt", content);
+
+        // 逻辑删除旧文档（已删除不参与判重）
+        jdbcTemplate.update("UPDATE knowledge_doc SET isDelete = 1 WHERE knowledgeId = ?", knowledgeId);
+
+        String second = upload(token, knowledgeId, "b.txt", content);
+        assertTrue(StringUtils.hasText(objectMapper.readTree(second).get("data").asText()), "删除旧文档后重传同内容应正常入库");
+    }
+
+    @Test
+    void revectorize_skippedDoc_forcesVectorize() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "去重测试4");
+        byte[] content = "强制入库内容".getBytes(StandardCharsets.UTF_8);
+        upload(token, knowledgeId, "a.txt", content);
+        upload(token, knowledgeId, "b.txt", content); // 重复 → SKIPPED
+
+        String skippedDocId = docIdByStatus(token, knowledgeId, "SKIPPED");
+        assertNotNull(skippedDocId);
+
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/{docId}/revectorize", knowledgeId, skippedDocId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode node = objectMapper.readTree(resp);
+        assertEquals(0, node.get("code").asInt());
+        assertTrue(StringUtils.hasText(node.get("data").asText()), "强制入库应返回任务 id");
+    }
+
+    @Test
+    void revectorize_successDoc_rejected() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "去重测试5");
+        upload(token, knowledgeId, "a.txt", "已入库内容".getBytes(StandardCharsets.UTF_8));
+
+        // 模拟已入库
+        jdbcTemplate.update("UPDATE knowledge_doc SET vectorStatus = 'SUCCESS' WHERE knowledgeId = ?", knowledgeId);
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/{docId}/revectorize", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40000, objectMapper.readTree(resp).get("code").asInt(), "已入库文档不应再次入库");
     }
 }

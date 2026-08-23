@@ -58,9 +58,14 @@ public class KnowledgeDoc implements Serializable {
     private String vectorStatus;
 
     /**
-     * 向量化失败原因
+     * 向量化失败原因（或 SKIPPED 时的提示）
      */
     private String errorMsg;
+
+    /**
+     * 文件内容 SHA-256（上传去重用）
+     */
+    private String fileHash;
 
     /**
      * 创建时间

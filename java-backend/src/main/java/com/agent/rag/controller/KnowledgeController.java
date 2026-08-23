@@ -67,10 +67,19 @@ public class KnowledgeController {
 
     /**
      * 上传文档（multipart，字段名 file）：提交向量化任务，返回任务 id 供前端轮询 /task/{taskId}
+     * 同知识库内存在相同内容文件时返回 null（默认未入库，可强制入库）
      */
     @PostMapping("/{id}/upload")
     public Result<String> upload(@PathVariable Long id, @RequestPart("file") MultipartFile file) {
         return Result.success(knowledgeService.uploadDoc(id, file));
+    }
+
+    /**
+     * 文档强制/重新入库：SKIPPED 重复文件强制向量化、FAILED/PENDING 重试；返回任务 id
+     */
+    @PostMapping("/{id}/docs/{docId}/revectorize")
+    public Result<String> reVectorize(@PathVariable Long id, @PathVariable Long docId) {
+        return Result.success(knowledgeService.reVectorizeDoc(id, docId));
     }
 
     /**
