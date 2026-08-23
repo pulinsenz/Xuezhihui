@@ -59,8 +59,9 @@ def _route_next(state):
     route = state.get("route")
     if route == "business":
         return "tool"
-    # 知识库问答且指定了知识库 → 检索；否则（闲聊/其他/无知识库）直接回答，避免无效循环
-    if route == "kb" and state.get("knowledge_id"):
+    # 用户显式选中了知识库 → 除业务数据外都先尝试检索（路由可能把"问自己上传的内容"误判为
+    # other/chitchat，检索 + 反思兜底：命中则基于资料回答，未命中才回退闲聊）
+    if state.get("knowledge_id") and route != "chitchat":
         return "retrieve"
     return "answer"
 

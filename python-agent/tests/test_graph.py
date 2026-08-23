@@ -40,6 +40,17 @@ def test_graph_chitchat_skips_retrieval():
     assert "你好" in result["answer"]
 
 
+def test_graph_other_route_with_knowledge_id_still_retrieves():
+    """路由误判为 other，但用户显式选了知识库 → 仍走检索，基于资料回答（回归：问自己上传的记录）"""
+    graph = build_graph()
+    result = graph.invoke(_state(FakeLLM(route="other", answer="15号你学了 hello_agent 文档。"),
+                                 knowledge_id="kb1"))
+
+    assert result["route"] == "other"
+    assert result["sources"], "选了知识库即使路由判 other 也应检索"
+    assert result["answer"]
+
+
 def test_graph_insufficient_evidence_triggers_retry_loop():
     """反思判定证据不足 → 触发二次检索（循环重试），最终仍拒绝编造"""
     graph = build_graph()
