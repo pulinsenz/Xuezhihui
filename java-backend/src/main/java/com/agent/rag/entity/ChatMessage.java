@@ -47,6 +47,26 @@ public class ChatMessage implements Serializable {
     private String content;
 
     /**
+     * 回答属性：kb/business/chitchat/other
+     */
+    private String route;
+
+    /**
+     * 使用的知识库 id（回答属性为 kb 时）
+     */
+    private String knowledgeId;
+
+    /**
+     * 思考过程（JSON 数组字符串）
+     */
+    private String thinking;
+
+    /**
+     * 参考文献（JSON 数组字符串：text/score/doc_id）
+     */
+    private String sources;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

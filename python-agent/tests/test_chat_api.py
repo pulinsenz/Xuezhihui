@@ -18,9 +18,10 @@ def test_save_session_appends_context_and_persists(monkeypatch):
 
     monkeypatch.setattr(chat_api.runtime, "redis_store", store)
     monkeypatch.setattr(chat_api, "persist_chat",
-                        lambda session_id, user_id, query, answer: persisted.append((session_id, user_id, query, answer)))
+                        lambda session_id, user_id, query, answer, *a, **k: persisted.append((session_id, user_id, query, answer)))
 
-    chat_api._save_session("s1", "你好", "你好呀", "1001")
+    chat_api._save_session("s1", "你好", "你好呀", "1001", "kb", "kb1",
+                           ["判断问题类型：知识库问答"], [{"text": "片段A"}])
 
     assert ("user", "你好") in store.calls
     assert ("assistant", "你好呀") in store.calls

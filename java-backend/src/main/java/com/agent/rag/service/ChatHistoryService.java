@@ -4,6 +4,7 @@ import com.agent.rag.dto.resp.HistoryMessageVO;
 import com.agent.rag.dto.resp.SessionVO;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 对话历史服务：会话/消息持久化（MySQL），按用户隔离
@@ -14,9 +15,10 @@ public interface ChatHistoryService {
 
     /**
      * 保存一轮对话（Python 回调）：会话存在则更新时间，否则创建（标题取首条用户消息）；
-     * 追加 user + assistant 两条消息
+     * 追加 user + assistant 两条消息；assistant 消息记录回答属性/思考过程/参考文献
      */
-    void saveTurn(String sessionId, Long userId, String query, String answer);
+    void saveTurn(String sessionId, Long userId, String query, String answer,
+                  String route, String knowledgeId, List<String> thinking, List<Map<String, Object>> sources);
 
     /**
      * 当前用户的会话列表（按最近活跃倒序）

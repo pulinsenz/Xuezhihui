@@ -196,6 +196,15 @@ const enrichSourceNames = async (msg) => {
   }
 }
 
+// 历史消息加载后补充来源文档名（重载历史时还原参考文献的来源文档）
+const enrichHistorySources = async () => {
+  await Promise.all(
+    chat.messages
+      .filter((m) => m.sources?.length && m.knowledge_id)
+      .map((m) => enrichSourceNames(m))
+  )
+}
+
 const loadKnowledge = async () => {
   // 未登录时知识库接口会被拦截（401），且访客无权查看个人知识库，跳过加载
   if (!authStore.isLogin) return
@@ -282,15 +291,17 @@ const handleNewSession = () => {
   chat.newSession()
 }
 
-const handleOpenSession = (s) => {
+const handleOpenSession = async (s) => {
   if (chat.sending) return
-  chat.openSession(s.session_id)
+  await chat.openSession(s.session_id)
+  enrichHistorySources()
 }
 
 const handleDeleteSession = async (s) => {
   if (chat.sending) return
   await ElMessageBox.confirm(`确定删除会话「${s.title}」吗？历史将不可恢复。`, '删除确认', { type: 'warning' })
   await chat.deleteSession(s.session_id)
+  enrichHistorySources()
 }
 
 const formatTime = (epochSec) => {
@@ -315,6 +326,7 @@ const initLoggedIn = async () => {
   const id = route.params.sessionId || localStorage.getItem('chat_session_id')
   if (id && chat.sessions.some((s) => s.session_id === id)) {
     await chat.openSession(id)
+    enrichHistorySources()
   } else {
     chat.newSession()
   }
@@ -356,8 +368,12 @@ watch(
   async (id) => {
     if (!id || id === chat.activeSessionId || chat.sending) return
     const known = chat.sessions.some((s) => s.session_id === id)
-    if (known) await chat.openSession(id)
-    else chat.newSession()
+    if (known) {
+      await chat.openSession(id)
+      enrichHistorySources()
+    } else {
+      chat.newSession()
+    }
   }
 )
 </script>

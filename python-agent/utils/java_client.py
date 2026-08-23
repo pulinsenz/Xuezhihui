@@ -49,21 +49,32 @@ def fetch_user_stats(user_id) -> Optional[dict]:
         return None
 
 
-def persist_chat(session_id, user_id, query, answer) -> bool:
+def persist_chat(session_id, user_id, query, answer, route=None, knowledge_id=None,
+                 thinking=None, sources=None) -> bool:
     """回调 Java 持久化一轮对话（会话 + 消息，MySQL）。失败降级 False，不阻断对话。"""
     if not session_id or not user_id:
         return False
     if not settings.java_token:
         logger.warning("JAVA_TOKEN 未配置，对话历史不落库")
         return False
+    payload = {
+        "session_id": str(session_id),
+        "user_id": str(user_id),
+        "query": query,
+        "answer": answer,
+    }
+    if route:
+        payload["route"] = route
+    if knowledge_id:
+        payload["knowledge_id"] = str(knowledge_id)
+    if thinking:
+        payload["thinking"] = list(thinking)
+    if sources:
+        payload["sources"] = list(sources)
     url = f"{settings.java_base_url.rstrip('/')}/internal/agent/chat-save"
     try:
-        resp = httpx.post(url, json={
-            "session_id": str(session_id),
-            "user_id": str(user_id),
-            "query": query,
-            "answer": answer,
-        }, headers=_headers(), timeout=_TIMEOUT, trust_env=False)
+        resp = httpx.post(url, json=payload,
+                          headers=_headers(), timeout=_TIMEOUT, trust_env=False)
         if resp.status_code != 200:
             logger.warning("对话落库失败: status=%s", resp.status_code)
             return False

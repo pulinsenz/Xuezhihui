@@ -11,6 +11,8 @@ import com.agent.rag.mapper.ChatMessageMapper;
 import com.agent.rag.mapper.ChatSessionMapper;
 import com.agent.rag.service.ChatHistoryService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,9 +21,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 对话历史服务实现：MySQL 持久化（唯一事实源），Redis 仅作 LLM 上下文
+ * <p>
+ * assistant 消息额外持久化回答属性(route/knowledgeId)、思考过程(thinking)、参考文献(sources)
+ * 为 JSON 字符串，重载历史时还原展示。
  *
  * @author pulinsenz
  */
@@ -38,9 +44,13 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
     @Resource
     private ChatMessageMapper chatMessageMapper;
 
+    @Resource
+    private ObjectMapper objectMapper;
+
     @Override
     @Transactional
-    public void saveTurn(String sessionId, Long userId, String query, String answer) {
+    public void saveTurn(String sessionId, Long userId, String query, String answer,
+                         String route, String knowledgeId, List<String> thinking, List<Map<String, Object>> sources) {
         if (StrUtil.isBlank(sessionId) || userId == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "会话参数错误");
         }
@@ -60,8 +70,9 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
             update.setUpdateTime(now);
             chatSessionMapper.updateById(update);
         }
-        insertMessage(sessionId, userId, "user", query, now);
-        insertMessage(sessionId, userId, "assistant", answer, now);
+        insertMessage(sessionId, userId, "user", query, now, null, null, null, null);
+        insertMessage(sessionId, userId, "assistant", answer, now,
+                route, knowledgeId, toJson(thinking), toJson(sources));
     }
 
     @Override
@@ -91,9 +102,14 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
         List<ChatMessage> messages = chatMessageMapper.selectList(new LambdaQueryWrapper<ChatMessage>()
                 .eq(ChatMessage::getSessionId, sessionId)
                 .orderByAsc(ChatMessage::getId));
-        return messages.stream()
-                .map(m -> HistoryMessageVO.of(m.getRole(), m.getContent()))
-                .toList();
+        return messages.stream().map(m -> {
+            HistoryMessageVO vo = HistoryMessageVO.of(m.getRole(), m.getContent());
+            vo.setRoute(m.getRoute());
+            vo.setKnowledgeId(m.getKnowledgeId());
+            vo.setThinking(parseStringList(m.getThinking()));
+            vo.setSources(parseMapList(m.getSources()));
+            return vo;
+        }).toList();
     }
 
     @Override
@@ -134,13 +150,18 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
         }
     }
 
-    private void insertMessage(String sessionId, Long userId, String role, String content, LocalDateTime now) {
+    private void insertMessage(String sessionId, Long userId, String role, String content, LocalDateTime now,
+                               String route, String knowledgeId, String thinkingJson, String sourcesJson) {
         ChatMessage message = new ChatMessage();
         message.setSessionId(sessionId);
         message.setUserId(userId);
         message.setRole(role);
         message.setContent(content);
         message.setCreateTime(now);
+        message.setRoute(route);
+        message.setKnowledgeId(knowledgeId);
+        message.setThinking(thinkingJson);
+        message.setSources(sourcesJson);
         chatMessageMapper.insert(message);
     }
 
@@ -150,5 +171,45 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
         }
         String text = query.trim().replaceAll("\\s+", " ");
         return text.length() <= TITLE_MAX ? text : text.substring(0, TITLE_MAX);
+    }
+
+    // ---- JSON 序列化/反序列化（thinking、sources 存 JSON 字符串） ----
+
+    private String toJson(Object value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(value);
+        } catch (Exception e) {
+            log.warn("JSON 序列化失败: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<String> parseStringList(String json) {
+        if (StrUtil.isBlank(json)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<String>>() {
+            });
+        } catch (Exception e) {
+            log.warn("JSON 解析失败(thinking): {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private List<Map<String, Object>> parseMapList(String json) {
+        if (StrUtil.isBlank(json)) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {
+            });
+        } catch (Exception e) {
+            log.warn("JSON 解析失败(sources): {}", e.getMessage());
+            return null;
+        }
     }
 }

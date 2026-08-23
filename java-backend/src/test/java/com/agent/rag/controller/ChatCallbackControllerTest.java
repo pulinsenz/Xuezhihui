@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
 /**
@@ -148,5 +149,36 @@ class ChatCallbackControllerTest {
                                 "query", "hi", "answer", "hi"))))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(40000, objectMapper.readTree(body).get("code").asInt());
+    }
+
+    @Test
+    void chatSave_storesRouteThinkingSources() throws Exception {
+        long uid = registerUser();
+        String sid = "meta_" + System.nanoTime();
+        createdSessionIds.add(sid);
+
+        String body = mockMvc.perform(post("/internal/agent/chat-save")
+                        .header("X-Agent-Token", TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "session_id", sid,
+                                "user_id", String.valueOf(uid),
+                                "query", "十五号我学了什么",
+                                "answer", "15号你学了hello_agent文档[1]",
+                                "route", "kb",
+                                "knowledge_id", "kb1",
+                                "thinking", List.of("判断问题类型：知识库问答", "检索知识库，命中5条资料"),
+                                "sources", List.of(Map.<String, Object>of("text", "片段A", "score", 0.8, "doc_id", "doc1"))))))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, objectMapper.readTree(body).get("code").asInt());
+
+        // 验证 assistant 消息落库了属性/思考/文献
+        Map<String, Object> row = jdbcTemplate.queryForMap(
+                "SELECT route, knowledgeId, thinking, sources FROM chat_message WHERE sessionId = ? AND role = 'assistant'",
+                sid);
+        assertEquals("kb", row.get("route"));
+        assertEquals("kb1", row.get("knowledgeId"));
+        assertTrue(String.valueOf(row.get("thinking")).contains("知识库问答"));
+        assertTrue(String.valueOf(row.get("sources")).contains("doc1"));
     }
 }

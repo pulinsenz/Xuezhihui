@@ -52,12 +52,13 @@ def _build_state(query: str, session_id: str, knowledge_id: str, history: list, 
     }
 
 
-def _save_session(session_id: str, query: str, answer: str, user_id: str = None):
+def _save_session(session_id: str, query: str, answer: str, user_id: str = None,
+                  route: str = "", knowledge_id: str = None, thinking: list = None, sources: list = None):
     # Redis 会话记忆（LLM 上下文，窗口裁剪）
     runtime.redis_store.append_message(session_id, "user", query)
     runtime.redis_store.append_message(session_id, "assistant", answer)
-    # MySQL 持久化历史（回调 Java 落库），失败降级不阻断对话
-    persist_chat(session_id, user_id, query, answer)
+    # MySQL 持久化历史（回调 Java 落库，含回答属性/思考过程/参考文献），失败降级不阻断对话
+    persist_chat(session_id, user_id, query, answer, route, knowledge_id, thinking, sources)
 
 
 _ROUTE_LABELS = {
@@ -82,7 +83,11 @@ def chat(req: ChatRequest):
     graph = get_graph()
     result = graph.invoke(_build_state(req.query, req.session_id, req.knowledge_id, history, req.user_id))
     answer = result.get("answer", "")
-    _save_session(req.session_id, req.query, answer, req.user_id)
+    route = result.get("route", "")
+    sources = result.get("sources", [])
+    # 非流式没有节点轨迹，构造最简思考过程
+    thinking = [f"判断问题类型：{_route_label(route)}", "正在生成回答…"]
+    _save_session(req.session_id, req.query, answer, req.user_id, route, req.knowledge_id, thinking, sources)
     return {
         "code": 0, "message": "ok",
         "data": ChatResponse(
@@ -111,6 +116,12 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
         final_answer = ""
         sources = []
         route = ""
+        thinking_steps = []
+
+        def emit_thinking(content: str):
+            thinking_steps.append(content)
+            return sse_event({"type": "thinking", "content": content})
+
         try:
             # stream_mode=["messages","updates"]：messages 输出 LLM token，updates 输出各节点结果
             async for mode, payload in graph.astream(state, stream_mode=["messages", "updates"]):
@@ -128,32 +139,27 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
                     for node, update in payload.items():
                         if node == "router":
                             route = update.get("route", "")
-                            yield sse_event({"type": "thinking",
-                                             "content": f"判断问题类型：{_route_label(route)}"})
+                            yield emit_thinking(f"判断问题类型：{_route_label(route)}")
                         elif node == "tool":
                             if update.get("tool_called"):
-                                yield sse_event({"type": "thinking",
-                                                 "content": f"调用工具：查询业务数据 → {update.get('tool_context', '')}"})
+                                yield emit_thinking(f"调用工具：查询业务数据 → {update.get('tool_context', '')}")
                             else:
-                                yield sse_event({"type": "thinking",
-                                                 "content": "调用业务数据工具：无数据或已降级为普通回答"})
+                                yield emit_thinking("调用业务数据工具：无数据或已降级为普通回答")
                         elif node == "retrieve":
                             sources = update.get("sources", [])
                             retry = update.get("retry_count", 1)
-                            yield sse_event({"type": "thinking",
-                                             "content": f"检索知识库，命中 {len(sources)} 条资料（第 {retry} 次检索）"})
+                            yield emit_thinking(f"检索知识库，命中 {len(sources)} 条资料（第 {retry} 次检索）")
                         elif node == "reflect":
                             sufficient = update.get("sufficient", False)
-                            yield sse_event({"type": "thinking",
-                                             "content": "证据校验：" + ("证据充分，开始回答" if sufficient else "证据不足，继续检索")})
+                            yield emit_thinking("证据校验：" + ("证据充分，开始回答" if sufficient else "证据不足，继续检索"))
                         elif node == "answer":
-                            yield sse_event({"type": "thinking", "content": "正在生成回答…"})
+                            yield emit_thinking("正在生成回答…")
                             if update.get("answer"):
                                 final_answer = update["answer"]
-            # 会话记忆（流式用缓存 token 拼完整回答）
+            # 会话记忆 + 历史持久化（含回答属性/思考过程/参考文献）
             if not final_answer:
                 final_answer = "".join(tokens)
-            _save_session(session_id, query, final_answer, user_id)
+            _save_session(session_id, query, final_answer, user_id, route, knowledge_id, thinking_steps, sources)
             yield sse_event({"type": "done", "answer": final_answer, "sources": sources,
                              "route": route, "knowledge_id": knowledge_id})
         except Exception as e:

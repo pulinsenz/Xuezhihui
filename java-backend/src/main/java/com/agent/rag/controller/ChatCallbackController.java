@@ -52,7 +52,11 @@ public class ChatCallbackController {
                 request.getSessionId(),
                 Long.valueOf(request.getUserId()),
                 request.getQuery(),
-                request.getAnswer());
+                request.getAnswer(),
+                request.getRoute(),
+                request.getKnowledgeId(),
+                request.getThinking(),
+                request.getSources());
         return Result.success(true);
     }
 }

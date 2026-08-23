@@ -95,12 +95,16 @@ CREATE TABLE IF NOT EXISTS `chat_session`
 -- 6. 创建对话消息表（若不存在）
 CREATE TABLE IF NOT EXISTS `chat_message`
 (
-    `id`         bigint      NOT NULL COMMENT '消息id(雪花)',
-    `sessionId`  varchar(64) NOT NULL COMMENT '会话id',
-    `userId`     bigint      NOT NULL COMMENT '所属用户id',
-    `role`       varchar(16) NOT NULL COMMENT '角色: user/assistant',
-    `content`    text        NOT NULL COMMENT '消息内容',
-    `createTime` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `id`          bigint      NOT NULL COMMENT '消息id(雪花)',
+    `sessionId`   varchar(64) NOT NULL COMMENT '会话id',
+    `userId`      bigint      NOT NULL COMMENT '所属用户id',
+    `role`        varchar(16) NOT NULL COMMENT '角色: user/assistant',
+    `content`     text        NOT NULL COMMENT '消息内容',
+    `route`       varchar(16) DEFAULT NULL COMMENT '回答属性: kb/business/chitchat/other',
+    `knowledgeId` varchar(64) DEFAULT NULL COMMENT '使用的知识库id(回答属性为kb时)',
+    `thinking`    longtext    DEFAULT NULL COMMENT '思考过程(JSON数组)',
+    `sources`     longtext    DEFAULT NULL COMMENT '参考文献(JSON数组: text/score/doc_id)',
+    `createTime`  datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     PRIMARY KEY (`id`),
     KEY `idx_session` (`sessionId`),
     KEY `idx_user` (`userId`)
@@ -144,3 +148,17 @@ SET @ddl4 = IF(@col4 = 0,
                'ALTER TABLE `user` ADD COLUMN collapseRefs tinyint NOT NULL DEFAULT 1 COMMENT ''参考文献默认折叠: 1=折叠 0=展开''',
                'SELECT 1');
 PREPARE s4 FROM @ddl4; EXECUTE s4; DEALLOCATE PREPARE s4;
+
+-- 12. 兼容旧库：chat_message 补 route/knowledgeId/thinking/sources 列（逐个判断，幂等）
+SET @c5 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_message' AND COLUMN_NAME = 'route');
+SET @d5 = IF(@c5 = 0, 'ALTER TABLE chat_message ADD COLUMN route varchar(16) DEFAULT NULL COMMENT ''回答属性: kb/business/chitchat/other''', 'SELECT 1');
+PREPARE s5 FROM @d5; EXECUTE s5; DEALLOCATE PREPARE s5;
+SET @c6 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_message' AND COLUMN_NAME = 'knowledgeId');
+SET @d6 = IF(@c6 = 0, 'ALTER TABLE chat_message ADD COLUMN knowledgeId varchar(64) DEFAULT NULL COMMENT ''使用的知识库id''', 'SELECT 1');
+PREPARE s6 FROM @d6; EXECUTE s6; DEALLOCATE PREPARE s6;
+SET @c7 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_message' AND COLUMN_NAME = 'thinking');
+SET @d7 = IF(@c7 = 0, 'ALTER TABLE chat_message ADD COLUMN thinking longtext DEFAULT NULL COMMENT ''思考过程(JSON数组)''', 'SELECT 1');
+PREPARE s7 FROM @d7; EXECUTE s7; DEALLOCATE PREPARE s7;
+SET @c8 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_message' AND COLUMN_NAME = 'sources');
+SET @d8 = IF(@c8 = 0, 'ALTER TABLE chat_message ADD COLUMN sources longtext DEFAULT NULL COMMENT ''参考文献(JSON数组)''', 'SELECT 1');
+PREPARE s8 FROM @d8; EXECUTE s8; DEALLOCATE PREPARE s8;
