@@ -115,7 +115,11 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
             # stream_mode=["messages","updates"]：messages 输出 LLM token，updates 输出各节点结果
             async for mode, payload in graph.astream(state, stream_mode=["messages", "updates"]):
                 if mode == "messages":
-                    msg, _meta = payload
+                    msg, meta = payload
+                    # 只收集回答节点的 token：路由/反思/工具等非流式 LLM 输出也会进入 messages 流
+                    # （否则 "kb"、"yes" 等会被误拼进回答），按节点名过滤
+                    if meta.get("langgraph_node") != "answer":
+                        continue
                     token = msg.content if hasattr(msg, "content") else str(msg)
                     if token:
                         tokens.append(token)
