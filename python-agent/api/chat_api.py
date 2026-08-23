@@ -60,6 +60,19 @@ def _save_session(session_id: str, query: str, answer: str, user_id: str = None)
     persist_chat(session_id, user_id, query, answer)
 
 
+_ROUTE_LABELS = {
+    "kb": "知识库问答",
+    "business": "业务数据查询",
+    "chitchat": "闲聊",
+    "other": "通用问答",
+}
+
+
+def _route_label(route: str) -> str:
+    """路由类型 → 思考过程里的可读描述"""
+    return _ROUTE_LABELS.get(route, route or "未知")
+
+
 @router.post("/chat")
 def chat(req: ChatRequest):
     """普通对话（非流式），返回完整回答"""
@@ -83,7 +96,7 @@ def chat(req: ChatRequest):
 
 @router.get("/stream")
 def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str = None):
-    """SSE 流式对话：逐 token 输出，末尾带 done 事件（含完整回答与来源）"""
+    """SSE 流式对话：逐 token 输出 + thinking 思考过程事件，末尾带 done 事件（含回答/来源/路由）"""
     if not session_id or not query.strip():
         raise HTTPException(status_code=400, detail="session_id 和 query 不能为空")
     history = runtime.redis_store.get_history(session_id)
@@ -97,6 +110,7 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
         tokens = []
         final_answer = ""
         sources = []
+        route = ""
         try:
             # stream_mode=["messages","updates"]：messages 输出 LLM token，updates 输出各节点结果
             async for mode, payload in graph.astream(state, stream_mode=["messages", "updates"]):
@@ -108,15 +122,31 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
                         yield sse_event({"type": "token", "content": token})
                 else:
                     for node, update in payload.items():
-                        if node == "answer" and update.get("answer"):
-                            final_answer = update["answer"]
-                        if node == "retrieve":
+                        if node == "router":
+                            route = update.get("route", "")
+                            yield sse_event({"type": "thinking",
+                                             "content": f"判断问题类型：{_route_label(route)}"})
+                        elif node == "tool":
+                            yield sse_event({"type": "thinking", "content": "查询你的业务数据…"})
+                        elif node == "retrieve":
                             sources = update.get("sources", [])
+                            retry = update.get("retry_count", 1)
+                            yield sse_event({"type": "thinking",
+                                             "content": f"检索知识库，命中 {len(sources)} 条资料（第 {retry} 次检索）"})
+                        elif node == "reflect":
+                            sufficient = update.get("sufficient", False)
+                            yield sse_event({"type": "thinking",
+                                             "content": "证据校验：" + ("证据充分，开始回答" if sufficient else "证据不足，继续检索")})
+                        elif node == "answer":
+                            yield sse_event({"type": "thinking", "content": "正在生成回答…"})
+                            if update.get("answer"):
+                                final_answer = update["answer"]
             # 会话记忆（流式用缓存 token 拼完整回答）
             if not final_answer:
                 final_answer = "".join(tokens)
             _save_session(session_id, query, final_answer, user_id)
-            yield sse_event({"type": "done", "answer": final_answer, "sources": sources})
+            yield sse_event({"type": "done", "answer": final_answer, "sources": sources,
+                             "route": route, "knowledge_id": knowledge_id})
         except Exception as e:
             logger.error("流式对话异常: %s", e)
             yield sse_event({"type": "error", "message": str(e)})

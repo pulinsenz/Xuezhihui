@@ -61,17 +61,24 @@ export const useChatStore = defineStore('chat', {
       this.messages.push({ role: 'user', content: text })
     },
     pushAssistantPlaceholder() {
-      this.messages.push({ role: 'assistant', content: '', streaming: true })
+      this.messages.push({ role: 'assistant', content: '', streaming: true, thinking: [], route: '', sources: [] })
     },
     appendToken(text) {
       const cur = this.messages[this.messages.length - 1]
       if (cur) cur.content += text
     },
-    async finishStream(answer) {
+    addThinking(text) {
+      const cur = this.messages[this.messages.length - 1]
+      if (cur && cur.thinking) cur.thinking.push(text)
+    },
+    async finishStream({ answer = '', route = '', sources = [], knowledge_id = '' } = {}) {
       const cur = this.messages[this.messages.length - 1]
       if (cur) {
         cur.streaming = false
         if (!cur.content) cur.content = answer || '（无回答）'
+        cur.route = route
+        cur.sources = sources || []
+        cur.knowledge_id = knowledge_id
       }
       this.sending = false
       // 刷新面板标题/条数/排序

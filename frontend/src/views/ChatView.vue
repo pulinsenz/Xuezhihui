@@ -54,8 +54,35 @@
               {{ msg.role === 'user' ? '我' : 'AI' }}
             </el-avatar>
             <div class="msg-bubble" :class="msg.role">
-              <span v-if="msg.role === 'assistant' && msg.streaming" class="typing-cursor" />
+              <template v-if="msg.role === 'assistant'">
+                <!-- 回答属性标识：闲聊 / 哪个知识库 / 业务数据 / 通用回答 -->
+                <div v-if="provenanceOf(msg).label" class="msg-provenance">
+                  <el-tag size="small" :type="provenanceOf(msg).type" effect="plain">
+                    {{ provenanceOf(msg).label }}
+                  </el-tag>
+                </div>
+                <span v-if="msg.streaming" class="typing-cursor" />
+              </template>
               <span class="msg-text" v-html="renderText(msg.content)" />
+
+              <!-- 思考过程（可折叠） -->
+              <details v-if="msg.role === 'assistant' && msg.thinking?.length" class="msg-thinking">
+                <summary>🧠 思考过程</summary>
+                <ul class="thinking-list">
+                  <li v-for="(t, i) in msg.thinking" :key="i">{{ t }}</li>
+                </ul>
+              </details>
+
+              <!-- 参考文献（使用了知识库才显示，编号对应回答中的 [1][2]） -->
+              <div v-if="msg.role === 'assistant' && msg.sources?.length && !msg.streaming" class="msg-refs">
+                <div class="refs-title">📚 参考文献</div>
+                <ol class="refs-list">
+                  <li v-for="(s, i) in msg.sources" :key="i">
+                    <span class="refs-num">[{{ i + 1 }}]</span>
+                    <span class="refs-text">{{ truncateText(s.text) }}</span>
+                  </li>
+                </ol>
+              </div>
             </div>
           </div>
         </div>
@@ -117,6 +144,25 @@ const renderText = (text) => {
     .replace(/\[(\d+)\]/g, '<span class="cite">[$1]</span>')
 }
 
+// 回答属性：路由 → 标签文案与颜色（闲聊/知识库/业务数据/通用回答）
+const provenanceOf = (msg) => {
+  const route = msg.route
+  if (route === 'kb') {
+    const kb = kbList.value.find((k) => String(k.id) === String(msg.knowledge_id))
+    return { label: kb ? `📚 知识库「${kb.name}」` : '📚 知识库', type: 'primary' }
+  }
+  if (route === 'chitchat') return { label: '💬 闲聊', type: 'info' }
+  if (route === 'business') return { label: '📊 业务数据', type: 'success' }
+  if (route === 'other') return { label: '🤖 通用回答', type: 'warning' }
+  return { label: '', type: 'info' }
+}
+
+// 参考文献片段截断展示
+const truncateText = (text, max = 120) => {
+  text = (text || '').replace(/\s+/g, ' ').trim()
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
 const loadKnowledge = async () => {
   // 未登录时知识库接口会被拦截（401），且访客无权查看个人知识库，跳过加载
   if (!authStore.isLogin) return
@@ -174,9 +220,11 @@ const handleSend = async () => {
         if (payload.type === 'token') {
           chat.appendToken(payload.content)
           scrollToBottom()
+        } else if (payload.type === 'thinking') {
+          chat.addThinking(payload.content || '')
         } else if (payload.type === 'done') {
           finished = true
-          await chat.finishStream(payload.answer || '')
+          await chat.finishStream(payload)
           scrollToBottom()
         } else if (payload.type === 'error') {
           throw new Error(payload.message || '对话出错')
@@ -184,7 +232,7 @@ const handleSend = async () => {
       }
     }
     // 未收到 done 事件时兜底收尾
-    if (!finished) await chat.finishStream('')
+    if (!finished) await chat.finishStream({})
   } catch (e) {
     chat.failStream(e.message || '对话失败，请稍后再试')
     ElMessage.error(e.message || '对话失败，请稍后再试')
@@ -427,6 +475,60 @@ watch(
 }
 .msg-bubble.user .cite {
   color: #e0f0ff;
+}
+/* 回答属性标识 */
+.msg-provenance {
+  margin-bottom: 6px;
+}
+/* 思考过程 */
+.msg-thinking {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+  border-top: 1px dashed var(--el-border-color-lighter);
+  padding-top: 6px;
+}
+.msg-thinking summary {
+  cursor: pointer;
+  user-select: none;
+}
+.thinking-list {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  line-height: 1.8;
+}
+/* 参考文献 */
+.msg-refs {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--el-border-color-lighter);
+  font-size: 12px;
+}
+.refs-title {
+  color: #606266;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.refs-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #909399;
+  line-height: 1.8;
+}
+.refs-num {
+  color: #409eff;
+  font-weight: 600;
+}
+.msg-bubble.user .refs-title,
+.msg-bubble.user .refs-num {
+  color: #e0f0ff;
+}
+.msg-bubble.user .refs-list {
+  color: #d9ecff;
+}
+.msg-bubble.user .msg-thinking {
+  color: #bcd6f0;
+  border-color: rgba(255, 255, 255, 0.25);
 }
 .typing-cursor {
   display: inline-block;

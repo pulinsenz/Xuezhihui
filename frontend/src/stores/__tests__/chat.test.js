@@ -116,4 +116,25 @@ describe('chat store', () => {
     expect(store.messages[0].content).toContain('出错了')
     expect(store.sending).toBe(false)
   })
+
+  it('finishStream 记录路由/参考文献/思考轨迹', async () => {
+    chatApi.listSessions.mockResolvedValue([])
+    const store = useChatStore()
+    store.pushAssistantPlaceholder()
+    store.addThinking('判断问题类型：知识库问答')
+    store.addThinking('检索知识库，命中 2 条资料')
+    await store.finishStream({
+      answer: '基于资料的回答[1]',
+      route: 'kb',
+      sources: [{ text: '片段A' }, { text: '片段B' }],
+      knowledge_id: 'kb1',
+    })
+    const m = store.messages[0]
+    expect(m.route).toBe('kb')
+    expect(m.sources).toHaveLength(2)
+    expect(m.knowledge_id).toBe('kb1')
+    expect(m.thinking).toEqual(['判断问题类型：知识库问答', '检索知识库，命中 2 条资料'])
+    expect(m.content).toBe('基于资料的回答[1]')
+    expect(m.streaming).toBe(false)
+  })
 })
