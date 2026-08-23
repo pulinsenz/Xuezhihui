@@ -60,7 +60,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, Document, Refresh, Upload } from '@element-plus/icons-vue'
-import { getKnowledge, listDocs, uploadDoc } from '../api/knowledge'
+import { getKnowledge, getTask, listDocs, uploadDoc } from '../api/knowledge'
 
 const route = useRoute()
 const router = useRouter()
@@ -93,21 +93,30 @@ const handleUpload = async (e) => {
   if (!file) return
   uploading.value = true
   try {
-    await uploadDoc(knowledgeId, file)
+    // 上传返回 taskId：向量化走 Redis 消息队列（Python worker 异步执行），前端轮询任务状态
+    const taskId = await uploadDoc(knowledgeId, file)
     ElMessage.success('上传成功，正在向量化...')
-    await loadDocs()
-    // 向量化异步执行，短暂轮询刷新状态
-    let pollCount = 0
     clearInterval(pollTimer)
     pollTimer = setInterval(async () => {
-      pollCount += 1
-      await loadDocs()
-      const pending = docs.value.some((d) => d.vectorStatus === 'PENDING')
-      if (pollCount >= 8 || !pending) {
+      try {
+        const task = await getTask(taskId)
+        const done = task?.status === 'SUCCESS' || task?.status === 'FAILED'
+        if (done) {
+          clearInterval(pollTimer)
+          await loadDocs()
+          if (task.status === 'FAILED') {
+            ElMessage.warning('向量化失败：' + (task.message || '未知原因'))
+          } else {
+            ElMessage.success('向量化完成，已可检索')
+          }
+        }
+      } catch (err) {
+        // 任务状态查询失败（任务过期等）则停止轮询，依赖文档列表刷新兜底
         clearInterval(pollTimer)
+        await loadDocs()
       }
     }, 1000)
-  } catch (e) {
+  } catch (err) {
     // 错误已由拦截器提示
   } finally {
     uploading.value = false

@@ -13,7 +13,9 @@ from fastapi.responses import JSONResponse
 from agent import runtime
 from api import chat_api, knowledge_api
 from config import settings, validate_settings
+from storage.task_store import TaskStore
 from utils.logger_util import get_logger
+from worker.vectorize_worker import VectorizeWorker
 
 logger = get_logger("main")
 
@@ -23,7 +25,11 @@ async def lifespan(app: FastAPI):
     # 生产启动校验：缺 key / 缺 token 直接终止，杜绝静默降级上线
     validate_settings()
     runtime.init_runtime()
+    # 长任务消费者：Redis List 消息队列，Java 提交、本服务消费执行向量化
+    worker = VectorizeWorker(TaskStore())
+    worker.start()
     yield
+    worker.stop()
 
 
 app = FastAPI(

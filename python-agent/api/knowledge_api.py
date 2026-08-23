@@ -82,20 +82,27 @@ def _parse(path: str, ext: str) -> str:
     return Path(path).read_bytes().decode("utf-8", errors="ignore")
 
 
+def process_vectorize(knowledge_id: str, doc_id: str, file_url: str, name: str) -> int:
+    """向量化入库核心逻辑（API 端点与消息队列 worker 共用）：
+    读文件 → 分块 → BM25 + 向量双索引，返回 chunk 数"""
+    text = _load_file(file_url, name)
+    if not text.strip():
+        raise HTTPException(status_code=400, detail="文件内容为空")
+    chunk_count = runtime.retriever.add_document(knowledge_id, doc_id, text)
+    agent_event(logger, "vectorized", knowledge_id=knowledge_id,
+                doc_id=doc_id, chunks=chunk_count)
+    return chunk_count
+
+
 @router.post("/vectorize")
 def vectorize(req: VectorizeRequest):
-    """文档向量化入库：读文件 → 分块 → BM25 + 向量双索引"""
+    """文档向量化入库：读文件 → 分块 → BM25 + 向量双索引（保留给 Java 同步调用场景）"""
     try:
-        text = _load_file(req.file_url, req.name)
+        chunk_count = process_vectorize(req.knowledge_id, req.doc_id, req.file_url, req.name)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"读取文件失败: {e}") from e
-    if not text.strip():
-        raise HTTPException(status_code=400, detail="文件内容为空")
-    chunk_count = runtime.retriever.add_document(req.knowledge_id, req.doc_id, text)
-    agent_event(logger, "vectorized", knowledge_id=req.knowledge_id,
-                doc_id=req.doc_id, chunks=chunk_count)
     return {"code": 0, "message": "ok", "data": {"chunks": chunk_count}}
 
 

@@ -1,10 +1,7 @@
 package com.agent.rag.controller;
 
 import cn.hutool.core.io.FileUtil;
-import com.agent.rag.common.VectorStatus;
 import com.agent.rag.config.JwtProperties;
-import com.agent.rag.entity.KnowledgeDoc;
-import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
@@ -37,8 +34,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 知识库接口集成测试（MockMvc + 真实 MySQL/Redis）
  * <p>
- * 覆盖：创建→列表→multipart 上传→文档列表→删除 全链路；
- * Python Agent 未启动时向量化优雅降级为 FAILED；
+ * 覆盖：创建→列表→multipart 上传→任务提交→文档列表→任务状态查询→删除 全链路；
+ * 向量化走 Redis 消息队列（Python worker 消费），集成环境不启动 worker，仅验证任务已提交且状态可查；
  * 未登录/跨用户访问被拦截。测试自清理数据库与上传文件。
  *
  * @author pulinsenz
@@ -55,8 +52,6 @@ class KnowledgeControllerTest {
     private StringRedisTemplate stringRedisTemplate;
     @Autowired
     private JdbcTemplate jdbcTemplate;
-    @Autowired
-    private KnowledgeDocMapper knowledgeDocMapper;
     @Autowired
     private JwtProperties jwtProperties;
     @Value("${app.file.storage.local-path}")
@@ -124,20 +119,6 @@ class KnowledgeControllerTest {
         return objectMapper.readTree(resp).get("data").asLong();
     }
 
-    /** 等待向量化状态不再是 PENDING */
-    private KnowledgeDoc waitForVectorStatus(Long docId, long timeoutMs) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + timeoutMs;
-        KnowledgeDoc doc;
-        do {
-            doc = knowledgeDocMapper.selectById(docId);
-            if (doc != null && !VectorStatus.PENDING.name().equals(doc.getVectorStatus())) {
-                return doc;
-            }
-            Thread.sleep(100);
-        } while (System.currentTimeMillis() < deadline);
-        return doc;
-    }
-
     @Test
     void knowledge_fullFlow() throws Exception {
         String token = registerAndLogin();
@@ -150,7 +131,7 @@ class KnowledgeControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(0, objectMapper.readTree(list).get("code").asInt());
 
-        // multipart 上传
+        // multipart 上传：提交向量化任务，返回任务 id
         MockMultipartFile file = new MockMultipartFile("file", "课程简介.txt", "text/plain",
                 "数据结构与算法是计算机核心课程".getBytes(StandardCharsets.UTF_8));
         String up = mockMvc.perform(multipart("/knowledge/{id}/upload", knowledgeId)
@@ -159,7 +140,8 @@ class KnowledgeControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         JsonNode upNode = objectMapper.readTree(up);
         assertEquals(0, upNode.get("code").asInt());
-        long docId = upNode.get("data").asLong();
+        String taskId = upNode.get("data").asText();
+        assertTrue(StringUtils.hasText(taskId), "上传应返回向量化任务 id");
 
         // 文档列表
         String docs = mockMvc.perform(get("/knowledge/{id}/docs", knowledgeId)
@@ -167,14 +149,14 @@ class KnowledgeControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(1, objectMapper.readTree(docs).get("data").size());
 
-        // 等待异步向量化完成：Python 未启动 → 优雅降级 FAILED；Python 运行中 → SUCCESS
-        KnowledgeDoc doc = waitForVectorStatus(docId, 8000);
-        String status = doc.getVectorStatus();
-        assertTrue(VectorStatus.SUCCESS.name().equals(status) || VectorStatus.FAILED.name().equals(status),
-                "向量化应结束（SUCCESS 或 FAILED），实际: " + status);
-        if (VectorStatus.FAILED.name().equals(status)) {
-            assertTrue(StringUtils.hasText(doc.getErrorMsg()), "失败时应记录原因");
-        }
+        // 任务状态可查（PENDING/PROCESSING/SUCCESS 由 Python worker 消费队列决定，此处仅验证接口可用）
+        String task = mockMvc.perform(get("/task/{id}", taskId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode taskNode = objectMapper.readTree(task);
+        assertEquals(0, taskNode.get("code").asInt());
+        assertTrue(taskNode.get("data").has("status"), "任务状态应可查询");
 
         // 删除知识库
         String del = mockMvc.perform(delete("/knowledge/{id}", knowledgeId)

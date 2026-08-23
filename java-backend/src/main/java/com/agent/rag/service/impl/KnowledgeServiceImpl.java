@@ -7,7 +7,6 @@ import com.agent.rag.common.ErrorCode;
 import com.agent.rag.common.VectorStatus;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.DeleteVectorRequest;
-import com.agent.rag.dto.req.VectorizeRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
@@ -17,6 +16,7 @@ import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.service.KnowledgeService;
+import com.agent.rag.service.TaskService;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.UserContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -26,7 +26,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
-import java.util.concurrent.Executor;
 
 /**
  * 知识库服务实现
@@ -49,8 +48,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     @Resource
     private PythonAgentClient pythonAgentClient;
 
-    @Resource(name = "vectorizeExecutor")
-    private Executor vectorizeExecutor;
+    @Resource
+    private TaskService taskService;
 
     @Override
     public Long createKnowledge(KnowledgeCreateRequest request) {
@@ -114,7 +113,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     @Override
-    public Long uploadDoc(Long knowledgeId, MultipartFile file) {
+    public String uploadDoc(Long knowledgeId, MultipartFile file) {
         getOwnedKnowledge(knowledgeId);
         String fileUrl = fileStorageService.store(file, UserContext.getUser().getId());
         KnowledgeDoc doc = new KnowledgeDoc();
@@ -125,10 +124,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         doc.setFileType(FileUtil.extName(file.getOriginalFilename()));
         doc.setVectorStatus(VectorStatus.PENDING.name());
         knowledgeDocMapper.insert(doc);
-        // 异步向量化：与上传解耦，失败不影响文档入库，状态可查
-        Long docId = doc.getId();
-        vectorizeExecutor.execute(() -> doVectorize(docId, knowledgeId, fileUrl, doc.getName()));
-        return docId;
+        // 长任务走 Redis 消息队列：Java 提交任务（状态 PENDING + 入队），Python worker 消费执行，
+        // 完成后回调 Java 回写状态；前端轮询 /task/{taskId}，规避向量化耗时导致的 HTTP 超时
+        return taskService.publishVectorize(knowledgeId, doc.getId(), fileUrl, doc.getName());
     }
 
     @Override
@@ -181,28 +179,5 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             vo.setLastUploadTime(latest.getCreateTime());
         }
         return vo;
-    }
-
-    /**
-     * 调用 Python Agent 执行向量化，并更新文档状态
-     */
-    private void doVectorize(Long docId, Long knowledgeId, String fileUrl, String name) {
-        try {
-            pythonAgentClient.vectorize(new VectorizeRequest(knowledgeId, docId, fileUrl, name));
-            updateVectorStatus(docId, VectorStatus.SUCCESS, null);
-            log.info("文档向量化成功: docId={}", docId);
-        } catch (Exception e) {
-            log.error("文档向量化失败: docId={}, knowledgeId={}", docId, knowledgeId, e);
-            String errorMsg = StrUtil.sub(e.getMessage(), 0, 500);
-            updateVectorStatus(docId, VectorStatus.FAILED, errorMsg);
-        }
-    }
-
-    private void updateVectorStatus(Long docId, VectorStatus status, String errorMsg) {
-        KnowledgeDoc update = new KnowledgeDoc();
-        update.setId(docId);
-        update.setVectorStatus(status.name());
-        update.setErrorMsg(errorMsg);
-        knowledgeDocMapper.updateById(update);
     }
 }

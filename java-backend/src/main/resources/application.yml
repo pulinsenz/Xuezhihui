@@ -43,6 +43,9 @@ app:
     base-url: http://localhost:8000
     # 生产用环境变量 AGENT_TOKEN 注入；默认值与 python-agent/.env 一致
     token: ${AGENT_TOKEN:dev-agent-token-change-me}
+  # 长任务消息队列（Redis List）：Java 提交，Python worker 消费
+  task:
+    queue-vectorize: ${TASK_QUEUE_VECTORIZE:xzh:task:vectorize}
   # 本地文件存储路径（对象存储可替换实现）
   file:
     storage:

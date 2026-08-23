@@ -2,7 +2,6 @@ package com.agent.rag.service;
 
 import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
-import com.agent.rag.common.Result;
 import com.agent.rag.common.VectorStatus;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.resp.KnowledgeVO;
@@ -26,10 +25,8 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
-import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -52,6 +49,8 @@ class KnowledgeServiceTest {
     private FileStorageService fileStorageService;
     @Mock
     private PythonAgentClient pythonAgentClient;
+    @Mock
+    private TaskService taskService;
 
     private KnowledgeServiceImpl knowledgeService;
 
@@ -62,9 +61,7 @@ class KnowledgeServiceTest {
         ReflectionTestUtils.setField(knowledgeService, "knowledgeDocMapper", knowledgeDocMapper);
         ReflectionTestUtils.setField(knowledgeService, "fileStorageService", fileStorageService);
         ReflectionTestUtils.setField(knowledgeService, "pythonAgentClient", pythonAgentClient);
-        // 同步执行器：让向量化逻辑在当前线程立即执行，便于断言状态流转
-        Executor syncExecutor = Runnable::run;
-        ReflectionTestUtils.setField(knowledgeService, "vectorizeExecutor", syncExecutor);
+        ReflectionTestUtils.setField(knowledgeService, "taskService", taskService);
 
         User user = new User();
         user.setId(1L);
@@ -170,14 +167,14 @@ class KnowledgeServiceTest {
         assertEquals(1, knowledgeService.listDocs(5L).size());
     }
 
-    // ---------- 上传 + 向量化 ----------
+    // ---------- 上传（提交向量化任务到消息队列） ----------
 
     private MockMultipartFile sampleFile() {
         return new MockMultipartFile("file", "course.txt", "text/plain", "hello".getBytes());
     }
 
     @Test
-    void uploadDoc_vectorizeSuccess_updatesStatusToSuccess() {
+    void uploadDoc_submitsVectorizeTaskToQueue() {
         when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
         when(fileStorageService.store(any(), eq(1L))).thenReturn("/data/files/course.txt");
         when(knowledgeDocMapper.insert(any(KnowledgeDoc.class))).thenAnswer(invocation -> {
@@ -185,33 +182,15 @@ class KnowledgeServiceTest {
             d.setId(100L);
             return 1;
         });
-        when(pythonAgentClient.vectorize(any())).thenReturn(Result.success());
+        when(taskService.publishVectorize(eq(5L), eq(100L), eq("/data/files/course.txt"), any()))
+                .thenReturn("task-1");
 
-        Long docId = knowledgeService.uploadDoc(5L, sampleFile());
+        String taskId = knowledgeService.uploadDoc(5L, sampleFile());
 
-        assertEquals(100L, docId);
+        assertEquals("task-1", taskId, "上传应返回任务 id 供前端轮询");
+        // 文档初始状态为待向量化
         ArgumentCaptor<KnowledgeDoc> captor = ArgumentCaptor.forClass(KnowledgeDoc.class);
-        verify(knowledgeDocMapper).updateById(captor.capture());
-        assertEquals(VectorStatus.SUCCESS.name(), captor.getValue().getVectorStatus());
-    }
-
-    @Test
-    void uploadDoc_vectorizeFailed_updatesStatusToFailedWithError() {
-        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
-        when(fileStorageService.store(any(), eq(1L))).thenReturn("/data/files/course.txt");
-        when(knowledgeDocMapper.insert(any(KnowledgeDoc.class))).thenAnswer(invocation -> {
-            KnowledgeDoc d = invocation.getArgument(0);
-            d.setId(100L);
-            return 1;
-        });
-        // Python Agent 未就绪：连接异常 → 优雅降级，文档标记 FAILED
-        when(pythonAgentClient.vectorize(any())).thenThrow(new RuntimeException("Connection refused"));
-
-        knowledgeService.uploadDoc(5L, sampleFile());
-
-        ArgumentCaptor<KnowledgeDoc> captor = ArgumentCaptor.forClass(KnowledgeDoc.class);
-        verify(knowledgeDocMapper).updateById(captor.capture());
-        assertEquals(VectorStatus.FAILED.name(), captor.getValue().getVectorStatus());
-        assertNotNull(captor.getValue().getErrorMsg());
+        verify(knowledgeDocMapper).insert(captor.capture());
+        assertEquals(VectorStatus.PENDING.name(), captor.getValue().getVectorStatus());
     }
 }

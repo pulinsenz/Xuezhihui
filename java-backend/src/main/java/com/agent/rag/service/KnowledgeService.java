@@ -37,9 +37,9 @@ public interface KnowledgeService {
     void deleteKnowledge(Long knowledgeId);
 
     /**
-     * 上传文档：存文件 + 记元数据 + 异步向量化
+     * 上传文档：存文件 + 记元数据 + 提交向量化任务（Redis 消息队列），返回任务 id 供前端轮询
      */
-    Long uploadDoc(Long knowledgeId, MultipartFile file);
+    String uploadDoc(Long knowledgeId, MultipartFile file);
 
     /**
      * 知识库文档列表

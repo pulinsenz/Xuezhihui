@@ -1,4 +1,4 @@
-"""文件加载/解析测试：本地路径、URL 下载、txt/pdf/docx"""
+"""文件加载/解析测试：本地路径、URL 下载、txt/pdf/docx + 向量化核心逻辑复用"""
 import sys
 import types
 from pathlib import Path
@@ -79,3 +79,40 @@ def test_parse_docx(monkeypatch, tmp_path):
     f.write_bytes(b"fake-docx")
     text = _parse(str(f), ".docx")
     assert "选课通知" in text and "开学时间" in text
+
+
+def test_process_vectorize_adds_document(monkeypatch):
+    """向量化核心逻辑（API 端点与消息队列 worker 共用）：读文本 → 分块入库"""
+    import agent.runtime as runtime
+
+    class FakeRetriever:
+        def __init__(self):
+            self.calls = []
+
+        def add_document(self, knowledge_id, doc_id, text):
+            self.calls.append((knowledge_id, doc_id, text))
+            return 5
+
+    monkeypatch.setattr(runtime, "retriever", FakeRetriever())
+    monkeypatch.setattr("api.knowledge_api._load_file", lambda url, name: "数据结构课程内容")
+    from api.knowledge_api import process_vectorize
+
+    assert process_vectorize("k1", "d1", "/f.txt", "f.txt") == 5
+    assert runtime.retriever.calls[0][:2] == ("k1", "d1")
+
+
+def test_process_vectorize_empty_text_rejected(monkeypatch):
+    import agent.runtime as runtime
+
+    class FakeRetriever:
+        def add_document(self, *a, **k):
+            return 0
+
+    monkeypatch.setattr(runtime, "retriever", FakeRetriever())
+    monkeypatch.setattr("api.knowledge_api._load_file", lambda url, name: "   ")
+    from api.knowledge_api import process_vectorize
+
+    import pytest
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException):
+        process_vectorize("k1", "d1", "/f.txt", "f.txt")

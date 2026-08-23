@@ -66,10 +66,10 @@ public class KnowledgeController {
     }
 
     /**
-     * 上传文档（multipart，字段名 file），异步向量化
+     * 上传文档（multipart，字段名 file）：提交向量化任务，返回任务 id 供前端轮询 /task/{taskId}
      */
     @PostMapping("/{id}/upload")
-    public Result<Long> upload(@PathVariable Long id, @RequestPart("file") MultipartFile file) {
+    public Result<String> upload(@PathVariable Long id, @RequestPart("file") MultipartFile file) {
         return Result.success(knowledgeService.uploadDoc(id, file));
     }
 

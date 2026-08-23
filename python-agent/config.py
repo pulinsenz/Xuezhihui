@@ -38,6 +38,9 @@ class Settings:
     redis_host: str = os.getenv("REDIS_HOST", "localhost")
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
 
+    # ---- 长任务消息队列（Redis List：Java 提交 / 本服务消费）----
+    task_queue_vectorize: str = os.getenv("TASK_QUEUE_VECTORIZE", "xzh:task:vectorize")
+
     # ---- 内部鉴权（Java 调用时带 X-Agent-Token）----
     agent_token: str = os.getenv("AGENT_TOKEN", "")
 
