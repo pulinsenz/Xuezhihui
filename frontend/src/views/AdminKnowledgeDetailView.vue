@@ -47,6 +47,10 @@
               <el-tag type="danger" size="small">失败</el-tag>
             </el-tooltip>
             <el-tag v-else-if="row.vectorStatus === 'SUCCESS'" type="success" size="small">已入库</el-tag>
+            <el-tooltip v-else-if="row.vectorStatus === 'SKIPPED'" :content="row.errorMsg || '重复文件'" placement="top">
+              <el-tag type="info" size="small">重复未入库</el-tag>
+            </el-tooltip>
+            <el-tag v-else-if="row.vectorStatus === 'REMOVED'" type="warning" size="small">未入库</el-tag>
             <el-tag v-else type="warning" size="small">待处理</el-tag>
           </template>
         </el-table-column>
@@ -67,13 +71,22 @@
             </template>
             <template v-else>
               <el-button
-                v-if="row.vectorStatus === 'FAILED' || row.vectorStatus === 'PENDING'"
+                v-if="row.vectorStatus === 'SUCCESS'"
+                size="small"
+                type="warning"
+                plain
+                @click="handleRemoveVector(row)"
+              >
+                移除入库
+              </el-button>
+              <el-button
+                v-if="row.vectorStatus === 'FAILED' || row.vectorStatus === 'PENDING' || row.vectorStatus === 'REMOVED' || row.vectorStatus === 'SKIPPED'"
                 size="small"
                 :icon="RefreshRight"
                 :loading="busyIds.includes(row.id)"
                 @click="handleReVectorize(row)"
               >
-                重新入库
+                {{ row.vectorStatus === 'SKIPPED' ? '强制入库' : '重新入库' }}
               </el-button>
               <el-button size="small" type="danger" :icon="Delete" @click="handleDelete(row)">删除</el-button>
             </template>
@@ -100,7 +113,7 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Delete, Document, Refresh, RefreshLeft, RefreshRight, Search } from '@element-plus/icons-vue'
-import { adminGetKnowledge, adminDeleteDoc, listAllDocs, restoreDoc, reVectorizeDoc } from '../api/admin'
+import { adminGetKnowledge, adminDeleteDoc, adminRemoveDocVector, listAllDocs, restoreDoc, reVectorizeDoc } from '../api/admin'
 import { getTask } from '../api/knowledge'
 
 const route = useRoute()
@@ -183,6 +196,17 @@ const runVectorize = async (row, actionText) => {
 
 const handleReVectorize = async (row) => {
   await runVectorize(row, (r) => reVectorizeDoc(knowledgeId, r.id))
+}
+
+const handleRemoveVector = async (row) => {
+  await ElMessageBox.confirm(
+    `确定将文档「${row.name}」移出入库吗？将删除其向量，文档记录保留，之后可重新入库。`,
+    '移除入库',
+    { type: 'warning' }
+  )
+  await adminRemoveDocVector(knowledgeId, row.id)
+  ElMessage.success('已移出入库')
+  loadDocs()
 }
 
 const handleRestore = async (row) => {

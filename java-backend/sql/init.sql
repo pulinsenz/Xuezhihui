@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `user`
     `userAvatar`   varchar(1024) DEFAULT NULL COMMENT '用户头像',
     `userProfile`  varchar(512)  DEFAULT NULL COMMENT '用户简介',
     `userRole`     varchar(256) NOT NULL DEFAULT 'user' COMMENT '用户角色：user/admin',
+    `defaultVectorize` tinyint NOT NULL DEFAULT 1 COMMENT '上传文档是否默认入库: 1=是 0=否',
     `editTime`     datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '编辑时间',
     `createTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updateTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -117,3 +118,11 @@ SET @ddl = IF(@col = 0,
               'ALTER TABLE knowledge_doc ADD COLUMN fileHash varchar(64) DEFAULT NULL COMMENT ''文件内容SHA-256(上传去重用)''',
               'SELECT 1');
 PREPARE s FROM @ddl; EXECUTE s; DEALLOCATE PREPARE s;
+
+-- 9. 兼容旧库：user 补 defaultVectorize 列（已存在则跳过，幂等）
+SET @col2 = (SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user' AND COLUMN_NAME = 'defaultVectorize');
+SET @ddl2 = IF(@col2 = 0,
+               'ALTER TABLE `user` ADD COLUMN defaultVectorize tinyint NOT NULL DEFAULT 1 COMMENT ''上传文档是否默认入库: 1=是 0=否''',
+               'SELECT 1');
+PREPARE s2 FROM @ddl2; EXECUTE s2; DEALLOCATE PREPARE s2;

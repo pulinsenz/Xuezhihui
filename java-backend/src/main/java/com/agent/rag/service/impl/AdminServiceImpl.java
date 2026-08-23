@@ -244,10 +244,25 @@ public class AdminServiceImpl implements AdminService {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档已删除，请先恢复");
         }
         if (!"FAILED".equals(doc.getVectorStatus()) && !"PENDING".equals(doc.getVectorStatus())
-                && !"SKIPPED".equals(doc.getVectorStatus())) {
+                && !"SKIPPED".equals(doc.getVectorStatus()) && !"REMOVED".equals(doc.getVectorStatus())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "仅支持对未入库或失败的文档重新入库");
         }
         return taskService.publishVectorize(knowledgeId, doc.getId(), doc.getFileUrl(), doc.getName());
+    }
+
+    @Override
+    public void removeDocVector(Long knowledgeId, Long docId) {
+        KnowledgeDoc doc = getDocAny(knowledgeId, docId);
+        if (!"SUCCESS".equals(doc.getVectorStatus())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档未入库，无需移除");
+        }
+        deleteVectorsBestEffort(String.valueOf(knowledgeId), String.valueOf(docId));
+        KnowledgeDoc update = new KnowledgeDoc();
+        update.setId(docId);
+        update.setVectorStatus("REMOVED");
+        update.setErrorMsg("已从索引移除，可点击重新入库");
+        knowledgeDocMapper.updateById(update);
+        log.info("管理员移除文档入库: knowledgeId={}, docId={}", knowledgeId, docId);
     }
 
     /**

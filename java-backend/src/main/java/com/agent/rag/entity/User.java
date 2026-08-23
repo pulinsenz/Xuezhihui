@@ -58,6 +58,11 @@ public class User implements Serializable {
     private String userRole;
 
     /**
+     * 上传文档是否默认入库：1=是 0=否
+     */
+    private Integer defaultVectorize;
+
+    /**
      * 编辑时间
      */
     private LocalDateTime editTime;

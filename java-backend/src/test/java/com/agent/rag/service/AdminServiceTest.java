@@ -465,4 +465,34 @@ class AdminServiceTest {
         assertEquals("t1", taskId);
         verify(knowledgeDocMapper, never()).restoreDeleted(any());
     }
+
+    // ---------- 移除入库 ----------
+
+    @Test
+    void removeDocVector_success_marksRemoved() {
+        KnowledgeDoc doc = new KnowledgeDoc();
+        doc.setId(101L);
+        doc.setKnowledgeId(10L);
+        doc.setVectorStatus("SUCCESS");
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(doc);
+
+        adminService.removeDocVector(10L, 101L);
+
+        ArgumentCaptor<KnowledgeDoc> captor = ArgumentCaptor.forClass(KnowledgeDoc.class);
+        verify(knowledgeDocMapper).updateById(captor.capture());
+        assertEquals("REMOVED", captor.getValue().getVectorStatus());
+        verify(pythonAgentClient).deleteKnowledge(any(DeleteVectorRequest.class));
+    }
+
+    @Test
+    void removeDocVector_notVectorized_throws() {
+        KnowledgeDoc doc = new KnowledgeDoc();
+        doc.setId(101L);
+        doc.setKnowledgeId(10L);
+        doc.setVectorStatus("PENDING");
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(doc);
+
+        BusinessException e = assertThrows(BusinessException.class, () -> adminService.removeDocVector(10L, 101L));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+    }
 }

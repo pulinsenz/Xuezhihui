@@ -75,11 +75,20 @@ public class KnowledgeController {
     }
 
     /**
-     * 文档强制/重新入库：SKIPPED 重复文件强制向量化、FAILED/PENDING 重试；返回任务 id
+     * 文档强制/重新入库：SKIPPED 重复文件强制向量化、FAILED/PENDING/REMOVED 重试；返回任务 id
      */
     @PostMapping("/{id}/docs/{docId}/revectorize")
     public Result<String> reVectorize(@PathVariable Long id, @PathVariable Long docId) {
         return Result.success(knowledgeService.reVectorizeDoc(id, docId));
+    }
+
+    /**
+     * 移除入库：删除文档向量（保留文档记录），状态置为未入库
+     */
+    @PostMapping("/{id}/docs/{docId}/remove-vector")
+    public Result<Boolean> removeVector(@PathVariable Long id, @PathVariable Long docId) {
+        knowledgeService.removeVector(id, docId);
+        return Result.success(true);
     }
 
     /**

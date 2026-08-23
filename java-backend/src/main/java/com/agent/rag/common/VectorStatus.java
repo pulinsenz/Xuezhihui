@@ -25,5 +25,10 @@ public enum VectorStatus {
     /**
      * 重复文件，默认跳过向量化（未入库，可强制入库）
      */
-    SKIPPED
+    SKIPPED,
+
+    /**
+     * 未入库：从索引移除 或 按设置默认不入库（文档记录保留，可重新入库）
+     */
+    REMOVED
 }

@@ -43,9 +43,14 @@ public interface KnowledgeService {
     String uploadDoc(Long knowledgeId, MultipartFile file);
 
     /**
-     * 文档强制/重新入库（SKIPPED 重复文件强制向量化、FAILED/PENDING 重试），返回任务 id
+     * 文档强制/重新入库（SKIPPED 重复文件强制向量化、FAILED/PENDING/REMOVED 重试），返回任务 id
      */
     String reVectorizeDoc(Long knowledgeId, Long docId);
+
+    /**
+     * 移除入库：删除文档向量（保留文档记录），状态置为 REMOVED（未入库）
+     */
+    void removeVector(Long knowledgeId, Long docId);
 
     /**
      * 知识库文档列表

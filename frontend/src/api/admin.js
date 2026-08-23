@@ -33,5 +33,8 @@ export const adminDeleteDoc = (knowledgeId, docId) => request.delete(`/admin/kno
 /** 恢复已删除文档（取消删除 + 重新向量化），返回 taskId */
 export const restoreDoc = (knowledgeId, docId) => request.put(`/admin/knowledge/${knowledgeId}/docs/${docId}/restore`)
 
-/** 文档重新入库（重新向量化，仅 FAILED/PENDING），返回 taskId */
+/** 文档重新入库（重新向量化，仅 FAILED/PENDING/SKIPPED/REMOVED），返回 taskId */
 export const reVectorizeDoc = (knowledgeId, docId) => request.post(`/admin/knowledge/${knowledgeId}/docs/${docId}/revectorize`)
+
+/** 移除文档入库（删向量，保留文档记录） */
+export const adminRemoveDocVector = (knowledgeId, docId) => request.post(`/admin/knowledge/${knowledgeId}/docs/${docId}/remove-vector`)

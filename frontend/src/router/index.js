@@ -18,6 +18,7 @@ const routes = [
       { path: 'chat/:sessionId?', name: 'Chat', component: () => import('../views/ChatView.vue') },
       { path: 'knowledge', name: 'KnowledgeList', component: () => import('../views/KnowledgeListView.vue') },
       { path: 'knowledge/:id', name: 'KnowledgeDetail', component: () => import('../views/KnowledgeDetailView.vue') },
+      { path: 'settings', name: 'Settings', component: () => import('../views/SettingsView.vue') },
       { path: 'admin/users', name: 'AdminUsers', component: () => import('../views/AdminUsersView.vue'), meta: { admin: true } },
       { path: 'admin/knowledge', name: 'AdminKnowledge', component: () => import('../views/AdminKnowledgeView.vue'), meta: { admin: true } },
       { path: 'admin/knowledge/:id', name: 'AdminKnowledgeDetail', component: () => import('../views/AdminKnowledgeDetailView.vue'), meta: { admin: true } },

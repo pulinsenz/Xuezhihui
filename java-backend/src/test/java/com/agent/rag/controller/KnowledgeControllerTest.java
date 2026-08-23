@@ -290,4 +290,56 @@ class KnowledgeControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(40000, objectMapper.readTree(resp).get("code").asInt(), "已入库文档不应再次入库");
     }
+
+    // ---------- 默认入库设置 + 移除入库 ----------
+
+    private long currentUserId(String token) throws Exception {
+        String resp = mockMvc.perform(get("/auth/me").header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return objectMapper.readTree(resp).get("data").get("id").asLong();
+    }
+
+    @Test
+    void upload_defaultNotVectorize_createsRemovedDoc() throws Exception {
+        String token = registerAndLogin();
+        long uid = currentUserId(token);
+        // 关闭"默认入库"
+        jdbcTemplate.update("UPDATE user SET defaultVectorize = 0 WHERE id = ?", uid);
+        long knowledgeId = createKnowledge(token, "设置测试");
+
+        String up = upload(token, knowledgeId, "a.txt", "普通内容".getBytes(StandardCharsets.UTF_8));
+        JsonNode node = objectMapper.readTree(up);
+        assertEquals(0, node.get("code").asInt());
+        assertTrue(node.get("data").isNull(), "默认不入库时应返回 null 表示跳过向量化");
+        assertNotNull(docIdByStatus(token, knowledgeId, "REMOVED"), "应创建未入库(REMOVED)记录");
+    }
+
+    @Test
+    void removeVector_success_marksRemoved() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "移除测试");
+        upload(token, knowledgeId, "a.txt", "内容".getBytes(StandardCharsets.UTF_8));
+        // 模拟已入库
+        jdbcTemplate.update("UPDATE knowledge_doc SET vectorStatus = 'SUCCESS' WHERE knowledgeId = ?", knowledgeId);
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/{docId}/remove-vector", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, objectMapper.readTree(resp).get("code").asInt());
+        assertNotNull(docIdByStatus(token, knowledgeId, "REMOVED"), "移除后应标记为未入库");
+    }
+
+    @Test
+    void removeVector_notVectorized_rejected() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "移除测试2");
+        upload(token, knowledgeId, "a.txt", "内容".getBytes(StandardCharsets.UTF_8)); // PENDING
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/{docId}/remove-vector", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40000, objectMapper.readTree(resp).get("code").asInt(), "未入库文档不应可移除");
+    }
 }

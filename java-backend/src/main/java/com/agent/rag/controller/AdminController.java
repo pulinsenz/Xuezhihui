@@ -128,10 +128,19 @@ public class AdminController {
     }
 
     /**
-     * 重新入库（重新向量化）：仅支持 FAILED/PENDING 且未删除的文档
+     * 重新入库（重新向量化）：仅支持 FAILED/PENDING/SKIPPED/REMOVED 且未删除的文档
      */
     @PostMapping("/knowledge/{id}/docs/{docId}/revectorize")
     public Result<String> reVectorize(@PathVariable Long id, @PathVariable Long docId) {
         return Result.success(adminService.reVectorize(id, docId));
+    }
+
+    /**
+     * 移除入库：删除文档向量（保留文档记录），状态置为未入库
+     */
+    @PostMapping("/knowledge/{id}/docs/{docId}/remove-vector")
+    public Result<Boolean> removeDocVector(@PathVariable Long id, @PathVariable Long docId) {
+        adminService.removeDocVector(id, docId);
+        return Result.success(true);
     }
 }

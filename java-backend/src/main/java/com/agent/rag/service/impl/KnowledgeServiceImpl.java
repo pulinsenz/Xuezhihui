@@ -139,11 +139,44 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             log.info("检测到重复文件，跳过向量化: knowledgeId={}, name={}", knowledgeId, file.getOriginalFilename());
             return null;
         }
+        // 用户设置"默认不入库"：创建记录但不向量化（REMOVED），可手动重新入库
+        Integer defaultVectorize = UserContext.getUser().getDefaultVectorize();
+        if (defaultVectorize != null && defaultVectorize == 0) {
+            doc.setVectorStatus(VectorStatus.REMOVED.name());
+            doc.setErrorMsg("已设置默认不入库，可点击重新入库");
+            knowledgeDocMapper.insert(doc);
+            log.info("默认不入库设置生效: knowledgeId={}, name={}", knowledgeId, file.getOriginalFilename());
+            return null;
+        }
         doc.setVectorStatus(VectorStatus.PENDING.name());
         knowledgeDocMapper.insert(doc);
         // 长任务走 Redis 消息队列：Java 提交任务（状态 PENDING + 入队），Python worker 消费执行，
         // 完成后回调 Java 回写状态；前端轮询 /task/{taskId}，规避向量化耗时导致的 HTTP 超时
         return taskService.publishVectorize(knowledgeId, doc.getId(), fileUrl, doc.getName());
+    }
+
+    @Override
+    public void removeVector(Long knowledgeId, Long docId) {
+        getOwnedKnowledge(knowledgeId);
+        KnowledgeDoc doc = knowledgeDocMapper.selectById(docId);
+        if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在");
+        }
+        if (!VectorStatus.SUCCESS.name().equals(doc.getVectorStatus())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档未入库，无需移除");
+        }
+        // 删除该文档向量（Python Agent），降级容忍
+        try {
+            pythonAgentClient.deleteKnowledge(new DeleteVectorRequest(String.valueOf(knowledgeId), String.valueOf(docId)));
+            log.info("文档向量移除成功: knowledgeId={}, docId={}", knowledgeId, docId);
+        } catch (Exception e) {
+            log.warn("文档向量移除失败（已降级）: knowledgeId={}, docId={}, error={}", knowledgeId, docId, e.getMessage());
+        }
+        KnowledgeDoc update = new KnowledgeDoc();
+        update.setId(docId);
+        update.setVectorStatus(VectorStatus.REMOVED.name());
+        update.setErrorMsg("已从索引移除，可点击重新入库");
+        knowledgeDocMapper.updateById(update);
     }
 
     @Override

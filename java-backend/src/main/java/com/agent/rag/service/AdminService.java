@@ -76,9 +76,14 @@ public interface AdminService {
     String restoreDoc(Long knowledgeId, Long docId);
 
     /**
-     * 重新入库（重新向量化）：仅支持 FAILED/PENDING 且未删除的文档，不改动删除状态
+     * 重新入库（重新向量化）：仅支持 FAILED/PENDING/SKIPPED/REMOVED 且未删除的文档，不改动删除状态
      *
      * @return 重新入库的任务 id
      */
     String reVectorize(Long knowledgeId, Long docId);
+
+    /**
+     * 移除入库：删除文档向量（保留文档记录），状态置为 REMOVED（未入库）
+     */
+    void removeDocVector(Long knowledgeId, Long docId);
 }

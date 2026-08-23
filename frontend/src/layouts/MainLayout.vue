@@ -14,6 +14,10 @@
           <el-icon><Folder /></el-icon>
           <span>知识库</span>
         </el-menu-item>
+        <el-menu-item index="/settings">
+          <el-icon><Setting /></el-icon>
+          <span>设置</span>
+        </el-menu-item>
         <template v-if="authStore.isAdmin">
           <el-menu-item index="/admin/users">
             <el-icon><User /></el-icon>

@@ -24,8 +24,11 @@ export const uploadDoc = (id, file) => {
 /** 知识库文档列表 */
 export const listDocs = (id) => request.get(`/knowledge/${id}/docs`)
 
-/** 文档强制/重新入库（SKIPPED 强制向量化、FAILED/PENDING 重试）：返回 taskId 供轮询 */
+/** 文档强制/重新入库（SKIPPED 强制向量化、FAILED/PENDING/REMOVED 重试）：返回 taskId 供轮询 */
 export const reVectorizeDoc = (id, docId) => request.post(`/knowledge/${id}/docs/${docId}/revectorize`)
+
+/** 移除入库：删除文档向量（保留文档记录），状态置为未入库 */
+export const removeDocVector = (id, docId) => request.post(`/knowledge/${id}/docs/${docId}/remove-vector`)
 
 /** 长任务状态查询（上传向量化后轮询） */
 export const getTask = (taskId) => request.get(`/task/${taskId}`)

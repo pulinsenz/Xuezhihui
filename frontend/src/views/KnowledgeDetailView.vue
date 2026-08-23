@@ -48,22 +48,35 @@
           <el-tooltip v-else-if="row.vectorStatus === 'SKIPPED'" :content="row.errorMsg || '重复文件'" placement="top">
             <el-tag type="info" size="small">重复未入库</el-tag>
           </el-tooltip>
+          <el-tag v-else-if="row.vectorStatus === 'REMOVED'" type="warning" size="small">未入库</el-tag>
           <el-tag v-else type="warning" size="small">待处理</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="createTime" label="上传时间" width="180">
         <template #default="{ row }">{{ row.createTime?.replace('T', ' ').slice(0, 19) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="110">
+      <el-table-column label="操作" width="120">
         <template #default="{ row }">
+          <el-button v-if="row.vectorStatus === 'SUCCESS'" size="small" type="warning" plain @click="handleRemoveVector(row)">
+            移除入库
+          </el-button>
           <el-button
-            v-if="row.vectorStatus === 'SKIPPED' || row.vectorStatus === 'FAILED'"
+            v-if="row.vectorStatus === 'SKIPPED'"
             size="small"
             type="primary"
             :loading="busyIds.includes(row.id)"
             @click="handleReVectorize(row)"
           >
-            {{ row.vectorStatus === 'SKIPPED' ? '强制入库' : '重新入库' }}
+            强制入库
+          </el-button>
+          <el-button
+            v-if="row.vectorStatus === 'FAILED' || row.vectorStatus === 'PENDING' || row.vectorStatus === 'REMOVED'"
+            size="small"
+            type="primary"
+            :loading="busyIds.includes(row.id)"
+            @click="handleReVectorize(row)"
+          >
+            重新入库
           </el-button>
         </template>
       </el-table-column>
@@ -74,9 +87,9 @@
 <script setup>
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, Document, Refresh, Upload } from '@element-plus/icons-vue'
-import { getKnowledge, getTask, listDocs, reVectorizeDoc, uploadDoc } from '../api/knowledge'
+import { getKnowledge, getTask, listDocs, reVectorizeDoc, removeDocVector, uploadDoc } from '../api/knowledge'
 
 const route = useRoute()
 const router = useRouter()
@@ -177,6 +190,18 @@ const handleReVectorize = async (row) => {
   } finally {
     busyIds.value = busyIds.value.filter((id) => id !== row.id)
   }
+}
+
+// 移除入库：删除文档向量（保留文档记录），状态置为未入库，可重新入库
+const handleRemoveVector = async (row) => {
+  await ElMessageBox.confirm(
+    `确定将文档「${row.name}」移出入库吗？将删除其向量，文档记录保留，之后可重新入库。`,
+    '移除入库',
+    { type: 'warning' }
+  )
+  await removeDocVector(knowledgeId, row.id)
+  ElMessage.success('已移出入库')
+  loadDocs()
 }
 
 const formatSize = (bytes) => {
