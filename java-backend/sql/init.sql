@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS `user`
     `userProfile`  varchar(512)  DEFAULT NULL COMMENT '用户简介',
     `userRole`     varchar(256) NOT NULL DEFAULT 'user' COMMENT '用户角色：user/admin',
     `defaultVectorize` tinyint NOT NULL DEFAULT 1 COMMENT '上传文档是否默认入库: 1=是 0=否',
+    `collapseRefs` tinyint NOT NULL DEFAULT 1 COMMENT '参考文献默认折叠: 1=折叠 0=展开',
     `editTime`     datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '编辑时间',
     `createTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updateTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -135,3 +136,11 @@ SET @ddl3 = IF(@col3 = 0,
                'ALTER TABLE knowledge_doc ADD COLUMN deleteSource varchar(16) DEFAULT NULL COMMENT ''删除来源: user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传''',
                'SELECT 1');
 PREPARE s3 FROM @ddl3; EXECUTE s3; DEALLOCATE PREPARE s3;
+
+-- 11. 兼容旧库：user 补 collapseRefs 列（已存在则跳过，幂等）
+SET @col4 = (SELECT COUNT(*) FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'user' AND COLUMN_NAME = 'collapseRefs');
+SET @ddl4 = IF(@col4 = 0,
+               'ALTER TABLE `user` ADD COLUMN collapseRefs tinyint NOT NULL DEFAULT 1 COMMENT ''参考文献默认折叠: 1=折叠 0=展开''',
+               'SELECT 1');
+PREPARE s4 FROM @ddl4; EXECUTE s4; DEALLOCATE PREPARE s4;

@@ -73,9 +73,13 @@
                 </ul>
               </details>
 
-              <!-- 参考文献（使用了知识库才显示，编号对应回答中的 [1][2]） -->
-              <div v-if="msg.role === 'assistant' && msg.sources?.length && !msg.streaming" class="msg-refs">
-                <div class="refs-title">📚 参考文献</div>
+              <!-- 参考文献（使用了知识库才显示，可折叠，默认按设置折叠） -->
+              <details
+                v-if="msg.role === 'assistant' && msg.sources?.length && !msg.streaming"
+                class="msg-refs"
+                :open="!refsCollapsedDefault"
+              >
+                <summary class="refs-title">📚 参考文献（{{ msg.sources.length }}）</summary>
                 <ol class="refs-list">
                   <li v-for="(s, i) in msg.sources" :key="i">
                     <span class="refs-num">[{{ i + 1 }}]</span>
@@ -83,7 +87,7 @@
                     <span class="refs-text">{{ truncateText(s.text) }}</span>
                   </li>
                 </ol>
-              </div>
+              </details>
             </div>
           </div>
         </div>
@@ -114,6 +118,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Plus, Promotion } from '@element-plus/icons-vue'
 import { listMyKnowledge, listDocs } from '../api/knowledge'
+import { getSettings } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import { useChatStore } from '../stores/chat'
@@ -129,6 +134,8 @@ const knowledgeId = ref('')
 const kbList = ref([])
 const kbLoading = ref(false)
 const messageAreaRef = ref(null)
+// 参考文献默认折叠（来自用户设置，1=折叠 0=展开）
+const refsCollapsedDefault = ref(true)
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -298,6 +305,13 @@ const formatTime = (epochSec) => {
 // ---- 初始化与路由同步 ----
 const initLoggedIn = async () => {
   await chat.loadSessions()
+  // 加载用户设置：参考文献默认折叠
+  try {
+    const settings = await getSettings()
+    refsCollapsedDefault.value = (settings.collapseRefs ?? 1) === 1
+  } catch (e) {
+    // 错误已由拦截器提示，保持默认折叠
+  }
   const id = route.params.sessionId || localStorage.getItem('chat_session_id')
   if (id && chat.sessions.some((s) => s.session_id === id)) {
     await chat.openSession(id)
@@ -535,6 +549,11 @@ watch(
   color: #606266;
   font-weight: 600;
   margin-bottom: 4px;
+  cursor: pointer;
+  user-select: none;
+}
+.refs-title::-webkit-details-marker {
+  color: #909399;
 }
 .refs-list {
   margin: 0;

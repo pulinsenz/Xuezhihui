@@ -18,4 +18,9 @@ public interface SettingsService {
      * 更新"上传文档是否默认入库"：1=是 0=否
      */
     void updateVectorizeDefault(Integer defaultVectorize);
+
+    /**
+     * 更新"参考文献默认折叠"：1=折叠 0=展开
+     */
+    void updateCollapseRefs(Integer collapseRefs);
 }

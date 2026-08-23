@@ -1,6 +1,7 @@
 package com.agent.rag.controller;
 
 import com.agent.rag.common.Result;
+import com.agent.rag.dto.req.UpdateCollapseRefsRequest;
 import com.agent.rag.dto.req.UpdateVectorizeDefaultRequest;
 import com.agent.rag.dto.resp.SettingsVO;
 import com.agent.rag.service.SettingsService;
@@ -37,6 +38,15 @@ public class SettingsController {
     @PutMapping("/vectorize-default")
     public Result<Boolean> updateVectorizeDefault(@RequestBody UpdateVectorizeDefaultRequest request) {
         settingsService.updateVectorizeDefault(request.getDefaultVectorize());
+        return Result.success(true);
+    }
+
+    /**
+     * 更新"参考文献默认折叠"：1=折叠 0=展开
+     */
+    @PutMapping("/collapse-refs")
+    public Result<Boolean> updateCollapseRefs(@RequestBody UpdateCollapseRefsRequest request) {
+        settingsService.updateCollapseRefs(request.getCollapseRefs());
         return Result.success(true);
     }
 }

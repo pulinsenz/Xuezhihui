@@ -28,6 +28,7 @@ public class SettingsServiceImpl implements SettingsService {
         User user = getLoginUser();
         SettingsVO vo = new SettingsVO();
         vo.setDefaultVectorize(user.getDefaultVectorize() == null ? 1 : user.getDefaultVectorize());
+        vo.setCollapseRefs(user.getCollapseRefs() == null ? 1 : user.getCollapseRefs());
         return vo;
     }
 
@@ -42,6 +43,19 @@ public class SettingsServiceImpl implements SettingsService {
         update.setDefaultVectorize(defaultVectorize);
         userMapper.updateById(update);
         log.info("更新默认入库设置: userId={}, defaultVectorize={}", user.getId(), defaultVectorize);
+    }
+
+    @Override
+    public void updateCollapseRefs(Integer collapseRefs) {
+        if (collapseRefs == null || (collapseRefs != 0 && collapseRefs != 1)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "collapseRefs 只能为 0 或 1");
+        }
+        User user = getLoginUser();
+        User update = new User();
+        update.setId(user.getId());
+        update.setCollapseRefs(collapseRefs);
+        userMapper.updateById(update);
+        log.info("更新参考文献折叠设置: userId={}, collapseRefs={}", user.getId(), collapseRefs);
     }
 
     private User getLoginUser() {

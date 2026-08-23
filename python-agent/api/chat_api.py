@@ -131,7 +131,12 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
                             yield sse_event({"type": "thinking",
                                              "content": f"判断问题类型：{_route_label(route)}"})
                         elif node == "tool":
-                            yield sse_event({"type": "thinking", "content": "查询你的业务数据…"})
+                            if update.get("tool_called"):
+                                yield sse_event({"type": "thinking",
+                                                 "content": f"调用工具：查询业务数据 → {update.get('tool_context', '')}"})
+                            else:
+                                yield sse_event({"type": "thinking",
+                                                 "content": "调用业务数据工具：无数据或已降级为普通回答"})
                         elif node == "retrieve":
                             sources = update.get("sources", [])
                             retry = update.get("retry_count", 1)

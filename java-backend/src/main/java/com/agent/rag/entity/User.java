@@ -63,6 +63,11 @@ public class User implements Serializable {
     private Integer defaultVectorize;
 
     /**
+     * 参考文献默认折叠：1=折叠 0=展开
+     */
+    private Integer collapseRefs;
+
+    /**
      * 编辑时间
      */
     private LocalDateTime editTime;

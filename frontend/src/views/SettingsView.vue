@@ -22,6 +22,24 @@
           @change="handleChange"
         />
       </div>
+
+      <el-divider />
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <div class="setting-title">参考文献默认折叠</div>
+          <div class="setting-desc">
+            开启：对话里使用了知识库的回答，其「📚 参考文献」默认收起，点击才展开；关闭：默认展开。
+          </div>
+        </div>
+        <el-switch
+          v-model="collapseRefs"
+          :active-value="1"
+          :inactive-value="0"
+          :loading="saving"
+          @change="handleCollapseChange"
+        />
+      </div>
     </el-card>
   </div>
 </template>
@@ -29,15 +47,17 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getSettings, updateVectorizeDefault } from '../api/settings'
+import { getSettings, updateCollapseRefs, updateVectorizeDefault } from '../api/settings'
 
 const defaultVectorize = ref(1)
+const collapseRefs = ref(1)
 const saving = ref(false)
 
 onMounted(async () => {
   try {
     const data = await getSettings()
     defaultVectorize.value = data.defaultVectorize ?? 1
+    collapseRefs.value = data.collapseRefs ?? 1
   } catch (e) {
     // 错误已由拦截器提示
   }
@@ -51,6 +71,19 @@ const handleChange = async (val) => {
   } catch (e) {
     // 保存失败回滚开关
     defaultVectorize.value = val === 1 ? 0 : 1
+  } finally {
+    saving.value = false
+  }
+}
+
+const handleCollapseChange = async (val) => {
+  saving.value = true
+  try {
+    await updateCollapseRefs(val)
+    ElMessage.success(val === 1 ? '参考文献默认折叠' : '参考文献默认展开')
+  } catch (e) {
+    // 保存失败回滚开关
+    collapseRefs.value = val === 1 ? 0 : 1
   } finally {
     saving.value = false
   }
