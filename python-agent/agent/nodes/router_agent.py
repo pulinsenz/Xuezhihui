@@ -15,6 +15,31 @@ ROUTER_SYSTEM = (
     "只输出一个词：business 或 kb 或 chitchat 或 other"
 )
 
+# 每个路由的匹配关键词（英文输出优先，中文标签兜底，容忍带标点/解释）
+ROUTE_KEYWORDS = {
+    "business": ("business", "业务"),
+    "kb": ("kb", "知识库"),
+    "chitchat": ("chitchat", "闲聊"),
+    "other": ("other", "其他"),
+}
+
+
+def _parse_route(reply: str) -> str:
+    """解析路由 LLM 输出。模型偶尔输出带标点或解释（如 "kb。"、"chitchat（闲聊）"、
+    "知识库问答"），首词包含关键词即命中；首词失败再匹配整句，兜底 chitchat。"""
+    if not reply or not reply.strip():
+        return "chitchat"
+    text = reply.strip().lower()
+    first = text.split()[0]
+    for route, keywords in ROUTE_KEYWORDS.items():
+        if any(kw in first for kw in keywords):
+            return route
+    # 首词没匹配上（如整句中文输出），退而匹配整句
+    for route, keywords in ROUTE_KEYWORDS.items():
+        if any(kw in text for kw in keywords):
+            return route
+    return "chitchat"
+
 
 def router_agent(state):
     llm = state["llm"]
@@ -25,9 +50,7 @@ def router_agent(state):
             {"role": "system", "content": ROUTER_SYSTEM},
             {"role": "user", "content": query},
         ])
-        word = reply.strip().lower().split()[0] if reply.strip() else ""
-        if word in ("kb", "chitchat", "other", "business"):
-            route = word
+        route = _parse_route(reply)
     except Exception as e:
         logger.error("路由判断失败，兜底为 chitchat: %s", e)
     agent_event(logger, "route_decided", query=query[:30], route=route)

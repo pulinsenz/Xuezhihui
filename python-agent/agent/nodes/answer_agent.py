@@ -17,7 +17,16 @@ ANSWER_SYSTEM_TEMPLATE = (
 
 CHITCHAT_SYSTEM = (
     "你是校园知识库问答助手「学智汇」，回答简洁、友好、准确。\n"
-    "如果用户询问校园知识（课程、教务、校园生活等），建议其先上传相关资料到知识库。"
+    "仅用于闲聊、打招呼、自我介绍等非知识问答场景。"
+)
+
+NO_KB_SYSTEM = (
+    "你是校园知识库问答助手「学智汇」。用户问的是校园知识类问题（课程、教务、校园生活等具体内容），"
+    "但没有选择知识库，无法基于资料回答。\n"
+    "回复要求：\n"
+    "1. 明确告知用户当前没有选择知识库，引导其在对话上方选择知识库后重新提问\n"
+    "2. 语气友好简洁，不要编造知识库内容，不要长篇客套\n"
+    "示例：「这个问题需要先选择知识库才能基于资料回答～ 你可以在对话上方选择对应知识库，我再帮你查。」"
 )
 
 
@@ -33,13 +42,17 @@ def answer_agent(state):
     context = state.get("retrieval_context", "").strip()
     tool_context = state.get("tool_context", "").strip()
     history = state.get("history", [])
+    route = state.get("route", "")
     llm = state["llm"]
 
-    # 上下文优先级：工具业务数据 > 知识库检索证据 > 无上下文（闲聊）
+    # 上下文优先级：工具业务数据 > 知识库检索证据 > 知识问题但未选知识库(引导) > 闲聊
     if tool_context:
         system = TOOL_SYSTEM_TEMPLATE.format(context=tool_context)
     elif context:
         system = ANSWER_SYSTEM_TEMPLATE.format(context=context)
+    elif route == "kb":
+        # 知识类问题但没选知识库 → 明确引导，避免空泛闲聊
+        system = NO_KB_SYSTEM
     else:
         system = CHITCHAT_SYSTEM
     messages = [{"role": "system", "content": system}]

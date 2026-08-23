@@ -5,7 +5,7 @@
       <h2>AI 对话</h2>
       <el-select
         v-model="knowledgeId"
-        placeholder="选择知识库（可选，不选则普通问答）"
+        placeholder="选择知识库（可选，不选则无法基于资料回答）"
         clearable
         filterable
         class="kb-select"
