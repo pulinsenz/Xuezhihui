@@ -31,19 +31,41 @@ class HybridRetriever:
         self.chunker = chunker or Chunker()
         self._bm25: dict[str, BM25Okapi] = {}
         self._bm25_docs: dict[str, List[str]] = {}
+        # knowledge_id -> {doc_id -> [chunks]}：按文档记录分块，删除/重入库时精确重建
+        self._chunks: dict[str, dict[str, List[str]]] = {}
 
     def add_document(self, knowledge_id, doc_id, text: str):
-        """分块 + 向量入库 + 建立 BM25 索引"""
+        """分块 + 向量入库 + 重建该知识库 BM25 索引（幂等：同 doc_id 向量会被覆盖）"""
         chunks = self.chunker.split(text)
         self.vector_store.add_document(knowledge_id, doc_id, text, chunks)
-        self._index_bm25(str(knowledge_id), chunks)
+        kid = str(knowledge_id)
+        self._chunks.setdefault(kid, {})[str(doc_id)] = chunks
+        self._rebuild_bm25(kid)
         return len(chunks)
 
-    def _index_bm25(self, knowledge_id: str, chunks: List[str]):
-        corpus = [_tokenize(c) for c in chunks]
-        # 幂等：同知识库重建索引
-        self._bm25[knowledge_id] = BM25Okapi(corpus)
-        self._bm25_docs[knowledge_id] = chunks
+    def delete_document(self, knowledge_id, doc_id):
+        """删除单个文档：删向量 + 从 BM25 索引剔除该文档分块"""
+        self.vector_store.delete_document(knowledge_id, doc_id)
+        kid = str(knowledge_id)
+        self._chunks.get(kid, {}).pop(str(doc_id), None)
+        self._rebuild_bm25(kid)
+
+    def delete_knowledge(self, knowledge_id):
+        """删除整个知识库：删向量 + 清空该知识库 BM25 索引"""
+        self.vector_store.delete_knowledge(knowledge_id)
+        kid = str(knowledge_id)
+        self._chunks.pop(kid, None)
+        self._rebuild_bm25(kid)
+
+    def _rebuild_bm25(self, knowledge_id: str):
+        """按知识库内全部文档的分块重建 BM25（含多文档，删除/重入库后保持一致）"""
+        all_chunks = [c for doc_chunks in self._chunks.get(knowledge_id, {}).values() for c in doc_chunks]
+        if all_chunks:
+            self._bm25[knowledge_id] = BM25Okapi([_tokenize(c) for c in all_chunks])
+            self._bm25_docs[knowledge_id] = all_chunks
+        else:
+            self._bm25.pop(knowledge_id, None)
+            self._bm25_docs.pop(knowledge_id, None)
 
     def retrieve(self, query: str, knowledge_id: str, top_k: int = 5) -> List[dict]:
         vector_results = self.vector_store.search(query, knowledge_id, top_k=top_k * 2)

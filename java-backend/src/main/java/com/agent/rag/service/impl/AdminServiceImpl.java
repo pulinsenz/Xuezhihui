@@ -1,12 +1,15 @@
 package com.agent.rag.service.impl;
 
 import cn.hutool.core.util.StrUtil;
+import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.common.RoleConstant;
 import com.agent.rag.config.JwtProperties;
+import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.req.UpdateUserRoleRequest;
 import com.agent.rag.dto.req.UserQueryRequest;
 import com.agent.rag.dto.resp.AdminUserVO;
+import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
 import com.agent.rag.entity.KnowledgeDoc;
@@ -16,6 +19,7 @@ import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.AdminService;
+import com.agent.rag.service.TaskService;
 import com.agent.rag.util.UserContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -26,6 +30,7 @@ import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -52,6 +57,12 @@ public class AdminServiceImpl implements AdminService {
 
     @Resource
     private JwtProperties jwtProperties;
+
+    @Resource
+    private PythonAgentClient pythonAgentClient;
+
+    @Resource
+    private TaskService taskService;
 
     @Override
     public Page<AdminUserVO> listUsers(UserQueryRequest request) {
@@ -128,21 +139,151 @@ public class AdminServiceImpl implements AdminService {
     public Page<KnowledgeVO> listAllKnowledge(UserQueryRequest request) {
         long pageNum = normalizePageNum(request);
         long pageSize = normalizePageSize(request);
-        LambdaQueryWrapper<Knowledge> wrapper = new LambdaQueryWrapper<Knowledge>()
-                .and(StrUtil.isNotBlank(request.getKeyword()), w ->
-                        w.like(Knowledge::getName, request.getKeyword()))
-                .orderByDesc(Knowledge::getCreateTime);
-        Page<Knowledge> knowledgePage = knowledgeMapper.selectPage(new Page<>(pageNum, pageSize), wrapper);
+        // 手写 SQL 分页：deleted 可查已删除知识库（BaseMapper 会强制过滤 isDelete=0）
+        IPage<Knowledge> knowledgePage = knowledgeMapper.selectKnowledgePage(
+                new Page<>(pageNum, pageSize),
+                request.getKeyword(),
+                request.getDeleted());
         List<KnowledgeVO> records = knowledgePage.getRecords().stream().map(knowledge -> {
             KnowledgeVO vo = KnowledgeVO.from(knowledge);
-            Long docCount = knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
-                    .eq(KnowledgeDoc::getKnowledgeId, knowledge.getId()));
-            vo.setDocCount(docCount);
+            // 含已删除文档计数，管理员恢复时可预览将重新入库的文档数
+            vo.setDocCount(knowledgeDocMapper.countAll(knowledge.getId()));
             return vo;
         }).toList();
         Page<KnowledgeVO> voPage = new Page<>(knowledgePage.getCurrent(), knowledgePage.getSize(), knowledgePage.getTotal());
         voPage.setRecords(records);
         return voPage;
+    }
+
+    @Override
+    public KnowledgeVO getKnowledgeDetail(Long knowledgeId) {
+        Knowledge knowledge = getKnowledgeAny(knowledgeId);
+        KnowledgeVO vo = KnowledgeVO.from(knowledge);
+        vo.setDocCount(knowledgeDocMapper.countAll(knowledgeId));
+        return vo;
+    }
+
+    @Override
+    public Page<KnowledgeDocVO> listAllDocs(Long knowledgeId, UserQueryRequest request) {
+        getKnowledgeAny(knowledgeId);
+        long pageNum = normalizePageNum(request);
+        long pageSize = normalizePageSize(request);
+        IPage<KnowledgeDoc> docPage = knowledgeDocMapper.selectDocPage(
+                new Page<>(pageNum, pageSize),
+                knowledgeId,
+                request.getKeyword(),
+                request.getDeleted());
+        List<KnowledgeDocVO> records = docPage.getRecords().stream().map(KnowledgeDocVO::from).toList();
+        Page<KnowledgeDocVO> voPage = new Page<>(docPage.getCurrent(), docPage.getSize(), docPage.getTotal());
+        voPage.setRecords(records);
+        return voPage;
+    }
+
+    @Override
+    @Transactional
+    public void deleteKnowledgeByAdmin(Long knowledgeId) {
+        getKnowledgeAny(knowledgeId);
+        // 逻辑删除知识库 + 全部当前正常文档（已删除的保持删除）
+        knowledgeMapper.deleteById(knowledgeId);
+        knowledgeDocMapper.delete(new LambdaQueryWrapper<KnowledgeDoc>()
+                .eq(KnowledgeDoc::getKnowledgeId, knowledgeId));
+        // 清理向量库（Python Agent），降级：失败不影响元数据删除
+        deleteVectorsBestEffort(String.valueOf(knowledgeId), null);
+        log.info("管理员删除知识库: knowledgeId={}", knowledgeId);
+    }
+
+    @Override
+    @Transactional
+    public List<String> restoreKnowledge(Long knowledgeId) {
+        Knowledge knowledge = getKnowledgeAny(knowledgeId);
+        if (knowledge.getIsDelete() == 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "知识库未被删除");
+        }
+        int rows = knowledgeMapper.restoreDeleted(knowledgeId);
+        if (rows == 0) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "知识库不存在或未被删除");
+        }
+        // 恢复全部文档（含之前单独删除的），随后逐个重新向量化
+        List<KnowledgeDoc> docs = knowledgeDocMapper.selectAllByKnowledgeId(knowledgeId);
+        knowledgeDocMapper.restoreDeletedByKnowledgeId(knowledgeId);
+        List<String> taskIds = docs.stream()
+                .map(doc -> taskService.publishVectorize(knowledgeId, doc.getId(), doc.getFileUrl(), doc.getName()))
+                .toList();
+        log.info("管理员恢复知识库: knowledgeId={}, 重新入库文档数={}", knowledgeId, taskIds.size());
+        return taskIds;
+    }
+
+    @Override
+    @Transactional
+    public void deleteDocByAdmin(Long knowledgeId, Long docId) {
+        KnowledgeDoc doc = getDocAny(knowledgeId, docId);
+        knowledgeDocMapper.deleteById(docId);
+        // 删除该文档向量（Python Agent），降级：失败不影响元数据删除
+        deleteVectorsBestEffort(String.valueOf(knowledgeId), String.valueOf(docId));
+        log.info("管理员删除文档: knowledgeId={}, docId={}", knowledgeId, docId);
+    }
+
+    @Override
+    @Transactional
+    public String restoreDoc(Long knowledgeId, Long docId) {
+        KnowledgeDoc doc = getDocAny(knowledgeId, docId);
+        if (doc.getIsDelete() == 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档未被删除");
+        }
+        int rows = knowledgeDocMapper.restoreDeleted(docId);
+        if (rows == 0) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在或未被删除");
+        }
+        return taskService.publishVectorize(knowledgeId, doc.getId(), doc.getFileUrl(), doc.getName());
+    }
+
+    @Override
+    public String reVectorize(Long knowledgeId, Long docId) {
+        KnowledgeDoc doc = getDocAny(knowledgeId, docId);
+        if (doc.getIsDelete() == 1) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档已删除，请先恢复");
+        }
+        if (!"FAILED".equals(doc.getVectorStatus()) && !"PENDING".equals(doc.getVectorStatus())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "仅支持对失败或待处理文档重新入库");
+        }
+        return taskService.publishVectorize(knowledgeId, doc.getId(), doc.getFileUrl(), doc.getName());
+    }
+
+    /**
+     * 查询知识库（不区分删除状态，管理员用）
+     */
+    private Knowledge getKnowledgeAny(Long knowledgeId) {
+        Knowledge knowledge = knowledgeMapper.selectAnyById(knowledgeId);
+        if (knowledge == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "知识库不存在");
+        }
+        return knowledge;
+    }
+
+    /**
+     * 查询文档（不区分删除状态，且校验归属知识库）
+     */
+    private KnowledgeDoc getDocAny(Long knowledgeId, Long docId) {
+        if (docId == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档 id 不能为空");
+        }
+        KnowledgeDoc doc = knowledgeDocMapper.selectAnyById(docId);
+        if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在");
+        }
+        return doc;
+    }
+
+    /**
+     * 调 Python 删向量（按 docId 或整库），失败降级不影响主流程
+     */
+    private void deleteVectorsBestEffort(String knowledgeId, String docId) {
+        try {
+            pythonAgentClient.deleteKnowledge(new DeleteVectorRequest(knowledgeId, docId));
+            log.info("向量库清理成功: knowledgeId={}, docId={}", knowledgeId, docId);
+        } catch (Exception e) {
+            log.warn("向量库清理失败（已降级）: knowledgeId={}, docId={}, error={}", knowledgeId, docId, e.getMessage());
+        }
     }
 
     private long normalizePageNum(UserQueryRequest request) {

@@ -5,6 +5,7 @@ import com.agent.rag.common.annotation.RequireRole;
 import com.agent.rag.dto.req.UpdateUserRoleRequest;
 import com.agent.rag.dto.req.UserQueryRequest;
 import com.agent.rag.dto.resp.AdminUserVO;
+import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.service.AdminService;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -12,10 +13,13 @@ import jakarta.annotation.Resource;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 /**
  * 管理员接口（全部需要 admin 角色，由 @RequireRole 注解在拦截器校验）
@@ -66,10 +70,68 @@ public class AdminController {
     }
 
     /**
-     * 全局知识库列表
+     * 全局知识库列表（deleted 过滤：null=全部/0=正常/1=已删除）
      */
     @GetMapping("/knowledge/list")
     public Result<Page<KnowledgeVO>> listKnowledge(UserQueryRequest request) {
         return Result.success(adminService.listAllKnowledge(request));
+    }
+
+    /**
+     * 知识库详情（任意用户/已删除均可查看，供管理员打开知识库）
+     */
+    @GetMapping("/knowledge/{id}")
+    public Result<KnowledgeVO> knowledgeDetail(@PathVariable Long id) {
+        return Result.success(adminService.getKnowledgeDetail(id));
+    }
+
+    /**
+     * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除）
+     */
+    @GetMapping("/knowledge/{id}/docs")
+    public Result<Page<KnowledgeDocVO>> knowledgeDocs(@PathVariable Long id, UserQueryRequest request) {
+        return Result.success(adminService.listAllDocs(id, request));
+    }
+
+    /**
+     * 删除知识库：逻辑删除 + 全部文档逻辑删除 + 删除向量
+     */
+    @DeleteMapping("/knowledge/{id}")
+    public Result<Boolean> deleteKnowledge(@PathVariable Long id) {
+        adminService.deleteKnowledgeByAdmin(id);
+        return Result.success(true);
+    }
+
+    /**
+     * 恢复已删除知识库：取消删除 + 全部文档取消删除 + 逐个重新向量化
+     */
+    @PutMapping("/knowledge/{id}/restore")
+    public Result<List<String>> restoreKnowledge(@PathVariable Long id) {
+        return Result.success(adminService.restoreKnowledge(id));
+    }
+
+    /**
+     * 删除知识库内单个文档：逻辑删除 + 删除该文档向量
+     */
+    @DeleteMapping("/knowledge/{id}/docs/{docId}")
+    public Result<Boolean> deleteDoc(@PathVariable Long id, @PathVariable Long docId) {
+        adminService.deleteDocByAdmin(id, docId);
+        return Result.success(true);
+    }
+
+    /**
+     * 恢复已删除文档：取消删除 + 重新向量化
+     */
+    @PutMapping("/knowledge/{id}/docs/{docId}/restore")
+    public Result<String> restoreDoc(@PathVariable Long id, @PathVariable Long docId) {
+        return Result.success(adminService.restoreDoc(id, docId));
+    }
+
+    /**
+     * 重新入库（重新向量化）：仅支持 FAILED/PENDING 且未删除的文档
+     */
+    @PostMapping("/knowledge/{id}/docs/{docId}/revectorize")
+    public Result<String> reVectorize(@PathVariable Long id, @PathVariable Long docId) {
+        return Result.success(adminService.reVectorize(id, docId));
     }
 }

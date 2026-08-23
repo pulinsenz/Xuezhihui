@@ -36,6 +36,11 @@ public class KnowledgeVO implements Serializable {
      */
     private Long docCount;
 
+    /**
+     * 逻辑删除状态：0=正常、1=已删除（管理员列表展示）
+     */
+    private Integer isDelete;
+
     private LocalDateTime createTime;
 
     private static final long serialVersionUID = 1L;
@@ -48,6 +53,7 @@ public class KnowledgeVO implements Serializable {
         vo.setCover(knowledge.getCover());
         vo.setUserId(knowledge.getUserId());
         vo.setCreateTime(knowledge.getCreateTime());
+        vo.setIsDelete(knowledge.getIsDelete());
         return vo;
     }
 }

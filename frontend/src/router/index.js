@@ -20,6 +20,7 @@ const routes = [
       { path: 'knowledge/:id', name: 'KnowledgeDetail', component: () => import('../views/KnowledgeDetailView.vue') },
       { path: 'admin/users', name: 'AdminUsers', component: () => import('../views/AdminUsersView.vue'), meta: { admin: true } },
       { path: 'admin/knowledge', name: 'AdminKnowledge', component: () => import('../views/AdminKnowledgeView.vue'), meta: { admin: true } },
+      { path: 'admin/knowledge/:id', name: 'AdminKnowledgeDetail', component: () => import('../views/AdminKnowledgeDetailView.vue'), meta: { admin: true } },
       { path: ':pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFoundView.vue') },
     ],
   },

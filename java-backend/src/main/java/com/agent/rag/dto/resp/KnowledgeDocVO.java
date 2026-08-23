@@ -34,6 +34,11 @@ public class KnowledgeDocVO implements Serializable {
 
     private String errorMsg;
 
+    /**
+     * 逻辑删除状态：0=正常、1=已删除（管理员列表展示）
+     */
+    private Integer isDelete;
+
     private LocalDateTime createTime;
 
     private static final long serialVersionUID = 1L;
@@ -48,6 +53,7 @@ public class KnowledgeDocVO implements Serializable {
         vo.setFileType(doc.getFileType());
         vo.setVectorStatus(doc.getVectorStatus());
         vo.setErrorMsg(doc.getErrorMsg());
+        vo.setIsDelete(doc.getIsDelete());
         vo.setCreateTime(doc.getCreateTime());
         return vo;
     }

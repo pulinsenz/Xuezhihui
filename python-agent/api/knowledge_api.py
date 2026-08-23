@@ -108,10 +108,10 @@ def vectorize(req: VectorizeRequest):
 
 @router.post("/delete")
 def delete(req: DeleteRequest):
-    """删除向量：指定 doc_id 删单个文档，否则删整个知识库"""
+    """删除向量：指定 doc_id 删单个文档，否则删整个知识库（同时清理 BM25 索引）"""
     if req.doc_id:
-        runtime.vector_store.delete_document(req.knowledge_id, req.doc_id)
+        runtime.retriever.delete_document(req.knowledge_id, req.doc_id)
     else:
-        runtime.vector_store.delete_knowledge(req.knowledge_id)
+        runtime.retriever.delete_knowledge(req.knowledge_id)
     agent_event(logger, "vectors_deleted", knowledge_id=req.knowledge_id, doc_id=req.doc_id)
     return {"code": 0, "message": "ok", "data": True}

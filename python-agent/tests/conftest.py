@@ -33,24 +33,24 @@ class FakeRetriever:
 
 
 class FakeVectorStore:
-    """不加载 embedding 的假向量库（按 knowledge_id 隔离）"""
+    """不加载 embedding 的假向量库（按 knowledge_id -> doc_id 隔离，删除精确到文档）"""
 
     def __init__(self):
-        self.data = {}  # knowledge_id -> [chunk...]
+        self.data = {}  # knowledge_id -> {doc_id -> [chunk...]}
 
     def add_document(self, knowledge_id, doc_id, text, chunks):
-        self.data[str(knowledge_id)] = list(chunks)
+        self.data.setdefault(str(knowledge_id), {})[str(doc_id)] = list(chunks)
         return len(chunks)
 
     def delete_document(self, knowledge_id, doc_id):
-        pass
+        self.data.get(str(knowledge_id), {}).pop(str(doc_id), None)
 
     def delete_knowledge(self, knowledge_id):
         self.data.pop(str(knowledge_id), None)
 
     def search(self, query, knowledge_id=None, top_k=5):
         if knowledge_id is not None:
-            chunks = self.data.get(str(knowledge_id), [])
+            chunks = [c for v in self.data.get(str(knowledge_id), {}).values() for c in v]
         else:
-            chunks = [c for v in self.data.values() for c in v]
+            chunks = [c for vv in self.data.values() for v in vv.values() for c in v]
         return [{"text": c, "score": 0.5} for c in chunks[:top_k]]
