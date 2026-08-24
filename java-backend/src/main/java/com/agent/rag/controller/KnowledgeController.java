@@ -3,8 +3,11 @@ package com.agent.rag.controller;
 import com.agent.rag.common.Result;
 import com.agent.rag.dto.req.BatchDocRequest;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
+import com.agent.rag.dto.req.KnowledgeUpdateRequest;
+import com.agent.rag.dto.req.MemberInviteRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
+import com.agent.rag.dto.resp.MemberVO;
 import com.agent.rag.service.KnowledgeService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -43,7 +46,16 @@ public class KnowledgeController {
     }
 
     /**
-     * 我的知识库列表
+     * 更新知识库信息（名称/封面/简介/是否公开），仅作者
+     */
+    @PostMapping("/update")
+    public Result<Boolean> update(@RequestBody KnowledgeUpdateRequest request) {
+        knowledgeService.updateKnowledge(request);
+        return Result.success(true);
+    }
+
+    /**
+     * 我的知识库列表（我拥有的 + 我收藏的）
      */
     @GetMapping("/list")
     public Result<List<KnowledgeVO>> list() {
@@ -51,11 +63,79 @@ public class KnowledgeController {
     }
 
     /**
-     * 知识库详情
+     * 公开知识库列表（isPublic=1 且未删除），关键词可选
+     */
+    @GetMapping("/public/list")
+    public Result<List<KnowledgeVO>> publicList(@RequestParam(required = false) String keyword) {
+        return Result.success(knowledgeService.listPublicKnowledge(keyword));
+    }
+
+    /**
+     * 知识库详情（作者/协作者/已收藏/公开可查看；外部查看浏览量 +1）
      */
     @GetMapping("/{id}")
     public Result<KnowledgeVO> detail(@PathVariable Long id) {
-        return Result.success(KnowledgeVO.from(knowledgeService.getOwnedKnowledge(id)));
+        return Result.success(knowledgeService.getKnowledgeDetail(id));
+    }
+
+    /**
+     * 收藏知识库（仅他人公开库）
+     */
+    @PostMapping("/{id}/favorite")
+    public Result<Boolean> favorite(@PathVariable Long id) {
+        knowledgeService.favorite(id);
+        return Result.success(true);
+    }
+
+    /**
+     * 取消收藏知识库
+     */
+    @DeleteMapping("/{id}/favorite")
+    public Result<Boolean> unfavorite(@PathVariable Long id) {
+        knowledgeService.unfavorite(id);
+        return Result.success(true);
+    }
+
+    /**
+     * 复制知识库：复制者为新作者，返回新知识库 id
+     */
+    @PostMapping("/{id}/copy")
+    public Result<Long> copy(@PathVariable Long id) {
+        return Result.success(knowledgeService.copyKnowledge(id));
+    }
+
+    /**
+     * 上传封面图片，返回可访问 URL（/api/files/...）
+     */
+    @PostMapping("/cover")
+    public Result<String> uploadCover(@RequestPart("file") MultipartFile file) {
+        return Result.success(knowledgeService.uploadCover(file));
+    }
+
+    /**
+     * 协作者列表（仅作者）
+     */
+    @GetMapping("/{id}/members")
+    public Result<List<MemberVO>> members(@PathVariable Long id) {
+        return Result.success(knowledgeService.listMembers(id));
+    }
+
+    /**
+     * 邀请协作者（仅作者，按 userId 或 userAccount）
+     */
+    @PostMapping("/{id}/members")
+    public Result<Boolean> addMember(@PathVariable Long id, @RequestBody MemberInviteRequest request) {
+        knowledgeService.addMember(id, request);
+        return Result.success(true);
+    }
+
+    /**
+     * 移除协作者（仅作者）
+     */
+    @DeleteMapping("/{id}/members/{userId}")
+    public Result<Boolean> removeMember(@PathVariable Long id, @PathVariable Long userId) {
+        knowledgeService.removeMember(id, userId);
+        return Result.success(true);
     }
 
     /**
@@ -145,7 +225,8 @@ public class KnowledgeController {
 
     /**
      * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除，用户可查看自己删除的文档并恢复；
-     * category 过滤：null/all=全部, vectorized=已入库, unvectorized=未入库）
+     * category 过滤：null/all=全部, vectorized=已入库, unvectorized=未入库。
+     * 外部查看者（非作者/协作者）强制只看正常文档）
      */
     @GetMapping("/{id}/docs")
     public Result<List<KnowledgeDocVO>> docs(@PathVariable Long id,

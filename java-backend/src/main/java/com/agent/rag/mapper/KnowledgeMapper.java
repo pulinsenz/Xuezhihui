@@ -49,4 +49,22 @@ public interface KnowledgeMapper extends BaseMapper<Knowledge> {
      */
     @Update("UPDATE knowledge SET isDelete = 0 WHERE id = #{id} AND isDelete = 1")
     int restoreDeleted(@Param("id") Long id);
+
+    /**
+     * 浏览量 +1（外部查看者访问详情时原子自增，避免读改写竞态）
+     */
+    @Update("UPDATE knowledge SET viewCount = viewCount + 1 WHERE id = #{id}")
+    int incrementViewCount(@Param("id") Long id);
+
+    /**
+     * 收藏量 +1（仅在收藏行实际插入成功时调用）
+     */
+    @Update("UPDATE knowledge SET favoriteCount = favoriteCount + 1 WHERE id = #{id}")
+    int incrementFavoriteCount(@Param("id") Long id);
+
+    /**
+     * 收藏量 -1（下限 0，仅在收藏行实际删除时调用）
+     */
+    @Update("UPDATE knowledge SET favoriteCount = GREATEST(favoriteCount - 1, 0) WHERE id = #{id}")
+    int decrementFavoriteCount(@Param("id") Long id);
 }

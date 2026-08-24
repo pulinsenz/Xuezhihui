@@ -14,6 +14,10 @@
           <el-icon><Folder /></el-icon>
           <span>知识库</span>
         </el-menu-item>
+        <el-menu-item index="/public-knowledge">
+          <el-icon><Compass /></el-icon>
+          <span>公开知识库</span>
+        </el-menu-item>
         <el-menu-item index="/settings">
           <el-icon><Setting /></el-icon>
           <span>设置</span>

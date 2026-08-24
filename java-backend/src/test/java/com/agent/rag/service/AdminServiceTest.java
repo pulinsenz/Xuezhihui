@@ -15,7 +15,9 @@ import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.KnowledgeDocMapper;
+import com.agent.rag.mapper.KnowledgeFavoriteMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
+import com.agent.rag.mapper.KnowledgeMemberMapper;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.impl.AdminServiceImpl;
 import com.agent.rag.util.UserContext;
@@ -61,6 +63,10 @@ class AdminServiceTest {
     @Mock
     private KnowledgeDocMapper knowledgeDocMapper;
     @Mock
+    private KnowledgeFavoriteMapper knowledgeFavoriteMapper;
+    @Mock
+    private KnowledgeMemberMapper knowledgeMemberMapper;
+    @Mock
     private ForbiddenFileHashMapper forbiddenFileHashMapper;
     @Mock
     private StringRedisTemplate stringRedisTemplate;
@@ -84,6 +90,8 @@ class AdminServiceTest {
         ReflectionTestUtils.setField(adminService, "userMapper", userMapper);
         ReflectionTestUtils.setField(adminService, "knowledgeMapper", knowledgeMapper);
         ReflectionTestUtils.setField(adminService, "knowledgeDocMapper", knowledgeDocMapper);
+        ReflectionTestUtils.setField(adminService, "knowledgeFavoriteMapper", knowledgeFavoriteMapper);
+        ReflectionTestUtils.setField(adminService, "knowledgeMemberMapper", knowledgeMemberMapper);
         ReflectionTestUtils.setField(adminService, "forbiddenFileHashMapper", forbiddenFileHashMapper);
         ReflectionTestUtils.setField(adminService, "stringRedisTemplate", stringRedisTemplate);
         ReflectionTestUtils.setField(adminService, "jwtProperties", jwtProperties);

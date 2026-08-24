@@ -17,4 +17,13 @@ public interface FileStorageService {
      * @return 存储地址
      */
     String store(MultipartFile file, Long userId);
+
+    /**
+     * 存储文件，返回可被前端访问的 URL（静态资源经 /api/files 暴露）
+     *
+     * @param file   上传的文件
+     * @param userId 所属用户
+     * @return 如 /api/files/202608/{userId}/{uuid}.png
+     */
+    String storeForWeb(MultipartFile file, Long userId);
 }

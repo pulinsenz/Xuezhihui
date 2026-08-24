@@ -48,6 +48,21 @@ public class Knowledge implements Serializable {
     private Long userId;
 
     /**
+     * 是否公开：1=公开（他人可浏览/收藏/复制） 0=私有
+     */
+    private Integer isPublic;
+
+    /**
+     * 浏览量（非作者/协作者每次查看详情 +1）
+     */
+    private Integer viewCount;
+
+    /**
+     * 收藏量（他人收藏数）
+     */
+    private Integer favoriteCount;
+
+    /**
      * 创建时间
      */
     private LocalDateTime createTime;

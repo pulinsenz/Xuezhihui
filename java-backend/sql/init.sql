@@ -174,3 +174,42 @@ CREATE TABLE IF NOT EXISTS `forbidden_file_hash`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='封禁文件哈希';
+
+-- 14. 兼容旧库：knowledge 补 isPublic/viewCount/favoriteCount 列（逐个判断，幂等）
+SET @c9 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge' AND COLUMN_NAME = 'isPublic');
+SET @d9 = IF(@c9 = 0, 'ALTER TABLE knowledge ADD COLUMN isPublic tinyint NOT NULL DEFAULT 0 COMMENT ''是否公开: 1=公开 0=私有''', 'SELECT 1');
+PREPARE s9 FROM @d9; EXECUTE s9; DEALLOCATE PREPARE s9;
+SET @c10 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge' AND COLUMN_NAME = 'viewCount');
+SET @d10 = IF(@c10 = 0, 'ALTER TABLE knowledge ADD COLUMN viewCount int NOT NULL DEFAULT 0 COMMENT ''浏览量''', 'SELECT 1');
+PREPARE s10 FROM @d10; EXECUTE s10; DEALLOCATE PREPARE s10;
+SET @c11 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge' AND COLUMN_NAME = 'favoriteCount');
+SET @d11 = IF(@c11 = 0, 'ALTER TABLE knowledge ADD COLUMN favoriteCount int NOT NULL DEFAULT 0 COMMENT ''收藏量''', 'SELECT 1');
+PREPARE s11 FROM @d11; EXECUTE s11; DEALLOCATE PREPARE s11;
+
+-- 15. 知识库收藏关系表（用户收藏他人公开知识库，收藏后出现在自己的知识库列表）
+CREATE TABLE IF NOT EXISTS `knowledge_favorite`
+(
+    `id`          bigint   NOT NULL AUTO_INCREMENT COMMENT 'id',
+    `knowledgeId` bigint   NOT NULL COMMENT '知识库id',
+    `userId`      bigint   NOT NULL COMMENT '收藏用户id',
+    `createTime`  datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_knowledgeUser` (`knowledgeId`, `userId`),
+    KEY `idx_userId` (`userId`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='知识库收藏';
+
+-- 16. 知识库协作者表（作者邀请他人共同管理，作者权限最高）
+CREATE TABLE IF NOT EXISTS `knowledge_member`
+(
+    `id`          bigint   NOT NULL AUTO_INCREMENT COMMENT 'id',
+    `knowledgeId` bigint   NOT NULL COMMENT '知识库id',
+    `userId`      bigint   NOT NULL COMMENT '协作者用户id',
+    `createTime`  datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_knowledgeUser` (`knowledgeId`, `userId`),
+    KEY `idx_userId` (`userId`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='知识库协作者';

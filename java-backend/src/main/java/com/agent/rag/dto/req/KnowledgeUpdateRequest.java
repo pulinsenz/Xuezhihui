@@ -5,12 +5,17 @@ import lombok.Data;
 import java.io.Serializable;
 
 /**
- * 创建知识库请求
+ * 更新知识库请求（仅作者可操作）
  *
  * @author pulinsenz
  */
 @Data
-public class KnowledgeCreateRequest implements Serializable {
+public class KnowledgeUpdateRequest implements Serializable {
+
+    /**
+     * 知识库 id
+     */
+    private Long id;
 
     /**
      * 知识库名称
@@ -28,7 +33,7 @@ public class KnowledgeCreateRequest implements Serializable {
     private String cover;
 
     /**
-     * 是否公开：1=公开 0=私有（默认私有，创建后作者可编辑）
+     * 是否公开：1=公开 0=私有
      */
     private Integer isPublic;
 

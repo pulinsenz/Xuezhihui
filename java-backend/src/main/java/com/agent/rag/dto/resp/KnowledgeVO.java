@@ -32,6 +32,21 @@ public class KnowledgeVO implements Serializable {
     private Long userId;
 
     /**
+     * 是否公开：1=公开 0=私有
+     */
+    private Integer isPublic;
+
+    /**
+     * 浏览量
+     */
+    private Integer viewCount;
+
+    /**
+     * 收藏量
+     */
+    private Integer favoriteCount;
+
+    /**
      * 文档数量
      */
     private Long docCount;
@@ -40,6 +55,31 @@ public class KnowledgeVO implements Serializable {
      * 逻辑删除状态：0=正常、1=已删除（管理员列表展示）
      */
     private Integer isDelete;
+
+    /**
+     * 作者昵称
+     */
+    private String authorName;
+
+    /**
+     * 作者头像
+     */
+    private String authorAvatar;
+
+    /**
+     * 当前用户是否为作者（拥有者）
+     */
+    private Boolean isOwner;
+
+    /**
+     * 当前用户是否为协作者
+     */
+    private Boolean isMember;
+
+    /**
+     * 当前用户是否已收藏
+     */
+    private Boolean isFavorite;
 
     private LocalDateTime createTime;
 
@@ -52,6 +92,9 @@ public class KnowledgeVO implements Serializable {
         vo.setDescription(knowledge.getDescription());
         vo.setCover(knowledge.getCover());
         vo.setUserId(knowledge.getUserId());
+        vo.setIsPublic(knowledge.getIsPublic());
+        vo.setViewCount(knowledge.getViewCount());
+        vo.setFavoriteCount(knowledge.getFavoriteCount());
         vo.setCreateTime(knowledge.getCreateTime());
         vo.setIsDelete(knowledge.getIsDelete());
         return vo;

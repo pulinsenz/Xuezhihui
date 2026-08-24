@@ -3,11 +3,44 @@ import request from './request'
 /** 创建知识库 */
 export const createKnowledge = (data) => request.post('/knowledge/create', data)
 
-/** 我的知识库列表 */
+/** 更新知识库信息（名称/封面/简介/是否公开），仅作者 */
+export const updateKnowledge = (data) => request.post('/knowledge/update', data)
+
+/** 我的知识库列表（我拥有的 + 我收藏的） */
 export const listMyKnowledge = () => request.get('/knowledge/list')
+
+/** 公开知识库列表（isPublic=1 且未删除），keyword 可选 */
+export const listPublicKnowledge = (keyword) => request.get('/knowledge/public/list', { params: { keyword } })
 
 /** 知识库详情 */
 export const getKnowledge = (id) => request.get(`/knowledge/${id}`)
+
+/** 收藏知识库（仅他人公开库） */
+export const favoriteKnowledge = (id) => request.post(`/knowledge/${id}/favorite`)
+
+/** 取消收藏知识库 */
+export const unfavoriteKnowledge = (id) => request.delete(`/knowledge/${id}/favorite`)
+
+/** 复制知识库：复制者为新作者，返回新知识库 id */
+export const copyKnowledge = (id) => request.post(`/knowledge/${id}/copy`)
+
+/** 上传封面图片，返回可访问 URL */
+export const uploadCover = (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/knowledge/cover', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+/** 协作者列表（仅作者） */
+export const listMembers = (id) => request.get(`/knowledge/${id}/members`)
+
+/** 邀请协作者（仅作者，按 userId 或 userAccount） */
+export const addMember = (id, data) => request.post(`/knowledge/${id}/members`, data)
+
+/** 移除协作者（仅作者） */
+export const removeMember = (id, userId) => request.delete(`/knowledge/${id}/members/${userId}`)
 
 /** 删除知识库（含文档） */
 export const deleteKnowledge = (id) => request.delete(`/knowledge/${id}`)

@@ -12,7 +12,10 @@ import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.KnowledgeDocMapper;
+import com.agent.rag.mapper.KnowledgeFavoriteMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
+import com.agent.rag.mapper.KnowledgeMemberMapper;
+import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.impl.KnowledgeServiceImpl;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.UserContext;
@@ -49,6 +52,12 @@ class KnowledgeServiceTest {
     @Mock
     private KnowledgeDocMapper knowledgeDocMapper;
     @Mock
+    private KnowledgeFavoriteMapper knowledgeFavoriteMapper;
+    @Mock
+    private KnowledgeMemberMapper knowledgeMemberMapper;
+    @Mock
+    private UserMapper userMapper;
+    @Mock
     private ForbiddenFileHashMapper forbiddenFileHashMapper;
     @Mock
     private FileStorageService fileStorageService;
@@ -64,6 +73,9 @@ class KnowledgeServiceTest {
         knowledgeService = new KnowledgeServiceImpl();
         ReflectionTestUtils.setField(knowledgeService, "knowledgeMapper", knowledgeMapper);
         ReflectionTestUtils.setField(knowledgeService, "knowledgeDocMapper", knowledgeDocMapper);
+        ReflectionTestUtils.setField(knowledgeService, "knowledgeFavoriteMapper", knowledgeFavoriteMapper);
+        ReflectionTestUtils.setField(knowledgeService, "knowledgeMemberMapper", knowledgeMemberMapper);
+        ReflectionTestUtils.setField(knowledgeService, "userMapper", userMapper);
         ReflectionTestUtils.setField(knowledgeService, "forbiddenFileHashMapper", forbiddenFileHashMapper);
         ReflectionTestUtils.setField(knowledgeService, "fileStorageService", fileStorageService);
         ReflectionTestUtils.setField(knowledgeService, "pythonAgentClient", pythonAgentClient);

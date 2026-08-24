@@ -33,6 +33,24 @@ public class LocalFileStorageService implements FileStorageService {
 
     @Override
     public String store(MultipartFile file, Long userId) {
+        String relativePath = storeInternal(file, userId, "");
+        // 必须用绝对路径：transferTo 对相对路径会按容器临时目录解析，导致 FileNotFoundException
+        File target = new File(Paths.get(localPath).toAbsolutePath().normalize().toFile(), relativePath);
+        return target.getAbsolutePath();
+    }
+
+    @Override
+    public String storeForWeb(MultipartFile file, Long userId) {
+        // 封面存入独立子目录 cover/，静态资源只暴露该目录，避免用户上传的文档文件被公开下载
+        String relativePath = storeInternal(file, userId, "cover");
+        String webPath = relativePath.substring("cover/".length());
+        return "/api/files/" + webPath;
+    }
+
+    /**
+     * 落盘并返回相对路径 {subDir}/{yyyyMM}/{userId}/{uuid}.{ext}
+     */
+    private String storeInternal(MultipartFile file, Long userId, String subDir) {
         if (file == null || file.isEmpty()) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件不能为空");
         }
@@ -40,7 +58,9 @@ public class LocalFileStorageService implements FileStorageService {
         String ext = FileUtil.extName(originalName);
         String datePath = DateUtil.format(new Date(), "yyyyMM");
         String fileName = IdUtil.fastSimpleUUID() + (StrUtil.isBlank(ext) ? "" : "." + ext);
-        String relativePath = StrUtil.format("{}/{}/{}", datePath, userId, fileName);
+        String relativePath = StrUtil.isBlank(subDir)
+                ? StrUtil.format("{}/{}/{}", datePath, userId, fileName)
+                : StrUtil.format("{}/{}/{}/{}", subDir, datePath, userId, fileName);
         // 必须用绝对路径：transferTo 对相对路径会按容器临时目录解析，导致 FileNotFoundException
         File base = Paths.get(localPath).toAbsolutePath().normalize().toFile();
         File target = new File(base, relativePath);
@@ -52,6 +72,6 @@ public class LocalFileStorageService implements FileStorageService {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件存储失败");
         }
         log.info("文件存储成功: path={}", target.getAbsolutePath());
-        return target.getAbsolutePath();
+        return relativePath;
     }
 }

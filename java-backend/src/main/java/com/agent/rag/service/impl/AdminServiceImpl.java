@@ -13,10 +13,14 @@ import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
 import com.agent.rag.entity.KnowledgeDoc;
+import com.agent.rag.entity.KnowledgeFavorite;
+import com.agent.rag.entity.KnowledgeMember;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.KnowledgeDocMapper;
+import com.agent.rag.mapper.KnowledgeFavoriteMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
+import com.agent.rag.mapper.KnowledgeMemberMapper;
 import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.AdminService;
@@ -54,6 +58,12 @@ public class AdminServiceImpl implements AdminService {
 
     @Resource
     private KnowledgeDocMapper knowledgeDocMapper;
+
+    @Resource
+    private KnowledgeFavoriteMapper knowledgeFavoriteMapper;
+
+    @Resource
+    private KnowledgeMemberMapper knowledgeMemberMapper;
 
     @Resource
     private ForbiddenFileHashMapper forbiddenFileHashMapper;
@@ -192,6 +202,11 @@ public class AdminServiceImpl implements AdminService {
         // 逻辑删除知识库 + 全部当前正常文档（来源=admin，用户不可恢复该文件）
         knowledgeMapper.deleteById(knowledgeId);
         knowledgeDocMapper.markDeletedByKnowledgeId(knowledgeId, "admin");
+        // 级联清理收藏与协作者关系，避免残留
+        knowledgeFavoriteMapper.delete(new LambdaQueryWrapper<KnowledgeFavorite>()
+                .eq(KnowledgeFavorite::getKnowledgeId, knowledgeId));
+        knowledgeMemberMapper.delete(new LambdaQueryWrapper<KnowledgeMember>()
+                .eq(KnowledgeMember::getKnowledgeId, knowledgeId));
         // 清理向量库（Python Agent），降级：失败不影响元数据删除
         deleteVectorsBestEffort(String.valueOf(knowledgeId), null);
         log.info("管理员删除知识库: knowledgeId={}", knowledgeId);

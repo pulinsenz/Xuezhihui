@@ -1,7 +1,10 @@
 package com.agent.rag.service;
 
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
+import com.agent.rag.dto.req.KnowledgeUpdateRequest;
+import com.agent.rag.dto.req.MemberInviteRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
+import com.agent.rag.dto.resp.MemberVO;
 import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
@@ -22,14 +25,39 @@ public interface KnowledgeService {
     Long createKnowledge(KnowledgeCreateRequest request);
 
     /**
-     * 我的知识库列表（含文档数）
+     * 更新知识库信息（名称/封面/简介/是否公开），仅作者可操作
+     */
+    void updateKnowledge(KnowledgeUpdateRequest request);
+
+    /**
+     * 我的知识库列表（我拥有的 + 我收藏的，含文档数/作者/浏览量/收藏量）
      */
     List<KnowledgeVO> listMyKnowledge();
+
+    /**
+     * 公开知识库列表（isPublic=1 且未删除，含自己的公开库），关键词可选
+     */
+    List<KnowledgeVO> listPublicKnowledge(String keyword);
 
     /**
      * 获取本人知识库（校验所属人，不存在或无权抛异常）
      */
     Knowledge getOwnedKnowledge(Long knowledgeId);
+
+    /**
+     * 获取本人或协作者可管理的知识库（上传/删除文档等文档操作）
+     */
+    Knowledge getManageableKnowledge(Long knowledgeId);
+
+    /**
+     * 获取当前用户可查看的知识库（作者/协作者/已收藏/公开）
+     */
+    Knowledge getViewableKnowledge(Long knowledgeId);
+
+    /**
+     * 知识库详情（可查看者访问，返回富化 VO；外部查看者浏览量 +1）
+     */
+    KnowledgeVO getKnowledgeDetail(Long knowledgeId);
 
     /**
      * 删除知识库及其文档
@@ -87,9 +115,47 @@ public interface KnowledgeService {
 
     /**
      * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除；
-     * category 向量状态过滤：null/all=全部, vectorized=已入库, unvectorized=未入库）
+     * category 向量状态过滤：null/all=全部, vectorized=已入库, unvectorized=未入库。
+     * 外部查看者（非作者/协作者）强制只看正常文档）
      */
     List<KnowledgeDocVO> listDocs(Long knowledgeId, Integer deleted, String category);
+
+    /**
+     * 收藏知识库（仅他人公开库），收藏后出现在自己的知识库列表
+     */
+    void favorite(Long knowledgeId);
+
+    /**
+     * 取消收藏知识库
+     */
+    void unfavorite(Long knowledgeId);
+
+    /**
+     * 复制知识库：复制者为新作者，复制其下文档并重新入库
+     *
+     * @return 新知识库 id
+     */
+    Long copyKnowledge(Long knowledgeId);
+
+    /**
+     * 上传封面图片，返回可访问 URL
+     */
+    String uploadCover(MultipartFile file);
+
+    /**
+     * 协作者列表（仅作者）
+     */
+    List<MemberVO> listMembers(Long knowledgeId);
+
+    /**
+     * 邀请协作者（仅作者，按 userId 或 userAccount）
+     */
+    void addMember(Long knowledgeId, MemberInviteRequest request);
+
+    /**
+     * 移除协作者（仅作者）
+     */
+    void removeMember(Long knowledgeId, Long userId);
 
     /**
      * 用户业务数据统计（工具 Agent 回调），跨用户时按 userId 精确过滤
