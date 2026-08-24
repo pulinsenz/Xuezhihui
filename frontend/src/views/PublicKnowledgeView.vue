@@ -22,7 +22,7 @@
     <el-empty v-if="!loading && list.length === 0" description="暂无公开知识库" />
 
     <el-row v-loading="loading" :gutter="16" class="kb-row">
-      <el-col v-for="kb in list" :key="kb.id" :span="8">
+      <el-col v-for="kb in list" :key="kb.id" :xs="24" :sm="12" :md="8" :lg="6" :xl="6">
         <el-card shadow="hover" class="kb-card" @click="goDetail(kb.id)">
           <!-- 自己的公开知识库：右上角“我的”徽标 -->
           <el-tag v-if="kb.isOwner" type="success" effect="dark" size="small" class="mine-badge">我的</el-tag>
@@ -152,10 +152,10 @@ onMounted(loadList)
   z-index: 2;
 }
 .kb-cover {
-  height: 90px;
-  line-height: 90px;
+  height: 180px;
+  line-height: 180px;
   text-align: center;
-  font-size: 40px;
+  font-size: 48px;
   font-weight: 700;
   color: #fff;
   background: linear-gradient(135deg, #409eff, #66b1ff);
@@ -164,7 +164,7 @@ onMounted(loadList)
 }
 .kb-cover-img {
   width: 100%;
-  height: 120px;
+  height: 180px;
   object-fit: cover;
   border-radius: 6px;
   margin-bottom: 12px;
