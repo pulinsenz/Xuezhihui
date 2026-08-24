@@ -17,6 +17,7 @@ import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
+import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.AdminService;
 import com.agent.rag.service.TaskService;
@@ -32,7 +33,9 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 管理员服务实现
@@ -51,6 +54,9 @@ public class AdminServiceImpl implements AdminService {
 
     @Resource
     private KnowledgeDocMapper knowledgeDocMapper;
+
+    @Resource
+    private ForbiddenFileHashMapper forbiddenFileHashMapper;
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
@@ -202,9 +208,12 @@ public class AdminServiceImpl implements AdminService {
         if (rows == 0) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "知识库不存在或未被删除");
         }
-        // 恢复全部文档（含之前单独删除的），随后逐个重新向量化
-        List<KnowledgeDoc> docs = knowledgeDocMapper.selectAllByKnowledgeId(knowledgeId);
-        knowledgeDocMapper.restoreDeletedByKnowledgeId(knowledgeId);
+        // 逐条恢复文档，跳过被管理员封禁哈希的文档：其本地文件已被级联删除，
+        // 若批量恢复会生成指向缺失文件的活跃记录，重新向量化必然失败
+        List<KnowledgeDoc> docs = knowledgeDocMapper.selectAllByKnowledgeId(knowledgeId).stream()
+                .filter(doc -> StrUtil.isBlank(doc.getFileHash()) || !forbiddenFileHashMapper.existsByHash(doc.getFileHash()))
+                .toList();
+        docs.forEach(doc -> knowledgeDocMapper.restoreDeleted(doc.getId()));
         List<String> taskIds = docs.stream()
                 .map(doc -> taskService.publishVectorize(knowledgeId, doc.getId(), doc.getFileUrl(), doc.getName()))
                 .toList();
@@ -216,10 +225,12 @@ public class AdminServiceImpl implements AdminService {
     @Transactional
     public void deleteDocByAdmin(Long knowledgeId, Long docId) {
         KnowledgeDoc doc = getDocAny(knowledgeId, docId);
-        // 管理员删除：记录来源为 admin，用户不可恢复该文件且禁止再上传
-        knowledgeDocMapper.markDeleted(docId, "admin");
-        // 删除该文档向量（Python Agent），降级：失败不影响元数据删除
-        deleteVectorsBestEffort(String.valueOf(knowledgeId), String.valueOf(docId));
+        // getDocAny 用 selectAnyById 会命中已删除文档，此处拦截防止静默 no-op
+        if (doc.getIsDelete() != null && doc.getIsDelete() == 1) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档已删除");
+        }
+        // 记录文件哈希到黑名单，并级联删除所有同内容文档（跨用户/知识库）
+        banAndCascade(doc);
         log.info("管理员删除文档: knowledgeId={}, docId={}", knowledgeId, docId);
     }
 
@@ -229,6 +240,10 @@ public class AdminServiceImpl implements AdminService {
         KnowledgeDoc doc = getDocAny(knowledgeId, docId);
         if (doc.getIsDelete() == 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "文档未被删除");
+        }
+        // 被管理员封禁哈希的文档不可恢复（本地文件已被级联删除）
+        if (StrUtil.isNotBlank(doc.getFileHash()) && forbiddenFileHashMapper.existsByHash(doc.getFileHash())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "该文件已被管理员删除，无法恢复");
         }
         int rows = knowledgeDocMapper.restoreDeleted(docId);
         if (rows == 0) {
@@ -296,22 +311,49 @@ public class AdminServiceImpl implements AdminService {
         if (docIds == null || docIds.isEmpty()) {
             return 0;
         }
+        Set<String> processedHashes = new HashSet<>();
         int deleted = 0;
         for (Long docId : docIds) {
             KnowledgeDoc doc = knowledgeDocMapper.selectAnyById(docId);
             if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
                 continue;
             }
-            if (doc.getIsDelete() == 1) {
+            if (doc.getIsDelete() != null && doc.getIsDelete() == 1) {
                 continue;
             }
-            // 管理员批量删除：来源=admin
-            knowledgeDocMapper.markDeleted(docId, "admin");
-            deleteVectorsBestEffort(String.valueOf(knowledgeId), String.valueOf(docId));
+            // 同内容哈希已在本次批量中级联处理过（会一并删除本记录），避免重复封禁
+            if (StrUtil.isNotBlank(doc.getFileHash()) && !processedHashes.add(doc.getFileHash())) {
+                continue;
+            }
+            banAndCascade(doc);
             deleted++;
         }
         log.info("管理员批量删除文档: knowledgeId={}, count={}", knowledgeId, deleted);
         return deleted;
+    }
+
+    /**
+     * 管理员删除文档核心：封禁文件哈希 + 级联删除所有同内容正常文档。
+     * <p>
+     * 1. 有哈希：写入黑名单表（全局禁止上传/恢复）→ 查全部同哈希正常文档（含目标，天然去重）
+     *    → 逐条逻辑删除（来源=admin）+ 删向量。
+     * 2. 无哈希（历史数据）：无法全局去重，退回仅删目标文档。
+     * 本地文件保留（逻辑删除，不随删除清理）。DB 写在事务内保证原子，Python 向量删除失败不阻断。
+     */
+    private void banAndCascade(KnowledgeDoc target) {
+        if (StrUtil.isBlank(target.getFileHash())) {
+            knowledgeDocMapper.markDeleted(target.getId(), "admin");
+            deleteVectorsBestEffort(String.valueOf(target.getKnowledgeId()), String.valueOf(target.getId()));
+            return;
+        }
+        forbiddenFileHashMapper.insertIgnore(target.getFileHash());
+        List<KnowledgeDoc> sameHashDocs = knowledgeDocMapper.selectActiveByHash(target.getFileHash());
+        for (KnowledgeDoc doc : sameHashDocs) {
+            knowledgeDocMapper.markDeleted(doc.getId(), "admin");
+            // 必须用每条文档自己的 knowledgeId/docId：Python 按 (knowledge_id, doc_id) 删向量，
+            // 用目标库 id 会留下跨库孤儿向量
+            deleteVectorsBestEffort(String.valueOf(doc.getKnowledgeId()), String.valueOf(doc.getId()));
+        }
     }
 
     /**

@@ -505,4 +505,59 @@ class KnowledgeControllerTest {
         assertEquals(0, node.get("code").asInt(), "用户删除的文件应允许重传");
         assertTrue(StringUtils.hasText(node.get("data").asText()), "重传应正常入库返回任务 id");
     }
+
+    // ---------- 彻底删除（逻辑删除 + 标记 purged，前端「已删除」列表不展示）----------
+
+    @Test
+    void purgeDoc_logicalDeleteHiddenFromDeletedList() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "彻底删除测试");
+        upload(token, knowledgeId, "a.txt", "彻底删除内容".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+        String fileUrl = jdbcTemplate.queryForObject("SELECT fileUrl FROM knowledge_doc WHERE id = ?",
+                String.class, Long.valueOf(docId));
+        assertTrue(StringUtils.hasText(fileUrl), "上传后应有本地文件地址");
+        File file = new File(fileUrl);
+        assertTrue(file.exists(), "上传后本地文件应存在");
+
+        String resp = mockMvc.perform(delete("/knowledge/{id}/docs/{docId}/purge", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, objectMapper.readTree(resp).get("code").asInt());
+
+        // 数据库是逻辑删除（记录保留）：deleteSource=purged，本地文件保留
+        String deleteSource = jdbcTemplate.queryForObject("SELECT deleteSource FROM knowledge_doc WHERE id = ?",
+                String.class, Long.valueOf(docId));
+        Integer isDelete = jdbcTemplate.queryForObject("SELECT isDelete FROM knowledge_doc WHERE id = ?",
+                Integer.class, Long.valueOf(docId));
+        assertEquals("purged", deleteSource, "彻底删除应标记 deleteSource=purged");
+        assertEquals(1, isDelete);
+        assertTrue(file.exists(), "彻底删除后本地文件应保留");
+
+        // 前端「已删除」分类也不展示彻底删除的文档
+        assertEquals(0, docs(token, knowledgeId).size(), "正常列表不含该文档");
+        assertEquals(0, docsWithDeleted(token, knowledgeId, 1).size(), "已删除列表也不展示彻底删除的文档");
+    }
+
+    @Test
+    void purgeDoc_deletedDoc_alsoPurged() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "彻底删除测试2");
+        upload(token, knowledgeId, "a.txt", "内容".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+        // 先逻辑删除（用户删，可恢复），再彻底删除
+        mockMvc.perform(delete("/knowledge/{id}/docs/{docId}", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn();
+
+        String resp = mockMvc.perform(delete("/knowledge/{id}/docs/{docId}/purge", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, objectMapper.readTree(resp).get("code").asInt(), "已删除文档也应支持彻底删除");
+
+        String deleteSource = jdbcTemplate.queryForObject("SELECT deleteSource FROM knowledge_doc WHERE id = ?",
+                String.class, Long.valueOf(docId));
+        assertEquals("purged", deleteSource, "已删除文档彻底删除后 deleteSource 应为 purged");
+        assertEquals(0, docsWithDeleted(token, knowledgeId, 1).size(), "已删除列表不再展示该文档");
+    }
 }

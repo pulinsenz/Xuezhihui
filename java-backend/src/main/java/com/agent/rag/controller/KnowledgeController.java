@@ -103,6 +103,15 @@ public class KnowledgeController {
     }
 
     /**
+     * 彻底删除单个文档：逻辑删除并标记 purged，前端「已删除」列表不再展示、用户不可自恢复（普通/已删除文档均可）
+     */
+    @DeleteMapping("/{id}/docs/{docId}/purge")
+    public Result<Boolean> purgeDoc(@PathVariable Long id, @PathVariable Long docId) {
+        knowledgeService.purgeDoc(id, docId);
+        return Result.success(true);
+    }
+
+    /**
      * 恢复用户自己删除的文档（管理员删除的拒绝），恢复后重新入库
      */
     @PostMapping("/{id}/docs/{docId}/restore")

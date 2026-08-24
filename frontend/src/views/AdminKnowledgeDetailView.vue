@@ -240,9 +240,11 @@ const handleBatchRemoveVector = async () => {
 const handleBatchDelete = async () => {
   const ids = selectedRows.value.map((r) => r.id)
   if (!ids.length) return
-  await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 个文档吗？将同时删除其向量，之后不可恢复。`, '批量删除', {
-    type: 'warning',
-  })
+  await ElMessageBox.confirm(
+    `确定删除选中的 ${ids.length} 个文档吗？将记录各自文件哈希、同步删除所有相同内容文档，并禁止再次上传与恢复。`,
+    '批量删除',
+    { type: 'warning' }
+  )
   const count = await adminBatchDeleteDocs(knowledgeId, ids)
   ElMessage.success(`已删除 ${count} 个文档`)
   loadDocs()
@@ -254,7 +256,11 @@ const handleRestore = async (row) => {
 }
 
 const handleDelete = async (row) => {
-  await ElMessageBox.confirm(`确定删除文档「${row.name}」吗？将同时清除其向量，之后可恢复。`, '删除确认', { type: 'warning' })
+  await ElMessageBox.confirm(
+    `确定删除文档「${row.name}」吗？将记录其文件哈希、同步删除所有相同内容文档，并禁止再次上传与恢复。`,
+    '删除确认',
+    { type: 'warning' }
+  )
   await adminDeleteDoc(knowledgeId, row.id)
   ElMessage.success('已删除')
   loadDocs()

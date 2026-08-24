@@ -68,7 +68,8 @@ public class KnowledgeDoc implements Serializable {
     private String fileHash;
 
     /**
-     * 删除来源：user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传
+     * 删除来源：user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传,
+     * purged=用户彻底删除（「已删除」列表不展示、不可自恢复）
      */
     private String deleteSource;
 

@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS `knowledge_doc`
     `vectorStatus` varchar(16)  NOT NULL DEFAULT 'PENDING' COMMENT '向量化状态: PENDING/SUCCESS/FAILED/SKIPPED/REMOVED',
     `errorMsg`     varchar(512) DEFAULT NULL COMMENT '向量化失败原因',
     `fileHash`     varchar(64)  DEFAULT NULL COMMENT '文件内容SHA-256(上传去重用)',
-    `deleteSource` varchar(16)  DEFAULT NULL COMMENT '删除来源: user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传',
+    `deleteSource` varchar(16)  DEFAULT NULL COMMENT '删除来源: user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传, purged=用户彻底删除（列表不展示）',
     `createTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updateTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     `isDelete`     tinyint      NOT NULL DEFAULT 0 COMMENT '是否删除',
@@ -137,7 +137,7 @@ PREPARE s2 FROM @ddl2; EXECUTE s2; DEALLOCATE PREPARE s2;
 SET @col3 = (SELECT COUNT(*) FROM information_schema.COLUMNS
              WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'knowledge_doc' AND COLUMN_NAME = 'deleteSource');
 SET @ddl3 = IF(@col3 = 0,
-               'ALTER TABLE knowledge_doc ADD COLUMN deleteSource varchar(16) DEFAULT NULL COMMENT ''删除来源: user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传''',
+               'ALTER TABLE knowledge_doc ADD COLUMN deleteSource varchar(16) DEFAULT NULL COMMENT ''删除来源: user=用户删除可自恢复, admin=管理员删除不可恢复且禁止上传, purged=用户彻底删除（列表不展示）''',
                'SELECT 1');
 PREPARE s3 FROM @ddl3; EXECUTE s3; DEALLOCATE PREPARE s3;
 
@@ -162,3 +162,15 @@ PREPARE s7 FROM @d7; EXECUTE s7; DEALLOCATE PREPARE s7;
 SET @c8 = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_message' AND COLUMN_NAME = 'sources');
 SET @d8 = IF(@c8 = 0, 'ALTER TABLE chat_message ADD COLUMN sources longtext DEFAULT NULL COMMENT ''参考文献(JSON数组)''', 'SELECT 1');
 PREPARE s8 FROM @d8; EXECUTE s8; DEALLOCATE PREPARE s8;
+
+-- 13. 封禁文件哈希黑名单表（管理员删除文档时记录其内容 SHA-256，全局禁止上传/恢复相同文件）
+CREATE TABLE IF NOT EXISTS `forbidden_file_hash`
+(
+    `id`         bigint      NOT NULL AUTO_INCREMENT COMMENT 'id',
+    `fileHash`   varchar(64) NOT NULL COMMENT '封禁文件内容SHA-256',
+    `createTime` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '封禁时间',
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_fileHash` (`fileHash`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='封禁文件哈希';

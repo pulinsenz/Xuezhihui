@@ -58,6 +58,12 @@ public interface KnowledgeService {
     void deleteDoc(Long knowledgeId, Long docId);
 
     /**
+     * 彻底删除单个文档：逻辑删除并标记 purged，前端「已删除」列表不再展示、用户不可自恢复。
+     * 本地文件保留，向量一并清除。普通文档与已删除文档均可彻底删除。
+     */
+    void purgeDoc(Long knowledgeId, Long docId);
+
+    /**
      * 恢复用户自己删除的文档：仅 user 来源可恢复，管理员删除的拒绝；恢复后重新入库
      *
      * @return 重新入库的任务 id

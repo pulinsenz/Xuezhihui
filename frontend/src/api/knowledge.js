@@ -33,8 +33,11 @@ export const reVectorizeDoc = (id, docId) => request.post(`/knowledge/${id}/docs
 /** 移除入库：删除文档向量（保留文档记录），状态置为未入库 */
 export const removeDocVector = (id, docId) => request.post(`/knowledge/${id}/docs/${docId}/remove-vector`)
 
-/** 删除单个文档（逻辑删除 + 删向量） */
+/** 删除单个文档（逻辑删除 + 删向量，用户可自恢复） */
 export const deleteDoc = (id, docId) => request.delete(`/knowledge/${id}/docs/${docId}`)
+
+/** 彻底删除单个文档（物理删除记录 + 删本地文件 + 删向量，不可恢复） */
+export const purgeDoc = (id, docId) => request.delete(`/knowledge/${id}/docs/${docId}/purge`)
 
 /** 批量移除入库：删除所选文档向量（保留文档记录），返回处理数量 */
 export const batchRemoveVector = (id, docIds) => request.post(`/knowledge/${id}/docs/batch-remove-vector`, { docIds })

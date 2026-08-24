@@ -16,6 +16,7 @@ import com.agent.rag.entity.KnowledgeDoc;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
+import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.service.KnowledgeService;
 import com.agent.rag.service.TaskService;
 import com.agent.rag.storage.FileStorageService;
@@ -44,6 +45,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     @Resource
     private KnowledgeDocMapper knowledgeDocMapper;
+
+    @Resource
+    private ForbiddenFileHashMapper forbiddenFileHashMapper;
 
     @Resource
     private FileStorageService fileStorageService;
@@ -120,9 +124,12 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         getOwnedKnowledge(knowledgeId);
         // 计算文件内容 SHA-256（先算哈希再落盘，供同文件去重）
         String fileHash = computeFileHash(file);
-        // 该文件曾被管理员删除 → 禁止用户再上传
+        // 该文件被管理员删除（封禁哈希黑名单 或 同库历史 admin 删除记录）→ 禁止用户再上传
+        // 保留库内判断兜底历史数据：旧版管理员删除未写入黑名单表，仅凭 deleteSource=admin 也能拦截
         Long adminDeleted = knowledgeDocMapper.countAdminDeletedByHash(knowledgeId, fileHash);
-        if (adminDeleted != null && adminDeleted > 0) {
+        boolean banned = forbiddenFileHashMapper.existsByHash(fileHash)
+                || (adminDeleted != null && adminDeleted > 0);
+        if (banned) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "该文件已被管理员删除，禁止上传");
         }
         boolean duplicate = knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
@@ -181,6 +188,21 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     @Override
+    public void purgeDoc(Long knowledgeId, Long docId) {
+        getOwnedKnowledge(knowledgeId);
+        // selectAnyById 绕过 @TableLogic，普通与已删除文档均可彻底删除（selectById 查不到已删除文档）
+        KnowledgeDoc doc = knowledgeDocMapper.selectAnyById(docId);
+        if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在");
+        }
+        // 彻底删除 = 逻辑删除 + 标记 purged：前端「已删除」列表不再展示，用户不可自恢复。
+        // 本地文件保留（逻辑删除，管理员可查、文件无需重建）；向量一并清除避免被检索。
+        deleteVectorsBestEffort(knowledgeId, docId);
+        knowledgeDocMapper.markPurged(docId);
+        log.info("彻底删除文档: knowledgeId={}, docId={}", knowledgeId, docId);
+    }
+
+    @Override
     public String restoreDoc(Long knowledgeId, Long docId) {
         getOwnedKnowledge(knowledgeId);
         KnowledgeDoc doc = knowledgeDocMapper.selectAnyById(docId);
@@ -192,6 +214,14 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         }
         // 管理员删除的文档用户不可恢复
         if ("admin".equals(doc.getDeleteSource())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "该文件已被管理员删除，无法恢复");
+        }
+        // 用户彻底删除（purged）的文档不可自恢复
+        if ("purged".equals(doc.getDeleteSource())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "该文件已被彻底删除，无法恢复");
+        }
+        // 文件哈希被管理员封禁（如其他用户同内容文件被删）→ 同样不可恢复
+        if (StrUtil.isNotBlank(doc.getFileHash()) && forbiddenFileHashMapper.existsByHash(doc.getFileHash())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "该文件已被管理员删除，无法恢复");
         }
         int rows = knowledgeDocMapper.restoreDeleted(docId);

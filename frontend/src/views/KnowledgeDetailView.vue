@@ -80,7 +80,7 @@
         <el-table-column prop="createTime" label="上传时间" width="180">
           <template #default="{ row }">{{ row.createTime?.replace('T', ' ').slice(0, 19) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="220">
+        <el-table-column label="操作" width="300">
           <template #default="{ row }">
             <!-- 已删除：用户删的可恢复，管理员删的锁定 -->
             <template v-if="row.isDelete === 1">
@@ -96,6 +96,7 @@
               <el-tooltip v-else :content="'该文件已被管理员删除，无法恢复或重新上传'" placement="top">
                 <el-tag type="info" size="small">已被管理员删除</el-tag>
               </el-tooltip>
+              <el-button size="small" type="danger" plain @click="handlePurgeDoc(row)">彻底删除</el-button>
             </template>
             <!-- 正常文档 -->
             <template v-else>
@@ -121,6 +122,7 @@
                 重新入库
               </el-button>
               <el-button size="small" type="danger" @click="handleDeleteDoc(row)">删除</el-button>
+              <el-button size="small" type="danger" plain @click="handlePurgeDoc(row)">彻底删除</el-button>
             </template>
           </template>
         </el-table-column>
@@ -141,6 +143,7 @@ import {
   getKnowledge,
   getTask,
   listDocs,
+  purgeDoc,
   reVectorizeDoc,
   removeDocVector,
   restoreDoc,
@@ -266,15 +269,27 @@ const handleSelectionChange = (rows) => {
   selectedRows.value = rows
 }
 
-// 删除单个文档（同时删向量）
+// 删除单个文档（逻辑删除 + 删向量，可自恢复）
 const handleDeleteDoc = async (row) => {
   await ElMessageBox.confirm(
-    `确定删除文档「${row.name}」吗？将同时删除其向量，之后不可恢复。`,
+    `确定删除文档「${row.name}」吗？将同时删除其向量，可在「已删除」中恢复。`,
     '删除确认',
     { type: 'warning' }
   )
   await deleteDoc(knowledgeId, row.id)
   ElMessage.success('已删除')
+  loadDocs()
+}
+
+// 彻底删除：逻辑删除 + 标记 purged，前端「已删除」列表不再展示、用户不可自恢复
+const handlePurgeDoc = async (row) => {
+  await ElMessageBox.confirm(
+    `确定彻底删除文档「${row.name}」吗？将把它从知识库移除，不再显示，且无法自行恢复。`,
+    '彻底删除',
+    { type: 'error' }
+  )
+  await purgeDoc(knowledgeId, row.id)
+  ElMessage.success('已彻底删除')
   loadDocs()
 }
 
@@ -290,11 +305,11 @@ const handleBatchRemoveVector = async () => {
   loadDocs()
 }
 
-// 批量删除文档（同时删各文档向量）
+// 批量删除文档（逻辑删除 + 删各文档向量，可恢复）
 const handleBatchDelete = async () => {
   const ids = selectedRows.value.map((r) => r.id)
   if (!ids.length) return
-  await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 个文档吗？将同时删除其向量，之后不可恢复。`, '批量删除', {
+  await ElMessageBox.confirm(`确定删除选中的 ${ids.length} 个文档吗？将同时删除其向量，可在「已删除」中恢复。`, '批量删除', {
     type: 'warning',
   })
   const count = await batchDeleteDocs(knowledgeId, ids)

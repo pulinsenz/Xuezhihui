@@ -13,6 +13,7 @@ import com.agent.rag.entity.Knowledge;
 import com.agent.rag.entity.KnowledgeDoc;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
+import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.mapper.UserMapper;
@@ -37,6 +38,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -59,6 +61,8 @@ class AdminServiceTest {
     @Mock
     private KnowledgeDocMapper knowledgeDocMapper;
     @Mock
+    private ForbiddenFileHashMapper forbiddenFileHashMapper;
+    @Mock
     private StringRedisTemplate stringRedisTemplate;
     @Mock
     private Cursor<String> cursor;
@@ -80,6 +84,7 @@ class AdminServiceTest {
         ReflectionTestUtils.setField(adminService, "userMapper", userMapper);
         ReflectionTestUtils.setField(adminService, "knowledgeMapper", knowledgeMapper);
         ReflectionTestUtils.setField(adminService, "knowledgeDocMapper", knowledgeDocMapper);
+        ReflectionTestUtils.setField(adminService, "forbiddenFileHashMapper", forbiddenFileHashMapper);
         ReflectionTestUtils.setField(adminService, "stringRedisTemplate", stringRedisTemplate);
         ReflectionTestUtils.setField(adminService, "jwtProperties", jwtProperties);
         ReflectionTestUtils.setField(adminService, "pythonAgentClient", pythonAgentClient);
@@ -346,7 +351,10 @@ class AdminServiceTest {
 
         List<String> taskIds = adminService.restoreKnowledge(10L);
 
-        verify(knowledgeDocMapper).restoreDeletedByKnowledgeId(10L);
+        // 逐条恢复（跳过被封禁哈希的文档），不再批量恢复
+        verify(knowledgeDocMapper).restoreDeleted(101L);
+        verify(knowledgeDocMapper).restoreDeleted(102L);
+        verify(knowledgeDocMapper, never()).restoreDeletedByKnowledgeId(10L);
         assertEquals(List.of("t1", "t2"), taskIds);
     }
 
@@ -535,5 +543,129 @@ class AdminServiceTest {
         assertEquals(2, count, "两条都应删除");
         // count 已证明 deleteById 各执行一次；此处验证向量删除也各执行一次
         verify(pythonAgentClient, times(2)).deleteKnowledge(any(DeleteVectorRequest.class));
+    }
+
+    // ---------- 管理员删除：哈希封禁 + 级联删除相同文件 ----------
+
+    private KnowledgeDoc docWithHash(Long id, Long knowledgeId, String hash, String fileUrl) {
+        KnowledgeDoc doc = new KnowledgeDoc();
+        doc.setId(id);
+        doc.setKnowledgeId(knowledgeId);
+        doc.setFileHash(hash);
+        doc.setFileUrl(fileUrl);
+        doc.setIsDelete(0);
+        return doc;
+    }
+
+    @Test
+    void deleteDocByAdmin_cascadesSameHashGlobally() {
+        KnowledgeDoc target = docWithHash(101L, 10L, "hashA", "/f/1.txt");
+        KnowledgeDoc other = docWithHash(202L, 20L, "hashA", "/f/2.txt"); // 其他用户/知识库的同内容文档
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(target);
+        when(knowledgeDocMapper.selectActiveByHash("hashA")).thenReturn(List.of(target, other));
+
+        adminService.deleteDocByAdmin(10L, 101L);
+
+        // 记录哈希到黑名单
+        verify(forbiddenFileHashMapper).insertIgnore("hashA");
+        // 两条同哈希文档均逻辑删除（来源=admin），本地文件保留不删除
+        verify(knowledgeDocMapper).markDeleted(101L, "admin");
+        verify(knowledgeDocMapper).markDeleted(202L, "admin");
+        // 向量删除必须用各自 knowledgeId/docId（跨库不误删、不留孤儿向量）
+        ArgumentCaptor<DeleteVectorRequest> captor = ArgumentCaptor.forClass(DeleteVectorRequest.class);
+        verify(pythonAgentClient, times(2)).deleteKnowledge(captor.capture());
+        List<DeleteVectorRequest> requests = captor.getAllValues();
+        assertTrue(requests.stream().anyMatch(r -> "10".equals(r.getKnowledgeId()) && "101".equals(r.getDocId())),
+                "目标文档按自己的库/文档 id 删向量");
+        assertTrue(requests.stream().anyMatch(r -> "20".equals(r.getKnowledgeId()) && "202".equals(r.getDocId())),
+                "级联文档按自己的库/文档 id 删向量");
+    }
+
+    @Test
+    void deleteDocByAdmin_nullHash_legacyBehavior() {
+        KnowledgeDoc doc = new KnowledgeDoc();
+        doc.setId(101L);
+        doc.setKnowledgeId(10L);
+        doc.setIsDelete(0);
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(doc);
+
+        adminService.deleteDocByAdmin(10L, 101L);
+
+        // 无哈希（历史数据）：仅删目标，不封禁、不级联
+        verify(knowledgeDocMapper).markDeleted(101L, "admin");
+        verify(forbiddenFileHashMapper, never()).insertIgnore(any());
+        verify(knowledgeDocMapper, never()).selectActiveByHash(any());
+    }
+
+    @Test
+    void deleteDocByAdmin_alreadyDeleted_throws() {
+        KnowledgeDoc doc = docWithHash(101L, 10L, "hashA", "/f/1.txt");
+        doc.setIsDelete(1);
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(doc);
+
+        BusinessException e = assertThrows(BusinessException.class, () -> adminService.deleteDocByAdmin(10L, 101L));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+        verify(knowledgeDocMapper, never()).markDeleted(any(), any());
+    }
+
+    @Test
+    void batchDeleteDocs_cascadesDistinctHashes() {
+        KnowledgeDoc d1 = docWithHash(101L, 10L, "hashA", "/f/1.txt");
+        KnowledgeDoc d2 = docWithHash(102L, 10L, "hashB", "/f/2.txt");
+        KnowledgeDoc d3 = docWithHash(103L, 10L, "hashA", "/f/3.txt"); // 与 d1 同哈希 → 去重
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(d1);
+        when(knowledgeDocMapper.selectAnyById(102L)).thenReturn(d2);
+        when(knowledgeDocMapper.selectAnyById(103L)).thenReturn(d3);
+        when(knowledgeDocMapper.selectActiveByHash("hashA")).thenReturn(List.of(d1, d3));
+        when(knowledgeDocMapper.selectActiveByHash("hashB")).thenReturn(List.of(d2));
+
+        int count = adminService.batchDeleteDocs(10L, List.of(101L, 102L, 103L));
+
+        assertEquals(2, count, "同哈希去重后按 2 个内容组处理");
+        verify(forbiddenFileHashMapper).insertIgnore("hashA");
+        verify(forbiddenFileHashMapper).insertIgnore("hashB");
+        verify(knowledgeDocMapper).markDeleted(101L, "admin");
+        verify(knowledgeDocMapper).markDeleted(102L, "admin");
+        verify(knowledgeDocMapper).markDeleted(103L, "admin"); // 同哈希 d3 被级联删除
+    }
+
+    @Test
+    void restoreDoc_bannedHash_rejected() {
+        KnowledgeDoc doc = docWithHash(101L, 10L, "banned", "/f/1.txt");
+        doc.setIsDelete(1);
+        when(knowledgeDocMapper.selectAnyById(101L)).thenReturn(doc);
+        when(forbiddenFileHashMapper.existsByHash("banned")).thenReturn(true);
+
+        BusinessException e = assertThrows(BusinessException.class, () -> adminService.restoreDoc(10L, 101L));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+        verify(knowledgeDocMapper, never()).restoreDeleted(any());
+    }
+
+    @Test
+    void restoreKnowledge_skipsBannedDocs() {
+        Knowledge kb = new Knowledge();
+        kb.setId(10L);
+        kb.setIsDelete(1);
+        when(knowledgeMapper.selectAnyById(10L)).thenReturn(kb);
+        when(knowledgeMapper.restoreDeleted(10L)).thenReturn(1);
+
+        KnowledgeDoc banned = new KnowledgeDoc();
+        banned.setId(101L);
+        banned.setFileUrl("/f/banned.txt");
+        banned.setName("banned.txt");
+        banned.setFileHash("banned-hash");
+        KnowledgeDoc ok = new KnowledgeDoc();
+        ok.setId(102L);
+        ok.setFileUrl("/f/ok.txt");
+        ok.setName("ok.txt");
+        when(knowledgeDocMapper.selectAllByKnowledgeId(10L)).thenReturn(List.of(banned, ok));
+        when(forbiddenFileHashMapper.existsByHash("banned-hash")).thenReturn(true);
+        when(taskService.publishVectorize(eq(10L), eq(102L), eq("/f/ok.txt"), eq("ok.txt"))).thenReturn("t2");
+
+        List<String> taskIds = adminService.restoreKnowledge(10L);
+
+        assertEquals(List.of("t2"), taskIds);
+        verify(knowledgeDocMapper).restoreDeleted(102L);
+        verify(knowledgeDocMapper, never()).restoreDeleted(101L); // 被封禁文档保持删除
     }
 }

@@ -90,13 +90,27 @@ public interface KnowledgeDocMapper extends BaseMapper<KnowledgeDoc> {
     int markDeleted(@Param("id") Long id, @Param("deleteSource") String deleteSource);
 
     /**
+     * 彻底删除（逻辑删除 + 标记 purged）：前端「已删除」列表不再展示，用户不可自恢复。
+     * 无 isDelete=0 条件限制，普通与已删除文档均可彻底删除。
+     */
+    @Update("UPDATE knowledge_doc SET isDelete = 1, deleteSource = 'purged' WHERE id = #{id}")
+    int markPurged(@Param("id") Long id);
+
+    /**
+     * 全局查询所有正常（isDelete=0）且同内容哈希的文档（管理员删除时级联封禁跨用户/知识库的相同文件）
+     */
+    @Select("SELECT id, knowledgeId, name, fileUrl, fileSize, fileType, vectorStatus, errorMsg, fileHash, deleteSource, createTime, updateTime, isDelete FROM knowledge_doc WHERE fileHash = #{fileHash} AND isDelete = 0")
+    List<KnowledgeDoc> selectActiveByHash(@Param("fileHash") String fileHash);
+
+    /**
      * 逻辑删除知识库下全部正常文档并记录删除来源
      */
     @Update("UPDATE knowledge_doc SET isDelete = 1, deleteSource = #{deleteSource} WHERE knowledgeId = #{knowledgeId} AND isDelete = 0")
     int markDeletedByKnowledgeId(@Param("knowledgeId") Long knowledgeId, @Param("deleteSource") String deleteSource);
 
     /**
-     * 用户文档列表（deleted 过滤：null=全部/0=正常/1=已删除；用户可看到自己删除的文档并恢复）
+     * 用户文档列表（deleted 过滤：null=全部/0=正常/1=已删除；用户可看到自己删除的文档并恢复）。
+     * 彻底删除（deleteSource='purged'）的文档不展示在用户任何列表里。
      */
     @Select("""
             <script>
@@ -104,6 +118,7 @@ public interface KnowledgeDocMapper extends BaseMapper<KnowledgeDoc> {
             FROM knowledge_doc
             WHERE knowledgeId = #{knowledgeId}
             AND (#{deleted} IS NULL OR isDelete = #{deleted})
+            AND (deleteSource IS NULL OR deleteSource &lt;&gt; 'purged')
             ORDER BY createTime DESC
             </script>
             """)

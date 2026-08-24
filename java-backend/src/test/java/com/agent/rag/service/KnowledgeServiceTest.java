@@ -3,12 +3,14 @@ package com.agent.rag.service;
 import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.common.VectorStatus;
+import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
 import com.agent.rag.entity.KnowledgeDoc;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
+import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.service.impl.KnowledgeServiceImpl;
@@ -30,6 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -46,6 +49,8 @@ class KnowledgeServiceTest {
     @Mock
     private KnowledgeDocMapper knowledgeDocMapper;
     @Mock
+    private ForbiddenFileHashMapper forbiddenFileHashMapper;
+    @Mock
     private FileStorageService fileStorageService;
     @Mock
     private PythonAgentClient pythonAgentClient;
@@ -59,6 +64,7 @@ class KnowledgeServiceTest {
         knowledgeService = new KnowledgeServiceImpl();
         ReflectionTestUtils.setField(knowledgeService, "knowledgeMapper", knowledgeMapper);
         ReflectionTestUtils.setField(knowledgeService, "knowledgeDocMapper", knowledgeDocMapper);
+        ReflectionTestUtils.setField(knowledgeService, "forbiddenFileHashMapper", forbiddenFileHashMapper);
         ReflectionTestUtils.setField(knowledgeService, "fileStorageService", fileStorageService);
         ReflectionTestUtils.setField(knowledgeService, "pythonAgentClient", pythonAgentClient);
         ReflectionTestUtils.setField(knowledgeService, "taskService", taskService);
@@ -192,5 +198,94 @@ class KnowledgeServiceTest {
         ArgumentCaptor<KnowledgeDoc> captor = ArgumentCaptor.forClass(KnowledgeDoc.class);
         verify(knowledgeDocMapper).insert(captor.capture());
         assertEquals(VectorStatus.PENDING.name(), captor.getValue().getVectorStatus());
+    }
+
+    // ---------- 上传：管理员封禁哈希禁止 ----------
+
+    @Test
+    void uploadDoc_bannedHash_rejected() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        when(forbiddenFileHashMapper.existsByHash(any())).thenReturn(true);
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> knowledgeService.uploadDoc(5L, sampleFile()));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+        // 命中黑名单应阻止落盘，store 不应被调用
+        verify(fileStorageService, never()).store(any(), any());
+    }
+
+    @Test
+    void uploadDoc_legacyAdminDeletedStillRejected() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        // 黑名单表无行，但同库存在历史 admin 删除记录（旧版管理员删除）→ 仍应拦截
+        when(knowledgeDocMapper.countAdminDeletedByHash(eq(5L), any())).thenReturn(1L);
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> knowledgeService.uploadDoc(5L, sampleFile()));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+    }
+
+    // ---------- 彻底删除 ----------
+
+    private KnowledgeDoc ownedDoc(Long id, Long knowledgeId, String fileUrl) {
+        KnowledgeDoc d = new KnowledgeDoc();
+        d.setId(id);
+        d.setKnowledgeId(knowledgeId);
+        d.setFileUrl(fileUrl);
+        return d;
+    }
+
+    @Test
+    void purgeDoc_success_logicalDeleteAndRemovesVector() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        when(knowledgeDocMapper.selectAnyById(100L)).thenReturn(ownedDoc(100L, 5L, "/data/files/a.txt"));
+
+        knowledgeService.purgeDoc(5L, 100L);
+
+        // 彻底删除 = 逻辑删除 + 标记 purged（记录保留、不删本地文件）
+        verify(knowledgeDocMapper).markPurged(100L);
+        // 删除向量（Python Agent，按 knowledgeId+docId）
+        ArgumentCaptor<DeleteVectorRequest> captor = ArgumentCaptor.forClass(DeleteVectorRequest.class);
+        verify(pythonAgentClient).deleteKnowledge(captor.capture());
+        assertEquals("5", captor.getValue().getKnowledgeId());
+        assertEquals("100", captor.getValue().getDocId());
+    }
+
+    @Test
+    void purgeDoc_deletedDoc_stillAllowed() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        KnowledgeDoc doc = ownedDoc(100L, 5L, "/data/files/a.txt");
+        doc.setIsDelete(1); // 已删除文档同样可彻底删除（selectById 查不到，须走 selectAnyById）
+        when(knowledgeDocMapper.selectAnyById(100L)).thenReturn(doc);
+
+        knowledgeService.purgeDoc(5L, 100L);
+
+        verify(knowledgeDocMapper).markPurged(100L);
+    }
+
+    @Test
+    void purgeDoc_otherKnowledge_throws() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        when(knowledgeDocMapper.selectAnyById(100L)).thenReturn(ownedDoc(100L, 99L, "/data/files/a.txt"));
+
+        BusinessException e = assertThrows(BusinessException.class, () -> knowledgeService.purgeDoc(5L, 100L));
+        assertEquals(ErrorCode.NOT_FOUND.getCode(), e.getCode());
+        verify(knowledgeDocMapper, never()).markPurged(any());
+    }
+
+    // ---------- 恢复：管理员封禁哈希禁止 ----------
+
+    @Test
+    void restoreDoc_bannedHash_rejected() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        KnowledgeDoc doc = ownedDoc(100L, 5L, "/data/files/a.txt");
+        doc.setIsDelete(1);
+        doc.setDeleteSource("user"); // 用户自删，但内容哈希后被管理员封禁 → 仍不可恢复
+        doc.setFileHash("banned-hash");
+        when(knowledgeDocMapper.selectAnyById(100L)).thenReturn(doc);
+        when(forbiddenFileHashMapper.existsByHash("banned-hash")).thenReturn(true);
+
+        BusinessException e = assertThrows(BusinessException.class, () -> knowledgeService.restoreDoc(5L, 100L));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
     }
 }
