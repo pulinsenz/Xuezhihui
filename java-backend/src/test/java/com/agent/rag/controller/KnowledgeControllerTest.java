@@ -213,6 +213,15 @@ class KnowledgeControllerTest {
         return objectMapper.readTree(resp).get("data");
     }
 
+    private JsonNode docsByCategory(String token, long knowledgeId, String category) throws Exception {
+        String resp = mockMvc.perform(get("/knowledge/{id}/docs", knowledgeId)
+                        .param("deleted", "0")
+                        .param("category", category)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return objectMapper.readTree(resp).get("data");
+    }
+
     private String docIdByStatus(String token, long knowledgeId, String status) throws Exception {
         for (JsonNode d : docs(token, knowledgeId)) {
             if (status.equals(d.get("vectorStatus").asText())) {
@@ -559,5 +568,44 @@ class KnowledgeControllerTest {
                 String.class, Long.valueOf(docId));
         assertEquals("purged", deleteSource, "已删除文档彻底删除后 deleteSource 应为 purged");
         assertEquals(0, docsWithDeleted(token, knowledgeId, 1).size(), "已删除列表不再展示该文档");
+    }
+
+    // ---------- 分类栏（全部/已入库/未入库）+ 批量入库 ----------
+
+    @Test
+    void listDocs_categoryFiltersByVectorStatus() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "分类筛选");
+        upload(token, knowledgeId, "a.txt", "内容A".getBytes(StandardCharsets.UTF_8));
+        upload(token, knowledgeId, "b.txt", "内容B".getBytes(StandardCharsets.UTF_8));
+        // 模拟一条已入库、一条待处理
+        String firstId = docs(token, knowledgeId).get(0).get("id").asText();
+        jdbcTemplate.update("UPDATE knowledge_doc SET vectorStatus = 'SUCCESS' WHERE id = ?", Long.valueOf(firstId));
+
+        assertEquals(1, docsByCategory(token, knowledgeId, "vectorized").size(), "已入库分类只含 SUCCESS");
+        assertEquals(1, docsByCategory(token, knowledgeId, "unvectorized").size(), "未入库分类不含 SUCCESS");
+        assertEquals(2, docsByCategory(token, knowledgeId, "all").size(), "全部分类含全部");
+    }
+
+    @Test
+    void batchVectorize_submitsOnlyUnvectorized() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "批量入库");
+        upload(token, knowledgeId, "a.txt", "内容A".getBytes(StandardCharsets.UTF_8));
+        upload(token, knowledgeId, "b.txt", "内容B".getBytes(StandardCharsets.UTF_8));
+        // 模拟一条已入库
+        String successId = docs(token, knowledgeId).get(0).get("id").asText();
+        jdbcTemplate.update("UPDATE knowledge_doc SET vectorStatus = 'SUCCESS' WHERE id = ?", Long.valueOf(successId));
+
+        List<String> ids = allDocIds(token, knowledgeId);
+        String resp = mockMvc.perform(post("/knowledge/{id}/docs/batch-vectorize", knowledgeId)
+                        .header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("docIds", ids))))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode node = objectMapper.readTree(resp);
+        assertEquals(0, node.get("code").asInt());
+        assertEquals(1, node.get("data").size(), "已入库的应被跳过，只提交 1 个任务");
+        assertTrue(StringUtils.hasText(node.get("data").get(0).asText()), "应返回任务 id");
     }
 }

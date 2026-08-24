@@ -21,8 +21,8 @@ export const uploadDoc = (id, file) => {
   })
 }
 
-/** 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除） */
-export const listDocs = (id, deleted) => request.get(`/knowledge/${id}/docs`, { params: { deleted } })
+/** 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除；category：null/all=全部, vectorized=已入库, unvectorized=未入库） */
+export const listDocs = (id, deleted, category) => request.get(`/knowledge/${id}/docs`, { params: { deleted, category } })
 
 /** 恢复用户自己删除的文档（管理员删除的拒绝），返回 taskId 供轮询 */
 export const restoreDoc = (id, docId) => request.post(`/knowledge/${id}/docs/${docId}/restore`)
@@ -44,6 +44,9 @@ export const batchRemoveVector = (id, docIds) => request.post(`/knowledge/${id}/
 
 /** 批量删除文档（逻辑删除 + 删各文档向量），返回删除数量 */
 export const batchDeleteDocs = (id, docIds) => request.post(`/knowledge/${id}/docs/batch-delete`, { docIds })
+
+/** 批量入库：为所选文档提交向量化任务（已入库/已删除自动跳过），返回 taskId 列表 */
+export const batchVectorizeDoc = (id, docIds) => request.post(`/knowledge/${id}/docs/batch-vectorize`, { docIds })
 
 /** 长任务状态查询（上传向量化后轮询） */
 export const getTask = (taskId) => request.get(`/task/${taskId}`)

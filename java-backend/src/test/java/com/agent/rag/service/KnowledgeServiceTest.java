@@ -168,9 +168,41 @@ class KnowledgeServiceTest {
         doc.setKnowledgeId(5L);
         doc.setName("a.txt");
         doc.setVectorStatus(VectorStatus.PENDING.name());
-        when(knowledgeDocMapper.selectDocsByFilter(eq(5L), any())).thenReturn(List.of(doc));
+        when(knowledgeDocMapper.selectDocsByFilter(eq(5L), any(), any())).thenReturn(List.of(doc));
 
-        assertEquals(1, knowledgeService.listDocs(5L, 0).size());
+        assertEquals(1, knowledgeService.listDocs(5L, 0, "all").size());
+    }
+
+    // ---------- 批量入库 ----------
+
+    @Test
+    void batchVectorize_submitsTasksForNonSuccessDocs() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        KnowledgeDoc success = new KnowledgeDoc();
+        success.setId(100L);
+        success.setKnowledgeId(5L);
+        success.setVectorStatus(VectorStatus.SUCCESS.name());
+        KnowledgeDoc failed = new KnowledgeDoc();
+        failed.setId(101L);
+        failed.setKnowledgeId(5L);
+        failed.setVectorStatus(VectorStatus.FAILED.name());
+        failed.setFileUrl("/f/1.txt");
+        failed.setName("1.txt");
+        when(knowledgeDocMapper.selectById(100L)).thenReturn(success);
+        when(knowledgeDocMapper.selectById(101L)).thenReturn(failed);
+        when(taskService.publishVectorize(eq(5L), eq(101L), eq("/f/1.txt"), eq("1.txt"))).thenReturn("t1");
+
+        List<String> taskIds = knowledgeService.batchVectorize(5L, List.of(100L, 101L));
+
+        assertEquals(List.of("t1"), taskIds, "已入库文档应跳过，只提交未入库任务");
+        verify(taskService, never()).publishVectorize(eq(5L), eq(100L), any(), any());
+    }
+
+    @Test
+    void batchVectorize_emptyIds_returnsEmpty() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+
+        assertEquals(List.of(), knowledgeService.batchVectorize(5L, List.of()));
     }
 
     // ---------- 上传（提交向量化任务到消息队列） ----------

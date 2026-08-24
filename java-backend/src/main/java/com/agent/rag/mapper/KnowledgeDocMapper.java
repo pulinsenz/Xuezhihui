@@ -109,7 +109,8 @@ public interface KnowledgeDocMapper extends BaseMapper<KnowledgeDoc> {
     int markDeletedByKnowledgeId(@Param("knowledgeId") Long knowledgeId, @Param("deleteSource") String deleteSource);
 
     /**
-     * 用户文档列表（deleted 过滤：null=全部/0=正常/1=已删除；用户可看到自己删除的文档并恢复）。
+     * 用户文档列表（deleted 过滤：null=全部/0=正常/1=已删除；用户可看到自己删除的文档并恢复；
+     * category 过滤向量状态：null/all=全部, vectorized=已入库(SUCCESS), unvectorized=未入库）。
      * 彻底删除（deleteSource='purged'）的文档不展示在用户任何列表里。
      */
     @Select("""
@@ -119,8 +120,16 @@ public interface KnowledgeDocMapper extends BaseMapper<KnowledgeDoc> {
             WHERE knowledgeId = #{knowledgeId}
             AND (#{deleted} IS NULL OR isDelete = #{deleted})
             AND (deleteSource IS NULL OR deleteSource &lt;&gt; 'purged')
+            <if test="category == 'vectorized'">
+            AND vectorStatus = 'SUCCESS'
+            </if>
+            <if test="category == 'unvectorized'">
+            AND vectorStatus != 'SUCCESS'
+            </if>
             ORDER BY createTime DESC
             </script>
             """)
-    List<KnowledgeDoc> selectDocsByFilter(@Param("knowledgeId") Long knowledgeId, @Param("deleted") Integer deleted);
+    List<KnowledgeDoc> selectDocsByFilter(@Param("knowledgeId") Long knowledgeId,
+                                          @Param("deleted") Integer deleted,
+                                          @Param("category") String category);
 }

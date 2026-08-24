@@ -81,9 +81,15 @@ public interface KnowledgeService {
     int batchDeleteDocs(Long knowledgeId, List<Long> docIds);
 
     /**
-     * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除）
+     * 批量入库：为所选文档逐个提交向量化任务（已入库/已删除自动跳过），返回任务 id 列表
      */
-    List<KnowledgeDocVO> listDocs(Long knowledgeId, Integer deleted);
+    List<String> batchVectorize(Long knowledgeId, List<Long> docIds);
+
+    /**
+     * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除；
+     * category 向量状态过滤：null/all=全部, vectorized=已入库, unvectorized=未入库）
+     */
+    List<KnowledgeDocVO> listDocs(Long knowledgeId, Integer deleted, String category);
 
     /**
      * 用户业务数据统计（工具 Agent 回调），跨用户时按 userId 精确过滤

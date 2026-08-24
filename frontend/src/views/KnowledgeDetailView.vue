@@ -22,10 +22,9 @@
       class="desc-alert"
     />
 
-    <el-empty v-if="!loading && docs.length === 0" description="暂无文档，点击右上角上传" />
-
-    <template v-else>
+    <template v-if="!loading">
       <div class="docs-toolbar">
+        <el-segmented v-model="category" :options="categoryOptions" @change="loadDocs()" />
         <el-select v-model="deletedFilter" placeholder="文档状态" style="width: 130px" @change="loadDocs()">
           <el-option label="正常文档" :value="0" />
           <el-option label="已删除" :value="1" />
@@ -33,6 +32,9 @@
         </el-select>
       </div>
       <div class="batch-toolbar">
+        <el-button size="small" type="primary" :disabled="!selectedRows.length" :icon="RefreshRight" @click="handleBatchVectorize">
+          批量入库
+        </el-button>
         <el-button size="small" :disabled="!selectedRows.length" :icon="RefreshLeft" @click="handleBatchRemoveVector">
           批量移除入库
         </el-button>
@@ -41,7 +43,9 @@
         </el-button>
       </div>
 
-      <el-table :data="docs" stripe class="doc-table" @selection-change="handleSelectionChange">
+      <el-empty v-if="docs.length === 0" description="暂无文档，点击右上角上传" />
+
+      <el-table v-else :data="docs" stripe class="doc-table" @selection-change="handleSelectionChange">
         <el-table-column type="selection" width="45" />
         <el-table-column label="文件名" min-width="240">
           <template #default="{ row }">
@@ -121,7 +125,7 @@
               >
                 重新入库
               </el-button>
-              <el-button size="small" type="danger" @click="handleDeleteDoc(row)">删除</el-button>
+              <el-button size="small" type="danger" @click="handleDeleteDoc(row)">禁用</el-button>
               <el-button size="small" type="danger" plain @click="handlePurgeDoc(row)">彻底删除</el-button>
             </template>
           </template>
@@ -135,10 +139,11 @@
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Delete, Document, Refresh, RefreshLeft, Upload } from '@element-plus/icons-vue'
+import { ArrowLeft, Delete, Document, Refresh, RefreshLeft, RefreshRight, Upload } from '@element-plus/icons-vue'
 import {
   batchDeleteDocs,
   batchRemoveVector,
+  batchVectorizeDoc,
   deleteDoc,
   getKnowledge,
   getTask,
@@ -162,13 +167,20 @@ const uploading = ref(false)
 const busyIds = ref([]) // 正在入库的文档 id，禁用按钮防重复提交
 const selectedRows = ref([]) // 勾选的行，用于批量操作
 const deletedFilter = ref(0) // 文档状态过滤：0=正常 1=已删除 null=全部
+const category = ref('all') // 向量状态分类：all=全部 vectorized=已入库 unvectorized=未入库
+const categoryOptions = [
+  { label: '全部', value: 'all' },
+  { label: '已入库', value: 'vectorized' },
+  { label: '未入库', value: 'unvectorized' },
+]
 const uploadRef = ref(null)
+const pollTimers = new Set() // 批量任务轮询定时器，组件卸载时统一清理
 let pollTimer = null
 
 const loadDocs = async () => {
   loading.value = true
   try {
-    docs.value = await listDocs(knowledgeId, deletedFilter.value)
+    docs.value = await listDocs(knowledgeId, deletedFilter.value, category.value)
   } finally {
     loading.value = false
   }
@@ -269,15 +281,15 @@ const handleSelectionChange = (rows) => {
   selectedRows.value = rows
 }
 
-// 删除单个文档（逻辑删除 + 删向量，可自恢复）
+// 禁用单个文档（原「删除」：逻辑删除 + 删向量，可在「已删除」中恢复）
 const handleDeleteDoc = async (row) => {
   await ElMessageBox.confirm(
-    `确定删除文档「${row.name}」吗？将同时删除其向量，可在「已删除」中恢复。`,
-    '删除确认',
+    `确定禁用文档「${row.name}」吗？将把它移入「已删除」，可恢复。`,
+    '禁用确认',
     { type: 'warning' }
   )
   await deleteDoc(knowledgeId, row.id)
-  ElMessage.success('已删除')
+  ElMessage.success('已禁用')
   loadDocs()
 }
 
@@ -316,6 +328,54 @@ const handleBatchDelete = async () => {
   ElMessage.success(`已删除 ${count} 个文档`)
   loadDocs()
 }
+
+// 批量入库：为所选文档提交向量化任务（已入库/已删除自动跳过），轮询至全部完成
+const handleBatchVectorize = async () => {
+  const ids = selectedRows.value.map((r) => r.id)
+  if (!ids.length) return
+  await ElMessageBox.confirm(`确定为选中的 ${ids.length} 个文档提交入库吗？（已入库的会自动跳过）`, '批量入库', { type: 'info' })
+  const taskIds = await batchVectorizeDoc(knowledgeId, ids)
+  if (!taskIds?.length) {
+    ElMessage.info('所选文档均已入库，无需重复入库')
+    loadDocs()
+    return
+  }
+  ElMessage.success(`已提交 ${taskIds.length} 个文档入库，正在向量化...`)
+  const failed = await pollTasks(taskIds)
+  await loadDocs()
+  if (failed.length) {
+    ElMessage.warning(`${failed.length} 个文档向量化失败，请查看文档状态`)
+  } else {
+    ElMessage.success('批量入库完成')
+  }
+}
+
+// 轮询多个任务直至全部结束，返回失败任务的消息列表
+const pollTasks = (taskIds) =>
+  new Promise((resolve) => {
+    const remaining = new Set(taskIds)
+    const failed = []
+    const timer = setInterval(async () => {
+      for (const id of [...remaining]) {
+        try {
+          const task = await getTask(id)
+          if (task?.status === 'SUCCESS' || task?.status === 'FAILED') {
+            remaining.delete(id)
+            if (task.status === 'FAILED') failed.push(task.message || '未知原因')
+          }
+        } catch {
+          // 任务过期或查询失败则视为结束，依赖列表刷新兜底
+          remaining.delete(id)
+        }
+      }
+      if (remaining.size === 0) {
+        clearInterval(timer)
+        pollTimers.delete(timer)
+        resolve(failed)
+      }
+    }, 1000)
+    pollTimers.add(timer)
+  })
 
 // 恢复用户自己删除的文档（管理员删除的已锁定不可恢复），恢复后重新入库
 const handleRestoreDoc = async (row) => {
@@ -365,7 +425,11 @@ onMounted(() => {
   loadKnowledge()
   loadDocs()
 })
-onBeforeUnmount(() => clearInterval(pollTimer))
+onBeforeUnmount(() => {
+  clearInterval(pollTimer)
+  pollTimers.forEach(clearInterval)
+  pollTimers.clear()
+})
 </script>
 
 <style scoped>
@@ -404,7 +468,8 @@ onBeforeUnmount(() => clearInterval(pollTimer))
 }
 .docs-toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 12px;
 }
 </style>

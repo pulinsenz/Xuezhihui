@@ -29,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -281,6 +282,28 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         return deleted;
     }
 
+    @Override
+    public List<String> batchVectorize(Long knowledgeId, List<Long> docIds) {
+        getOwnedKnowledge(knowledgeId);
+        if (docIds == null || docIds.isEmpty()) {
+            return List.of();
+        }
+        List<String> taskIds = new ArrayList<>();
+        for (Long docId : docIds) {
+            // selectById 过滤已删除文档；已入库的跳过，其余（未入库/失败/重复等）提交向量化任务
+            KnowledgeDoc doc = knowledgeDocMapper.selectById(docId);
+            if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+                continue;
+            }
+            if (VectorStatus.SUCCESS.name().equals(doc.getVectorStatus())) {
+                continue;
+            }
+            taskIds.add(taskService.publishVectorize(knowledgeId, doc.getId(), doc.getFileUrl(), doc.getName()));
+        }
+        log.info("批量入库: knowledgeId={}, 提交任务数={}", knowledgeId, taskIds.size());
+        return taskIds;
+    }
+
     /**
      * 查询文档且校验属于该知识库
      */
@@ -342,9 +365,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     @Override
-    public List<KnowledgeDocVO> listDocs(Long knowledgeId, Integer deleted) {
+    public List<KnowledgeDocVO> listDocs(Long knowledgeId, Integer deleted, String category) {
         getOwnedKnowledge(knowledgeId);
-        List<KnowledgeDoc> docs = knowledgeDocMapper.selectDocsByFilter(knowledgeId, deleted);
+        List<KnowledgeDoc> docs = knowledgeDocMapper.selectDocsByFilter(knowledgeId, deleted, category);
         return docs.stream().map(KnowledgeDocVO::from).toList();
     }
 

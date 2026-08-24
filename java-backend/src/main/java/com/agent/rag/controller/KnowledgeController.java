@@ -136,11 +136,21 @@ public class KnowledgeController {
     }
 
     /**
-     * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除，用户可查看自己删除的文档并恢复）
+     * 批量入库：为所选文档逐个提交向量化任务（已入库/已删除自动跳过），返回任务 id 列表
+     */
+    @PostMapping("/{id}/docs/batch-vectorize")
+    public Result<List<String>> batchVectorize(@PathVariable Long id, @RequestBody BatchDocRequest request) {
+        return Result.success(knowledgeService.batchVectorize(id, request.getDocIds()));
+    }
+
+    /**
+     * 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除，用户可查看自己删除的文档并恢复；
+     * category 过滤：null/all=全部, vectorized=已入库, unvectorized=未入库）
      */
     @GetMapping("/{id}/docs")
     public Result<List<KnowledgeDocVO>> docs(@PathVariable Long id,
-                                             @RequestParam(required = false) Integer deleted) {
-        return Result.success(knowledgeService.listDocs(id, deleted));
+                                             @RequestParam(required = false) Integer deleted,
+                                             @RequestParam(required = false) String category) {
+        return Result.success(knowledgeService.listDocs(id, deleted, category));
     }
 }
