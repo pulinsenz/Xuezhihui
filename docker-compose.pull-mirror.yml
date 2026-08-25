@@ -34,3 +34,10 @@ services:
 
   milvus:
     image: docker.m.daocloud.io/milvusdb/milvus:v2.4.6
+
+  # 前端构建/运行镜像走 DaoCloud 代理
+  frontend:
+    build:
+      args:
+        NODE_IMAGE: docker.m.daocloud.io/library/node:22-alpine
+        NGINX_IMAGE: docker.m.daocloud.io/library/nginx:1.27-alpine

@@ -1,0 +1,57 @@
+# 学智汇 生产 override：对外端口收敛 + 应用 profile + 日志轮转 + 重启策略 + HTTPS 预留
+# 用法：docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+# 效果：合并后仅 frontend 对外暴露 :80，中间件/后端端口全部关闭（仅内网互访）。
+#       docker compose config 可立即校验合并结果。
+
+# 日志轮转锚点（json-file driver：单文件 20MB，最多 5 份，共 ~100MB/服务）
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  # ---- 中间件：关闭公网端口（仅容器内互访，排查走 docker exec）----
+  mysql:
+    # `!reset []` 是 Compose spec 官方写法：把 base 的 ports 整体替换为空列表。
+    # 若目标 Docker 解析报错，可改回 `ports: []`（语义相同）。
+    ports: !reset []
+    logging: *default-logging
+
+  redis:
+    ports: !reset []
+    logging: *default-logging
+
+  minio:
+    ports: !reset []
+    logging: *default-logging
+
+  milvus:
+    ports: !reset []
+    logging: *default-logging
+
+  # ---- 应用：关闭公网端口 + prod profile + 自动重启 ----
+  java-backend:
+    ports: !reset []
+    restart: unless-stopped
+    environment:
+      # 切 prod：关闭 knife4j 文档（application-prod.yml）；同源部署浏览器不触发 CORS，无需改白名单
+      SPRING_PROFILES_ACTIVE: prod
+    logging: *default-logging
+
+  python-agent:
+    ports: !reset []
+    restart: unless-stopped
+    logging: *default-logging
+
+  frontend:
+    restart: unless-stopped
+    logging: *default-logging
+    # ========== HTTPS 后补占位（上线后接入）==========
+    # 1) nginx.conf 增加 listen 443 ssl 的 server 块（代理逻辑与 80 一致），80 → 301 跳 443
+    # 2) 放开下方注释：
+    # ports:
+    #   - "443:443"
+    # volumes:
+    #   - /etc/letsencrypt/live/你的域名/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+    #   - /etc/letsencrypt/live/你的域名/privkey.pem:/etc/nginx/ssl/privkey.pem:ro

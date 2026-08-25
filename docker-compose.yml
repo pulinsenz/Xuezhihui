@@ -1,7 +1,8 @@
 # 学智汇 多 Agent 协同 RAG 系统 一键编排
 # 用法：
-#   1. export DEEPSEEK_API_KEY=sk-xxx AGENT_TOKEN=<强随机值> JWT_SECRET=<强随机值>
-#   2. docker compose up -d --build
+#   1. cp .env.example .env 并填写 DEEPSEEK_API_KEY / AGENT_TOKEN / JWT_SECRET
+#   2. docker compose up -d --build                                    # 开发/本地全量
+#      docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build  # 生产：对外仅 80
 #
 # 说明：agent 服务生产默认 VECTOR_STORE=milvus（持久化向量库）
 
@@ -14,7 +15,7 @@ services:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-111111}
       MYSQL_DATABASE: xuezhihui
     ports:
-      # 宿主 3307（避开本机 MySQL 占用的 3306；容器间仍走 mysql:3306）
+      # 宿主 3307（避开本机 MySQL 的 3306；容器间仍走 mysql:3306）；生产由 prod override 关闭
       - "3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
@@ -94,6 +95,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    healthcheck:
+      # temurin:17-jre 自带 bash（无 curl/wget、pom 无 actuator），用 bash /dev/tcp 探测 8123；
+      # Tomcat 监听 = JVM 已起且启动期连 MySQL 成功（Hikari 启动即初始化，连不上会启动失败）
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8123'"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
 
   python-agent:
     build: ./python-agent
@@ -105,14 +114,46 @@ services:
       MILVUS_URI: http://milvus:19530
       REDIS_HOST: redis
       LOG_LEVEL: INFO
+      # 回调 Java（vector-callback/chat-save/user-stats）：config.py 默认 localhost 在容器内指向自身，
+      # 必须显式指到 java 服务名；本机混合场景（Java 在宿主机）可在 .env 覆盖为 http://host.docker.internal:8123/api
+      JAVA_BASE_URL: ${JAVA_BASE_URL:-http://java-backend:8123/api}
+      # embedding 模型（BAAI/bge-small-zh-v1.5 ~130MB）走官方 HF：实测新版 huggingface_hub
+      # 对 hf-mirror.com 的 HEAD 元数据校验失败（FileMetadataError），而 huggingface.co 可直连；
+      # 模型已持久化到 hf-cache 卷，仅首启下载一次
     volumes:
       # 读取 Java 上传的文件（共享卷）
       - file-data:/app/data/files
+      # embedding 模型缓存持久化：容器重建后不重复下载 ~130MB（agentuser 的 HOME 是 /home/agentuser）
+      - hf-cache:/home/agentuser/.cache/huggingface
     ports:
       - "8000:8000"
     depends_on:
       - milvus
       - redis
+    healthcheck:
+      # /health 免鉴权（main.py 中间件豁免）；用 python 标准库 urllib 探测（镜像无 curl/wget）
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5).status==200 else 1)"]
+      interval: 15s
+      timeout: 10s
+      retries: 12
+      start_period: 180s
+
+  # 前端：Nginx 托管 Vite 产物，对外唯一入口 :80（生产由 prod override 收敛端口）
+  frontend:
+    build: ./frontend
+    container_name: xzh-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      java-backend:
+        condition: service_healthy
+    healthcheck:
+      # nginx:alpine 自带 busybox wget，探测 nginx.conf 内定义的 /healthz
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 volumes:
   mysql-data:
@@ -121,3 +162,4 @@ volumes:
   minio-data:
   milvus-data:
   file-data:
+  hf-cache:
