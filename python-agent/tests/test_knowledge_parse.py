@@ -116,3 +116,21 @@ def test_process_vectorize_empty_text_rejected(monkeypatch):
     from fastapi import HTTPException
     with pytest.raises(HTTPException):
         process_vectorize("k1", "d1", "/f.txt", "f.txt")
+
+
+def test_chunks_endpoint_returns_doc_texts(monkeypatch):
+    """「向量详情」接口：返回文档切片文本列表"""
+    import agent.runtime as runtime
+
+    class FakeRetriever:
+        def get_chunks(self, knowledge_id, doc_id):
+            return ["切片A：数据结构", "切片B：操作系统"]
+
+    monkeypatch.setattr(runtime, "retriever", FakeRetriever())
+    from api.knowledge_api import chunks
+
+    assert chunks("k1", "d1") == {
+        "code": 0,
+        "message": "ok",
+        "data": ["切片A：数据结构", "切片B：操作系统"],
+    }

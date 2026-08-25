@@ -8,6 +8,7 @@ import com.agent.rag.dto.resp.MemberVO;
 import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
+import com.agent.rag.entity.KnowledgeDoc;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
@@ -119,6 +120,16 @@ public interface KnowledgeService {
      * 外部查看者（非作者/协作者）强制只看正常文档）
      */
     List<KnowledgeDocVO> listDocs(Long knowledgeId, Integer deleted, String category);
+
+    /**
+     * 获取当前用户可查看的文档（校验知识库可查看 + 文档属于该知识库），供「打开/下载」取原始文件
+     */
+    KnowledgeDoc getViewableDoc(Long knowledgeId, Long docId);
+
+    /**
+     * 文档切片详情（文本列表），未入库返回空列表；可查看者均可访问
+     */
+    List<String> listDocChunks(Long knowledgeId, Long docId);
 
     /**
      * 收藏知识库（仅他人公开库），收藏后出现在自己的知识库列表

@@ -57,6 +57,10 @@ class HybridRetriever:
         self._chunks.pop(kid, None)
         self._rebuild_bm25(kid)
 
+    def get_chunks(self, knowledge_id, doc_id):
+        """查询文档切片文本列表（「向量详情」）"""
+        return self.vector_store.get_chunks(knowledge_id, doc_id)
+
     def _rebuild_bm25(self, knowledge_id: str):
         """按知识库内全部文档的分块重建 BM25（含多文档，删除/重入库后保持一致）"""
         all_chunks = [c for doc_chunks in self._chunks.get(knowledge_id, {}).values() for c in doc_chunks]

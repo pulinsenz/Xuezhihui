@@ -5,8 +5,12 @@ import com.agent.rag.dto.req.ChatRequest;
 import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.resp.ChatResponse;
 import org.springframework.cloud.openfeign.FeignClient;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
 
 /**
  * Python Agent 服务客户端（Feign）
@@ -30,4 +34,11 @@ public interface PythonAgentClient {
      */
     @PostMapping("/api/agent/chat")
     Result<ChatResponse> chat(@RequestBody ChatRequest request);
+
+    /**
+     * 查询文档切片文本（「向量详情」）
+     */
+    @GetMapping("/api/knowledge/chunks")
+    Result<List<String>> docChunks(@RequestParam("knowledge_id") String knowledgeId,
+                                   @RequestParam("doc_id") String docId);
 }

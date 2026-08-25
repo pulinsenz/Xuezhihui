@@ -195,9 +195,9 @@
             row.createTime?.replace("T", " ").slice(0, 19)
           }}</template>
         </el-table-column>
-        <el-table-column v-if="canManage" label="操作" width="300">
+        <el-table-column label="操作" :width="canManage ? 440 : 210">
           <template #default="{ row }">
-            <!-- 已删除：用户删的可恢复，管理员删的锁定 -->
+            <!-- 已删除：用户删的可恢复，管理员删的锁定（外部查看者看不到已删除文档） -->
             <template v-if="row.isDelete === 1">
               <el-button
                 v-if="row.deleteSource !== 'admin'"
@@ -223,52 +223,58 @@
                 >彻底删除</el-button
               >
             </template>
-            <!-- 正常文档 -->
+            <!-- 正常文档：打开 / 向量详情 / 下载对所有可查看者开放 -->
             <template v-else>
-              <el-button
-                v-if="row.vectorStatus === 'SUCCESS'"
-                size="small"
-                type="warning"
-                plain
-                @click="handleRemoveVector(row)"
-              >
-                移除入库
-              </el-button>
-              <el-button
-                v-if="row.vectorStatus === 'SKIPPED'"
-                size="small"
-                type="primary"
-                :loading="busyIds.includes(row.id)"
-                @click="handleReVectorize(row)"
-              >
-                强制入库
-              </el-button>
-              <el-button
-                v-if="
-                  row.vectorStatus === 'FAILED' ||
-                  row.vectorStatus === 'PENDING' ||
-                  row.vectorStatus === 'REMOVED'
-                "
-                size="small"
-                type="primary"
-                :loading="busyIds.includes(row.id)"
-                @click="handleReVectorize(row)"
-              >
-                重新入库
-              </el-button>
-              <el-button
-                size="small"
-                type="danger"
-                @click="handleDeleteDoc(row)"
-                >禁用</el-button
-              >
-              <el-button
-                size="small"
-                type="danger"
-                plain
-                @click="handlePurgeDoc(row)"
-                >彻底删除</el-button
-              >
+              <el-button size="small" @click="handleOpenDoc(row)">打开</el-button>
+              <el-button size="small" type="primary" plain @click="handleViewChunks(row)">向量详情</el-button>
+              <el-button size="small" @click="handleDownloadDoc(row)">下载</el-button>
+              <!-- 管理操作仅作者/协作者可见 -->
+              <template v-if="canManage">
+                <el-button
+                  v-if="row.vectorStatus === 'SUCCESS'"
+                  size="small"
+                  type="warning"
+                  plain
+                  @click="handleRemoveVector(row)"
+                >
+                  移除入库
+                </el-button>
+                <el-button
+                  v-if="row.vectorStatus === 'SKIPPED'"
+                  size="small"
+                  type="primary"
+                  :loading="busyIds.includes(row.id)"
+                  @click="handleReVectorize(row)"
+                >
+                  强制入库
+                </el-button>
+                <el-button
+                  v-if="
+                    row.vectorStatus === 'FAILED' ||
+                    row.vectorStatus === 'PENDING' ||
+                    row.vectorStatus === 'REMOVED'
+                  "
+                  size="small"
+                  type="primary"
+                  :loading="busyIds.includes(row.id)"
+                  @click="handleReVectorize(row)"
+                >
+                  重新入库
+                </el-button>
+                <el-button
+                  size="small"
+                  type="danger"
+                  @click="handleDeleteDoc(row)"
+                  >禁用</el-button
+                >
+                <el-button
+                  size="small"
+                  type="danger"
+                  plain
+                  @click="handlePurgeDoc(row)"
+                  >彻底删除</el-button
+                >
+              </template>
             </template>
           </template>
         </el-table-column>
@@ -325,6 +331,24 @@
         </el-table-column>
       </el-table>
     </el-dialog>
+
+    <!-- 向量详情弹窗：展示文档切片 -->
+    <el-dialog
+      v-model="chunkDialogVisible"
+      :title="`向量详情 - ${chunkDocName}`"
+      width="720px"
+      top="6vh"
+    >
+      <div v-loading="chunkLoading">
+        <el-empty v-if="!chunkLoading && chunks.length === 0" description="该文档暂无切片" />
+        <div v-else class="chunk-list">
+          <div v-for="(chunk, idx) in chunks" :key="idx" class="chunk-item">
+            <div class="chunk-head">切片 {{ idx + 1 }}</div>
+            <pre class="chunk-text">{{ chunk }}</pre>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -356,7 +380,10 @@ import {
   copyKnowledge,
   deleteDoc,
   deleteKnowledge,
+  downloadDocFile,
   favoriteKnowledge,
+  getDocChunks,
+  getDocFile,
   getKnowledge,
   getTask,
   listDocs,
@@ -418,6 +445,12 @@ const members = ref([]);
 const membersLoading = ref(false);
 const inviteAccount = ref("");
 const inviting = ref(false);
+
+// 向量详情弹窗
+const chunkDialogVisible = ref(false);
+const chunkLoading = ref(false);
+const chunkDocName = ref("");
+const chunks = ref([]);
 
 const loadDocs = async () => {
   loading.value = true;
@@ -794,6 +827,79 @@ const handleRestoreDoc = async (row) => {
   }
 };
 
+// ---------- 查看操作：打开 / 下载 / 向量详情（所有可查看者） ----------
+
+// 后端异常会返回 Result JSON（Blob），解析后提示而非当文件处理
+const blobErrorMessage = async (blob) => {
+  if (!(blob instanceof Blob) || !blob.type.includes("application/json")) return null;
+  try {
+    const data = JSON.parse(await blob.text());
+    return data && data.code !== 0 ? data.message || "文件操作失败" : null;
+  } catch {
+    return null;
+  }
+};
+
+// 打开：拉取原始文件，新标签页浏览器原生预览（PDF/文本内联，Office 自动下载）
+const handleOpenDoc = async (row) => {
+  const win = window.open("", "_blank"); // 同步开窗，规避弹窗拦截
+  if (!win) {
+    ElMessage.warning("浏览器拦截了新窗口，请允许弹窗后重试");
+    return;
+  }
+  try {
+    const blob = await getDocFile(knowledgeId, row.id);
+    const err = await blobErrorMessage(blob);
+    if (err) {
+      win.close();
+      ElMessage.error(err);
+      return;
+    }
+    win.location.href = URL.createObjectURL(blob);
+  } catch (e) {
+    win.close(); // 错误已由拦截器提示
+  }
+};
+
+// 下载：拉取原始文件触发浏览器下载（保留原名）
+const handleDownloadDoc = async (row) => {
+  try {
+    const blob = await downloadDocFile(knowledgeId, row.id);
+    const err = await blobErrorMessage(blob);
+    if (err) {
+      ElMessage.error(err);
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = row.name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (e) {
+    // 错误已由拦截器提示
+  }
+};
+
+// 向量详情：查询文档切片并弹窗展示
+const handleViewChunks = async (row) => {
+  if (row.vectorStatus !== "SUCCESS") {
+    ElMessage.info("该文档未入库，暂无切片数据");
+    return;
+  }
+  chunkDocName.value = row.name;
+  chunks.value = [];
+  chunkDialogVisible.value = true;
+  chunkLoading.value = true;
+  try {
+    chunks.value = await getDocChunks(knowledgeId, row.id);
+  } catch (e) {
+    // 错误已由拦截器提示，保持空态
+  } finally {
+    chunkLoading.value = false;
+  }
+};
+
 const formatSize = (bytes) => {
   bytes = Number(bytes);
   if (!bytes) return "-";
@@ -954,5 +1060,30 @@ onBeforeUnmount(() => {
 .member-name {
   margin-left: 6px;
   font-size: 13px;
+}
+.chunk-list {
+  max-height: 60vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chunk-item {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.chunk-head {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 6px;
+}
+.chunk-text {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #303133;
 }
 </style>

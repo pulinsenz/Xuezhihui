@@ -57,6 +57,15 @@ export const uploadDoc = (id, file) => {
 /** 知识库文档列表（deleted 过滤：null=全部/0=正常/1=已删除；category：null/all=全部, vectorized=已入库, unvectorized=未入库） */
 export const listDocs = (id, deleted, category) => request.get(`/knowledge/${id}/docs`, { params: { deleted, category } })
 
+/** 文档内容文件（原始文件，inline 预览），用于「打开」 */
+export const getDocFile = (id, docId) => request.get(`/knowledge/${id}/docs/${docId}/file`, { responseType: 'blob' })
+
+/** 文档内容文件（原始文件，attachment 下载），用于「下载」 */
+export const downloadDocFile = (id, docId) => request.get(`/knowledge/${id}/docs/${docId}/download`, { responseType: 'blob' })
+
+/** 文档切片详情（文本列表），用于「向量详情」 */
+export const getDocChunks = (id, docId) => request.get(`/knowledge/${id}/docs/${docId}/chunks`)
+
 /** 恢复用户自己删除的文档（管理员删除的拒绝），返回 taskId 供轮询 */
 export const restoreDoc = (id, docId) => request.post(`/knowledge/${id}/docs/${docId}/restore`)
 

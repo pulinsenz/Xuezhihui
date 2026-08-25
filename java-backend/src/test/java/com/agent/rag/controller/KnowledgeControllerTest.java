@@ -1,6 +1,8 @@
 package com.agent.rag.controller;
 
 import cn.hutool.core.io.FileUtil;
+import com.agent.rag.client.PythonAgentClient;
+import com.agent.rag.common.Result;
 import com.agent.rag.config.JwtProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,7 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
@@ -23,14 +27,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
@@ -58,6 +67,9 @@ class KnowledgeControllerTest {
     private JwtProperties jwtProperties;
     @Value("${app.file.storage.local-path}")
     private String storagePath;
+    // 集成环境无 Python Agent，切片查询用 Mock 替身返回可控结果
+    @MockBean
+    private PythonAgentClient pythonAgentClient;
 
     private final List<String> createdTokens = new ArrayList<>();
     private final List<Long> createdUserIds = new ArrayList<>();
@@ -607,5 +619,88 @@ class KnowledgeControllerTest {
         assertEquals(0, node.get("code").asInt());
         assertEquals(1, node.get("data").size(), "已入库的应被跳过，只提交 1 个任务");
         assertTrue(StringUtils.hasText(node.get("data").get(0).asText()), "应返回任务 id");
+    }
+
+    // ---------- 打开 / 下载 / 向量详情 ----------
+
+    @Test
+    void docFile_returnsOriginalContentForPreview() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "打开测试");
+        byte[] content = "数据结构与算法是计算机核心课程".getBytes(StandardCharsets.UTF_8);
+        upload(token, knowledgeId, "课程简介.txt", content);
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        mockMvc.perform(get("/knowledge/{id}/docs/{docId}/file", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.TEXT_PLAIN))
+                .andExpect(content().bytes(content))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("inline")))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("UTF-8''")));
+    }
+
+    @Test
+    void docDownload_setsAttachmentDisposition() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "下载测试");
+        byte[] content = "下载内容".getBytes(StandardCharsets.UTF_8);
+        upload(token, knowledgeId, "note.txt", content);
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        mockMvc.perform(get("/knowledge/{id}/docs/{docId}/download", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(content))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")));
+    }
+
+    @Test
+    void docFile_cannotAccessOthers() throws Exception {
+        String tokenA = registerAndLogin();
+        long knowledgeId = createKnowledge(tokenA, "A 的文件");
+        upload(tokenA, knowledgeId, "a.txt", "私有内容".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(tokenA, knowledgeId).get(0).get("id").asText();
+
+        String tokenB = registerAndLogin();
+        String resp = mockMvc.perform(get("/knowledge/{id}/docs/{docId}/file", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + tokenB))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40101, objectMapper.readTree(resp).get("code").asInt(), "跨用户访问他人文档应无权限");
+    }
+
+    @Test
+    void docChunks_notVectorized_returnsEmpty() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "切片测试");
+        upload(token, knowledgeId, "a.txt", "待入库内容".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        String resp = mockMvc.perform(get("/knowledge/{id}/docs/{docId}/chunks", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode node = objectMapper.readTree(resp);
+        assertEquals(0, node.get("code").asInt());
+        assertEquals(0, node.get("data").size(), "未入库文档应返回空切片");
+    }
+
+    @Test
+    void docChunks_vectorized_returnsChunks() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "切片测试2");
+        upload(token, knowledgeId, "a.txt", "已入库内容".getBytes(StandardCharsets.UTF_8));
+        // 模拟已入库
+        jdbcTemplate.update("UPDATE knowledge_doc SET vectorStatus = 'SUCCESS' WHERE knowledgeId = ?", knowledgeId);
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+        when(pythonAgentClient.docChunks(anyString(), anyString()))
+                .thenReturn(Result.success(List.of("切片1：数据结构", "切片2：操作系统")));
+
+        String resp = mockMvc.perform(get("/knowledge/{id}/docs/{docId}/chunks", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode node = objectMapper.readTree(resp);
+        assertEquals(0, node.get("code").asInt());
+        assertEquals(2, node.get("data").size());
+        assertEquals("切片1：数据结构", node.get("data").get(0).asText());
     }
 }

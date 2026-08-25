@@ -30,6 +30,10 @@ class VectorStore(ABC):
     def search(self, query: str, knowledge_id: Optional[str] = None, top_k: int = 5) -> List[dict]:
         """向量检索，返回 [{"text", "score"}]"""
 
+    @abstractmethod
+    def get_chunks(self, knowledge_id: str, doc_id: str) -> List[str]:
+        """查询文档切片文本列表（按入库顺序），无则返回空列表"""
+
 
 class LocalVectorStore(VectorStore):
     """内存向量库：embedding + 余弦相似度暴力检索，适合开发/小规模演示"""
@@ -83,6 +87,12 @@ class LocalVectorStore(VectorStore):
             scored.append({"text": v["text"], "score": score, "doc_id": v["doc_id"]})
         scored.sort(key=lambda x: -x["score"])
         return scored[:top_k]
+
+    def get_chunks(self, knowledge_id, doc_id):
+        """查询文档切片文本（按入库顺序）"""
+        with self._lock:
+            return [v["text"] for v in self._vectors
+                    if v["knowledge_id"] == str(knowledge_id) and v["doc_id"] == str(doc_id)]
 
 
 def _cosine(a, b):

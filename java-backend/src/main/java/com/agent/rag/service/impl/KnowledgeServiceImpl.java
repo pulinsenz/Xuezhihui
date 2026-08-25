@@ -5,6 +5,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.DigestUtil;
 import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
+import com.agent.rag.common.Result;
 import com.agent.rag.common.VectorStatus;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.DeleteVectorRequest;
@@ -195,6 +196,40 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             return knowledge;
         }
         throw new BusinessException(ErrorCode.NO_AUTH, "无权访问该知识库");
+    }
+
+    @Override
+    public KnowledgeDoc getViewableDoc(Long knowledgeId, Long docId) {
+        // 文档查看门槛与知识库一致：作者/协作者/收藏者/公开库可访问
+        getViewableKnowledge(knowledgeId);
+        KnowledgeDoc doc = knowledgeDocMapper.selectById(docId);
+        if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文档不存在");
+        }
+        return doc;
+    }
+
+    @Override
+    public List<String> listDocChunks(Long knowledgeId, Long docId) {
+        KnowledgeDoc doc = getViewableDoc(knowledgeId, docId);
+        // 未入库的文档没有切片，直接返回空，避免无谓调用 Python
+        if (!VectorStatus.SUCCESS.name().equals(doc.getVectorStatus())) {
+            return List.of();
+        }
+        try {
+            Result<List<String>> resp = pythonAgentClient.docChunks(
+                    String.valueOf(knowledgeId), String.valueOf(docId));
+            if (resp == null || resp.getCode() != 0) {
+                throw new BusinessException(ErrorCode.OPERATION_ERROR,
+                        "切片查询失败: " + (resp == null ? "无响应" : resp.getMessage()));
+            }
+            return resp.getData() == null ? List.of() : resp.getData();
+        } catch (BusinessException e) {
+            throw e;
+        } catch (Exception e) {
+            log.error("切片查询异常: knowledgeId={}, docId={}", knowledgeId, docId, e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "切片服务不可用，请稍后重试");
+        }
     }
 
     @Override

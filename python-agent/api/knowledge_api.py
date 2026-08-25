@@ -115,3 +115,10 @@ def delete(req: DeleteRequest):
         runtime.retriever.delete_knowledge(req.knowledge_id)
     agent_event(logger, "vectors_deleted", knowledge_id=req.knowledge_id, doc_id=req.doc_id)
     return {"code": 0, "message": "ok", "data": True}
+
+
+@router.get("/chunks")
+def chunks(knowledge_id: str, doc_id: str):
+    """查询文档切片文本列表（「向量详情」，Java 代理调用）"""
+    texts = runtime.retriever.get_chunks(knowledge_id, doc_id)
+    return {"code": 0, "message": "ok", "data": texts}

@@ -1,5 +1,7 @@
 package com.agent.rag.controller;
 
+import cn.hutool.core.util.StrUtil;
+import com.agent.rag.common.ErrorCode;
 import com.agent.rag.common.Result;
 import com.agent.rag.dto.req.BatchDocRequest;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
@@ -8,9 +10,16 @@ import com.agent.rag.dto.req.MemberInviteRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.dto.resp.MemberVO;
+import com.agent.rag.entity.KnowledgeDoc;
+import com.agent.rag.exception.BusinessException;
 import com.agent.rag.service.KnowledgeService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.MediaTypeFactory;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,6 +31,9 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 /**
@@ -233,5 +245,52 @@ public class KnowledgeController {
                                              @RequestParam(required = false) Integer deleted,
                                              @RequestParam(required = false) String category) {
         return Result.success(knowledgeService.listDocs(id, deleted, category));
+    }
+
+    /**
+     * 文档内容文件（原始文件，inline 预览），供「打开」；可查看者均可访问
+     */
+    @GetMapping("/{id}/docs/{docId}/file")
+    public ResponseEntity<FileSystemResource> docFile(@PathVariable Long id, @PathVariable Long docId) {
+        return buildFileResponse(knowledgeService.getViewableDoc(id, docId), true);
+    }
+
+    /**
+     * 文档内容文件（原始文件，attachment 下载），供「下载」；可查看者均可访问
+     */
+    @GetMapping("/{id}/docs/{docId}/download")
+    public ResponseEntity<FileSystemResource> docDownload(@PathVariable Long id, @PathVariable Long docId) {
+        return buildFileResponse(knowledgeService.getViewableDoc(id, docId), false);
+    }
+
+    /**
+     * 文档切片详情（文本列表），供「向量详情」查看；可查看者均可访问
+     */
+    @GetMapping("/{id}/docs/{docId}/chunks")
+    public Result<List<String>> docChunks(@PathVariable Long id, @PathVariable Long docId) {
+        return Result.success(knowledgeService.listDocChunks(id, docId));
+    }
+
+    /**
+     * 组装文件响应：inline=浏览器内预览（PDF/文本），attachment=触发下载。
+     * 文件名按 RFC 5987（filename*=UTF-8''）编码，中文不乱码。
+     */
+    private ResponseEntity<FileSystemResource> buildFileResponse(KnowledgeDoc doc, boolean inline) {
+        if (StrUtil.isBlank(doc.getFileUrl())) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文件地址为空");
+        }
+        File file = new File(doc.getFileUrl());
+        if (!file.exists() || !file.isFile()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文件不存在或已被清理");
+        }
+        String encodedName = URLEncoder.encode(doc.getName(), StandardCharsets.UTF_8).replace("+", "%20");
+        String disposition = (inline ? "inline" : "attachment") + "; filename*=UTF-8''" + encodedName;
+        MediaType mediaType = MediaTypeFactory.getMediaType(doc.getName())
+                .orElse(MediaType.APPLICATION_OCTET_STREAM);
+        return ResponseEntity.ok()
+                .contentType(mediaType)
+                .contentLength(file.length())
+                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                .body(new FileSystemResource(file));
     }
 }

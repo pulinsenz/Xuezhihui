@@ -54,3 +54,6 @@ class FakeVectorStore:
         else:
             chunks = [c for vv in self.data.values() for v in vv.values() for c in v]
         return [{"text": c, "score": 0.5} for c in chunks[:top_k]]
+
+    def get_chunks(self, knowledge_id, doc_id):
+        return list(self.data.get(str(knowledge_id), {}).get(str(doc_id), []))

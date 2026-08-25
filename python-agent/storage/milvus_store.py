@@ -74,3 +74,14 @@ class MilvusStore(VectorStore):
         hits = results[0] if results else []
         return [{"text": h["entity"]["text"], "score": float(h["distance"]),
                  "doc_id": h["entity"].get("doc_id")} for h in hits]
+
+    def get_chunks(self, knowledge_id, doc_id):
+        """查询文档切片文本（按入库顺序：Milvus auto_id 随插入递增）"""
+        results = self.client.query(
+            self.collection,
+            filter=f'knowledge_id == "{knowledge_id}" and doc_id == "{doc_id}"',
+            output_fields=["id", "text"],
+            limit=10000,
+        )
+        results.sort(key=lambda r: r["id"])
+        return [r["text"] for r in results]

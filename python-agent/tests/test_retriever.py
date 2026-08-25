@@ -62,3 +62,18 @@ def test_delete_knowledge_clears_bm25_and_vectors():
     assert "kb1" not in retriever._chunks
     # 向量库同步清空
     assert "kb1" not in retriever.vector_store.data
+
+
+def test_get_chunks_returns_doc_chunks():
+    """「向量详情」：按文档返回切片文本（FakeVectorStore 保持入库顺序）"""
+    retriever = _make_retriever()
+    chunks = retriever.get_chunks("kb1", "doc1")
+    assert chunks, "已入库文档应能查到切片"
+    assert any("数据结构" in c for c in chunks), "doc1 切片应包含其内容"
+
+
+def test_get_chunks_unknown_doc_empty():
+    """「向量详情」：未入库/不存在的文档返回空列表"""
+    retriever = _make_retriever()
+    assert retriever.get_chunks("kb1", "no_such_doc") == []
+    assert retriever.get_chunks("kb999", "doc1") == []
