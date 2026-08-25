@@ -230,6 +230,8 @@ class KnowledgePublicControllerTest {
         JsonNode item = findById(data(list), publicId);
         assertNotNull(item, "收藏的知识库应出现在我的列表");
         assertEquals(true, item.get("isFavorite").asBoolean());
+        // 回归：收藏的是他人库，isOwner 必须为 false（否则前端显示“我的”）
+        assertEquals(false, item.get("isOwner").asBoolean(), "收藏他人公开库不应标记为我的");
 
         // 取消收藏
         String unfav = mockMvc.perform(delete("/knowledge/{id}/favorite", publicId)

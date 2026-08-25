@@ -144,7 +144,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         // createTime 理论上不为空（DB 默认），null 时排最后，避免排序 NPE
         all.sort(Comparator.comparing(Knowledge::getCreateTime,
                 Comparator.nullsLast(Comparator.naturalOrder())).reversed());
-        return all.stream().map(k -> enrichVO(k, userId, true, favIds.contains(k.getId()))).toList();
+        // isOwner 必须按作者判断：列表含「我收藏的他人公开库」，硬编码 true 会让收藏的库也显示"我的"
+        return all.stream().map(k -> enrichVO(k, userId, k.getUserId().equals(userId),
+                favIds.contains(k.getId()))).toList();
     }
 
     @Override
