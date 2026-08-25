@@ -2,7 +2,7 @@
   <el-container class="layout">
     <el-aside width="210px" class="aside">
       <div class="logo">
-        <span class="logo-icon">学</span>
+        <img class="logo-img" :src="logo" alt="学智汇" />
         <span>学智汇</span>
       </div>
       <el-menu :default-active="activeMenu" class="menu" @select="handleMenuSelect">
@@ -77,6 +77,7 @@ import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import LoginDialog from '../components/LoginDialog.vue'
+import logo from '../assets/logo.png'
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
@@ -132,15 +133,11 @@ const handleCommand = async (command) => {
   font-size: 18px;
   font-weight: 600;
 }
-.logo-icon {
+.logo-img {
   width: 28px;
   height: 28px;
-  line-height: 28px;
-  text-align: center;
   border-radius: 6px;
-  background: #409eff;
-  color: #fff;
-  font-size: 15px;
+  object-fit: contain;
 }
 .menu {
   border-right: none;

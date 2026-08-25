@@ -2,7 +2,7 @@
   <div class="login-page">
     <div class="login-card">
       <div class="brand">
-        <div class="brand-logo">学</div>
+        <img class="brand-logo" :src="logo" alt="学智汇" />
         <h1>学智汇</h1>
         <p>多 Agent 协同 RAG 校园问答系统</p>
       </div>
@@ -15,6 +15,7 @@
 <script setup>
 import { useRouter, useRoute } from 'vue-router'
 import AuthForm from '../components/AuthForm.vue'
+import logo from '../assets/logo.png'
 
 const router = useRouter()
 const route = useRoute()
@@ -44,15 +45,12 @@ const handleSuccess = () => {
   margin-bottom: 20px;
 }
 .brand-logo {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   margin: 0 auto 12px;
-  line-height: 48px;
-  font-size: 26px;
-  font-weight: 700;
-  color: #fff;
-  background: #409eff;
+  display: block;
   border-radius: 10px;
+  object-fit: contain;
 }
 .brand h1 {
   font-size: 24px;

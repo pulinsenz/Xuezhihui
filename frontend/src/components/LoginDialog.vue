@@ -7,7 +7,7 @@
     destroy-on-close
   >
     <div class="dialog-brand">
-      <div class="brand-logo">学</div>
+      <img class="brand-logo" :src="logo" alt="学智汇" />
       <p>多 Agent 协同 RAG 校园问答系统</p>
     </div>
     <AuthForm @success="handleSuccess" />
@@ -16,6 +16,7 @@
 
 <script setup>
 import AuthForm from './AuthForm.vue'
+import logo from '../assets/logo.png'
 
 const visible = defineModel({ type: Boolean, default: false })
 
@@ -30,15 +31,12 @@ const handleSuccess = () => {
   margin-bottom: 16px;
 }
 .brand-logo {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   margin: 0 auto 8px;
-  line-height: 40px;
-  font-size: 22px;
-  font-weight: 700;
-  color: #fff;
-  background: #409eff;
+  display: block;
   border-radius: 8px;
+  object-fit: contain;
 }
 .dialog-brand p {
   font-size: 12px;
