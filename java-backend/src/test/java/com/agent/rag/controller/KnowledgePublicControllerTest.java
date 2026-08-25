@@ -3,12 +3,14 @@ package com.agent.rag.controller;
 import com.agent.rag.config.JwtProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qcloud.cos.COSClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,7 +41,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * @author pulinsenz
  */
-@SpringBootTest(properties = "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef")
+@SpringBootTest(properties = {
+        "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef",
+        "cos.client.host=https://test.cos.myqcloud.com",
+        "cos.client.secret-id=test-secret-id",
+        "cos.client.secret-key=test-secret-key",
+        "cos.client.region=ap-guangzhou",
+        "cos.client.bucket=test-bucket"
+})
 @AutoConfigureMockMvc
 class KnowledgePublicControllerTest {
 
@@ -55,6 +64,9 @@ class KnowledgePublicControllerTest {
     private JwtProperties jwtProperties;
     @Value("${app.file.storage.local-path}")
     private String storagePath;
+    // 封面上传走 COS：Mock 掉 SDK 客户端，避免真实网络/密钥
+    @MockBean
+    private COSClient cosClient;
 
     private final List<String> createdTokens = new ArrayList<>();
     private final List<Long> createdUserIds = new ArrayList<>();
@@ -163,11 +175,8 @@ class KnowledgePublicControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(0, code(resp), "封面上传应成功");
         String url = objectMapper.readTree(resp).get("data").asText();
-        assertTrue(url.startsWith("/api/files/"), "封面上传应返回可访问 URL，实际: " + url);
-
-        // 静态资源无需登录可访问（浏览器 <img> 不带 JWT）：MockMvc 请求不含 context-path
-        String filePath = url.substring("/api".length());
-        mockMvc.perform(get(filePath)).andExpect(status().isOk());
+        // 封面已改走 COS：返回对象存储直链；public-read ACL 保证浏览器 <img> 免鉴权加载（ACL 由 CosFileStorageServiceTest 单测验证）
+        assertTrue(url.startsWith("https://test.cos.myqcloud.com/cover/"), "应返回 COS 直链，实际: " + url);
     }
 
     // ---------- 公开列表 ----------

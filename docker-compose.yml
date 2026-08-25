@@ -85,6 +85,12 @@ services:
       SPRING_DATA_REDIS_HOST: redis
       APP_AGENT_BASE_URL: http://python-agent:8000
       APP_AGENT_TOKEN: ${AGENT_TOKEN}
+      # 腾讯云 COS（封面对象存储）：映射 application.yml 的 cos.client.* 占位符
+      COS_HOST: ${COS_HOST:-}
+      COS_SECRETID: ${COS_SECRETID:-}
+      COS_SECRETKEY: ${COS_SECRETKEY:-}
+      COS_REGION: ${COS_REGION:-ap-guangzhou}
+      COS_BUCKET: ${COS_BUCKET:-}
     volumes:
       # 上传文件与 python-agent 共享（生产可换 COS 对象存储）
       - file-data:/app/data/files

@@ -6,6 +6,7 @@ import com.agent.rag.common.Result;
 import com.agent.rag.config.JwtProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qcloud.cos.COSClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,7 +52,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * @author pulinsenz
  */
-@SpringBootTest(properties = "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef")
+@SpringBootTest(properties = {
+        "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef",
+        "cos.client.host=https://test.cos.myqcloud.com",
+        "cos.client.secret-id=test-secret-id",
+        "cos.client.secret-key=test-secret-key",
+        "cos.client.region=ap-guangzhou",
+        "cos.client.bucket=test-bucket"
+})
 @AutoConfigureMockMvc
 class KnowledgeControllerTest {
 
@@ -70,6 +78,9 @@ class KnowledgeControllerTest {
     // 集成环境无 Python Agent，切片查询用 Mock 替身返回可控结果
     @MockBean
     private PythonAgentClient pythonAgentClient;
+    // 封面上传走 COS：Mock 掉 SDK 客户端，避免真实网络/密钥
+    @MockBean
+    private COSClient cosClient;
 
     private final List<String> createdTokens = new ArrayList<>();
     private final List<Long> createdUserIds = new ArrayList<>();
@@ -702,5 +713,23 @@ class KnowledgeControllerTest {
         assertEquals(0, node.get("code").asInt());
         assertEquals(2, node.get("data").size());
         assertEquals("切片1：数据结构", node.get("data").get(0).asText());
+    }
+
+    // ---------- 封面上传（走 COS 对象存储）----------
+
+    @Test
+    void uploadCover_returnsCosUrl() throws Exception {
+        String token = registerAndLogin();
+        MockMultipartFile file = new MockMultipartFile("file", "封面.png", "image/png", "png-bytes".getBytes());
+
+        String resp = mockMvc.perform(multipart("/knowledge/cover")
+                        .file(file)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode node = objectMapper.readTree(resp);
+        assertEquals(0, node.get("code").asInt(), "封面上传应成功");
+        String url = node.get("data").asText();
+        assertTrue(url.startsWith("https://test.cos.myqcloud.com/cover/"), "应返回 COS 直链: " + url);
+        assertTrue(url.endsWith(".png"), "应保留扩展名");
     }
 }
