@@ -41,9 +41,21 @@ public class LocalFileStorageService implements FileStorageService {
 
     @Override
     public String storeForWeb(MultipartFile file, Long userId) {
-        // 封面存入独立子目录 cover/，静态资源只暴露该目录，避免用户上传的文档文件被公开下载
-        String relativePath = storeInternal(file, userId, "cover");
-        String webPath = relativePath.substring("cover/".length());
+        return storeWeb(file, userId, "cover");
+    }
+
+    @Override
+    public String storeAvatar(MultipartFile file, Long userId) {
+        return storeWeb(file, userId, "avatar");
+    }
+
+    /**
+     * 公网图片落盘并返回 /api/files 地址：封面/头像存入各自独立子目录，
+     * 静态资源只暴露这些子目录，避免用户上传的文档文件被公开下载
+     */
+    private String storeWeb(MultipartFile file, Long userId, String subDir) {
+        String relativePath = storeInternal(file, userId, subDir);
+        String webPath = relativePath.substring((subDir + "/").length());
         return "/api/files/" + webPath;
     }
 

@@ -9,6 +9,7 @@ import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 /**
@@ -51,13 +52,14 @@ public class WebConfig implements WebMvcConfigurer {
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        // 知识库封面静态资源：/api/files/** → {local-path}/cover/
+        // 公网图片静态资源：/api/files/** → {local-path}/cover/ 与 {local-path}/avatar/
         // 因 context-path=/api，浏览器实际访问 /api/files/xxx（前端走 /api 代理即可）。
-        // 只暴露 cover/ 子目录，用户上传的文档文件不在此目录，避免未授权下载。
+        // 只暴露 cover/（知识库封面）、avatar/（头像）子目录，用户上传的文档文件不在此目录，避免未授权下载。
         // toUri() 生成标准 file:///D:/.../ 形式，避免 Windows 反斜杠拼 file: URL 解析失败
-        String location = Paths.get(localPath).toAbsolutePath().normalize()
-                .resolve("cover").toUri().toString();
-        registry.addResourceHandler("/files/**").addResourceLocations(location);
+        Path base = Paths.get(localPath).toAbsolutePath().normalize();
+        String cover = base.resolve("cover").toUri().toString();
+        String avatar = base.resolve("avatar").toUri().toString();
+        registry.addResourceHandler("/files/**").addResourceLocations(cover, avatar);
     }
 
     @Override

@@ -4,6 +4,7 @@ import {
   register as apiRegister,
   logout as apiLogout,
   getCurrentUser,
+  updateProfile as apiUpdateProfile,
 } from '../api/auth'
 
 /**
@@ -33,6 +34,11 @@ export const useAuthStore = defineStore('auth', {
       const user = await getCurrentUser()
       this.user = user
       localStorage.setItem('user', JSON.stringify(user))
+    },
+    /** 更新个人资料（昵称/头像/简介），成功后刷新本地缓存的用户信息 */
+    async updateProfile(data) {
+      await apiUpdateProfile(data)
+      await this.fetchCurrentUser()
     },
     async logout() {
       try {

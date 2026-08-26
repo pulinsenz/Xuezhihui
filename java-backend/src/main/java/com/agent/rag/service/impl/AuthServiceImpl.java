@@ -6,12 +6,14 @@ import com.agent.rag.common.ErrorCode;
 import com.agent.rag.config.JwtProperties;
 import com.agent.rag.dto.req.LoginRequest;
 import com.agent.rag.dto.req.RegisterRequest;
+import com.agent.rag.dto.req.UpdateProfileRequest;
 import com.agent.rag.dto.resp.LoginResponse;
 import com.agent.rag.dto.resp.UserVO;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.AuthService;
+import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.JwtUtil;
 import com.agent.rag.util.UserContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -19,6 +21,7 @@ import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
@@ -43,6 +46,9 @@ public class AuthServiceImpl implements AuthService {
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+
+    @Resource
+    private FileStorageService fileStorageService;
 
     @Override
     public Long register(RegisterRequest request) {
@@ -121,5 +127,35 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ErrorCode.NOT_LOGIN);
         }
         return user;
+    }
+
+    @Override
+    public void updateProfile(UpdateProfileRequest request) {
+        User loginUser = getLoginUser();
+        String userName = StrUtil.trimToNull(request.getUserName());
+        if (userName == null || userName.length() > 30) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "昵称长度应在 1-30 字");
+        }
+        String profile = StrUtil.trimToNull(request.getUserProfile());
+        if (profile != null && profile.length() > 200) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "简介不能超过 200 字");
+        }
+        // 仅更新允许的字段，角色/密码等敏感字段不可经此修改（防越权）
+        User update = new User();
+        update.setId(loginUser.getId());
+        update.setUserName(userName);
+        update.setUserAvatar(StrUtil.trimToNull(request.getUserAvatar()));
+        update.setUserProfile(profile);
+        update.setEditTime(LocalDateTime.now());
+        userMapper.updateById(update);
+        log.info("更新资料成功: userId={}", loginUser.getId());
+    }
+
+    @Override
+    public String uploadAvatar(MultipartFile file) {
+        User loginUser = getLoginUser();
+        String url = fileStorageService.storeAvatar(file, loginUser.getId());
+        log.info("头像上传成功: userId={}, url={}", loginUser.getId(), url);
+        return url;
     }
 }

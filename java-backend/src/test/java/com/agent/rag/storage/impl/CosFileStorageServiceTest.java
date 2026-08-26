@@ -1,9 +1,12 @@
 package com.agent.rag.storage.impl;
 
 import cn.hutool.core.date.DateUtil;
+import com.agent.rag.common.ErrorCode;
 import com.agent.rag.config.CosProperties;
 import com.agent.rag.exception.BusinessException;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.exception.CosClientException;
+import com.qcloud.cos.exception.CosServiceException;
 import com.qcloud.cos.model.CannedAccessControlList;
 import com.qcloud.cos.model.PutObjectRequest;
 import org.junit.jupiter.api.Test;
@@ -24,7 +27,8 @@ import static org.mockito.Mockito.when;
 /**
  * CosFileStorageService 单元测试（Mockito，不连真实 COS）
  * <p>
- * 覆盖：封面走 COS（URL 直链格式 + public-read ACL）、配置缺失报错、文档 store 委托本地。
+ * 覆盖：封面走 COS（URL 直链格式 + public-read ACL）、配置缺失报错、COS 网络/服务端异常
+ * 包装为业务错误（而非漏成"系统内部异常"）、文档 store 委托本地。
  *
  * @author pulinsenz
  */
@@ -88,6 +92,24 @@ class CosFileStorageServiceTest {
     }
 
     @Test
+    void storeAvatar_uploadsUnderAvatarPrefix() throws Exception {
+        COSClient cosClient = mock(COSClient.class);
+        CosFileStorageService svc = service(props(), cosClient);
+        MockMultipartFile file = new MockMultipartFile("file", "me.png", "image/png", "avatar".getBytes());
+
+        String url = svc.storeAvatar(file, 1001L);
+
+        String month = DateUtil.format(new Date(), "yyyyMM");
+        assertTrue(url.startsWith("https://picture-1391878614.cos.ap-guangzhou.myqcloud.com/avatar/"
+                + month + "/1001/"), "头像应走 avatar/ 前缀: " + url);
+        assertTrue(url.endsWith(".png"), "应保留扩展名");
+        ArgumentCaptor<PutObjectRequest> captor = ArgumentCaptor.forClass(PutObjectRequest.class);
+        verify(cosClient).putObject(captor.capture());
+        assertEquals(CannedAccessControlList.PublicRead, captor.getValue().getCannedAcl(),
+                "头像对象同样需要 public-read，<img> 才能免鉴权加载");
+    }
+
+    @Test
     void store_delegatesToLocal() {
         LocalFileStorageService local = mock(LocalFileStorageService.class);
         CosFileStorageService svc = service(props(), mock(COSClient.class));
@@ -97,5 +119,34 @@ class CosFileStorageServiceTest {
 
         assertEquals("/local/doc.txt", svc.store(file, 1L), "文档文件应继续走本地存储");
         verify(local).store(file, 1L);
+    }
+
+    @Test
+    void storeForWeb_cosClientException_wrapsAsBusiness() throws Exception {
+        // 网络层失败（如 TLS 握手被掐断，即本次 Docker 死代理场景）不得漏成"系统内部异常"
+        COSClient cosClient = mock(COSClient.class);
+        when(cosClient.putObject(any(PutObjectRequest.class)))
+                .thenThrow(new CosClientException("Remote host terminated the handshake"));
+        CosFileStorageService svc = service(props(), cosClient);
+        MockMultipartFile file = new MockMultipartFile("file", "a.png", "image/png", new byte[]{1});
+
+        BusinessException e = assertThrows(BusinessException.class, () -> svc.storeForWeb(file, 1L));
+        assertEquals(ErrorCode.OPERATION_ERROR.getCode(), e.getCode());
+        assertTrue(e.getMessage().contains("图片上传失败"), "COS 网络错误应明确提示而非系统内部异常: " + e.getMessage());
+    }
+
+    @Test
+    void storeForWeb_cosServiceException_wrapsAsBusiness() throws Exception {
+        // 服务端拒绝（如无权限/桶 ACL 限制），同样包装为业务错误
+        COSClient cosClient = mock(COSClient.class);
+        CosServiceException svcErr = new CosServiceException("simulated");
+        svcErr.setErrorCode("AccessDenied");
+        when(cosClient.putObject(any(PutObjectRequest.class))).thenThrow(svcErr);
+        CosFileStorageService svc = service(props(), cosClient);
+        MockMultipartFile file = new MockMultipartFile("file", "a.png", "image/png", new byte[]{1});
+
+        BusinessException e = assertThrows(BusinessException.class, () -> svc.storeForWeb(file, 1L));
+        assertEquals(ErrorCode.OPERATION_ERROR.getCode(), e.getCode());
+        assertTrue(e.getMessage().contains("图片上传失败"), e.getMessage());
     }
 }

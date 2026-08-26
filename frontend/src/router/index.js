@@ -19,6 +19,7 @@ const routes = [
       { path: 'knowledge', name: 'KnowledgeList', component: () => import('../views/KnowledgeListView.vue') },
       { path: 'knowledge/:id', name: 'KnowledgeDetail', component: () => import('../views/KnowledgeDetailView.vue') },
       { path: 'public-knowledge', name: 'PublicKnowledge', component: () => import('../views/PublicKnowledgeView.vue') },
+      { path: 'profile', name: 'Profile', component: () => import('../views/ProfileView.vue') },
       { path: 'settings', name: 'Settings', component: () => import('../views/SettingsView.vue') },
       { path: 'admin/users', name: 'AdminUsers', component: () => import('../views/AdminUsersView.vue'), meta: { admin: true } },
       { path: 'admin/knowledge', name: 'AdminKnowledge', component: () => import('../views/AdminKnowledgeView.vue'), meta: { admin: true } },

@@ -11,3 +11,15 @@ export const logout = () => request.post('/auth/logout')
 
 /** 获取当前登录用户 */
 export const getCurrentUser = () => request.get('/auth/me')
+
+/** 更新个人资料（昵称/头像/简介） */
+export const updateProfile = (data) => request.put('/auth/profile', data)
+
+/** 上传头像，返回可公网访问的 URL */
+export const uploadAvatar = (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return request.post('/auth/avatar', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}

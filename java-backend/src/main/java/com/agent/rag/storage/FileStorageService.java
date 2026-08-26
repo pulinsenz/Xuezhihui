@@ -26,4 +26,15 @@ public interface FileStorageService {
      * @return 如 /api/files/202608/{userId}/{uuid}.png
      */
     String storeForWeb(MultipartFile file, Long userId);
+
+    /**
+     * 存储头像图片，返回可被前端 {@code <img>} 直接加载的 URL
+     * <p>
+     * 与 storeForWeb 的区别仅是目录前缀（avatar/ vs cover/），头像与知识库封面互不混用。
+     *
+     * @param file   上传的图片
+     * @param userId 所属用户
+     * @return COS 直链或 /api/files/avatar/... 静态地址
+     */
+    String storeAvatar(MultipartFile file, Long userId);
 }

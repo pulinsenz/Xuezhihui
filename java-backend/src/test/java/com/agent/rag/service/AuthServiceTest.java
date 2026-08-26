@@ -4,26 +4,33 @@ import com.agent.rag.common.ErrorCode;
 import com.agent.rag.config.JwtProperties;
 import com.agent.rag.dto.req.LoginRequest;
 import com.agent.rag.dto.req.RegisterRequest;
+import com.agent.rag.dto.req.UpdateProfileRequest;
 import com.agent.rag.dto.resp.LoginResponse;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.impl.AuthServiceImpl;
+import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.JwtUtil;
+import com.agent.rag.util.UserContext;
 import cn.hutool.crypto.digest.BCrypt;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -48,6 +55,8 @@ class AuthServiceTest {
     private StringRedisTemplate stringRedisTemplate;
     @Mock
     private ValueOperations<String, String> valueOperations;
+    @Mock
+    private FileStorageService fileStorageService;
 
     private JwtProperties jwtProperties;
     private AuthServiceImpl authService;
@@ -64,6 +73,21 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(authService, "jwtUtil", jwtUtil);
         ReflectionTestUtils.setField(authService, "jwtProperties", jwtProperties);
         ReflectionTestUtils.setField(authService, "stringRedisTemplate", stringRedisTemplate);
+        ReflectionTestUtils.setField(authService, "fileStorageService", fileStorageService);
+    }
+
+    @AfterEach
+    void tearDown() {
+        // 清理 ThreadLocal，避免登录用户串到其他用例
+        UserContext.clear();
+    }
+
+    private User loggedInUser(Long id) {
+        User user = new User();
+        user.setId(id);
+        user.setUserAccount("bob");
+        user.setUserRole("user");
+        return user;
     }
 
     private RegisterRequest validRegister() {
@@ -185,5 +209,71 @@ class AuthServiceTest {
     void logout_nullToken_doesNothing() {
         authService.logout(null);
         verify(stringRedisTemplate, never()).delete(anyString());
+    }
+
+    // ---------- 更新资料 ----------
+
+    @Test
+    void updateProfile_updatesOnlyAllowedFields() {
+        UserContext.setUser(loggedInUser(7L));
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setUserName("新昵称");
+        req.setUserAvatar("https://cos/avatar/xx.png");
+        req.setUserProfile("热爱学习");
+
+        authService.updateProfile(req);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).updateById(captor.capture());
+        User update = captor.getValue();
+        assertEquals(7L, update.getId());
+        assertEquals("新昵称", update.getUserName());
+        assertEquals("https://cos/avatar/xx.png", update.getUserAvatar());
+        assertEquals("热爱学习", update.getUserProfile());
+        // 敏感字段不可经资料接口修改
+        assertNull(update.getUserRole());
+        assertNull(update.getUserPassword());
+    }
+
+    @Test
+    void updateProfile_blankName_throwsParamsError() {
+        UserContext.setUser(loggedInUser(7L));
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setUserName("   ");
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.updateProfile(req));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+        verify(userMapper, never()).updateById(any(User.class));
+    }
+
+    @Test
+    void updateProfile_profileTooLong_throwsParamsError() {
+        UserContext.setUser(loggedInUser(7L));
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setUserName("昵称");
+        req.setUserProfile("长".repeat(201));
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.updateProfile(req));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+    }
+
+    @Test
+    void updateProfile_notLogin_throwsNotLogin() {
+        UpdateProfileRequest req = new UpdateProfileRequest();
+        req.setUserName("ok");
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.updateProfile(req));
+        assertEquals(ErrorCode.NOT_LOGIN.getCode(), e.getCode());
+    }
+
+    // ---------- 头像上传 ----------
+
+    @Test
+    void uploadAvatar_delegatesToStorage_withLoginUserId() throws Exception {
+        UserContext.setUser(loggedInUser(7L));
+        when(fileStorageService.storeAvatar(any(), eq(7L))).thenReturn("https://cos/avatar/a.png");
+        MockMultipartFile file = new MockMultipartFile("file", "me.png", "image/png", new byte[]{1});
+
+        String url = authService.uploadAvatar(file);
+
+        assertEquals("https://cos/avatar/a.png", url);
+        verify(fileStorageService).storeAvatar(file, 7L);
     }
 }

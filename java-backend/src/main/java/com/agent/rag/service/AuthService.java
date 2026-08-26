@@ -2,8 +2,10 @@ package com.agent.rag.service;
 
 import com.agent.rag.dto.req.LoginRequest;
 import com.agent.rag.dto.req.RegisterRequest;
+import com.agent.rag.dto.req.UpdateProfileRequest;
 import com.agent.rag.dto.resp.LoginResponse;
 import com.agent.rag.entity.User;
+import org.springframework.web.multipart.MultipartFile;
 
 /**
  * 认证服务
@@ -39,4 +41,19 @@ public interface AuthService {
      * 获取当前登录用户（来自 ThreadLocal，由拦截器填充）
      */
     User getLoginUser();
+
+    /**
+     * 更新当前用户资料（昵称/头像/简介）
+     *
+     * @param request 资料请求
+     */
+    void updateProfile(UpdateProfileRequest request);
+
+    /**
+     * 上传当前用户头像，返回可公网加载的 URL
+     *
+     * @param file 头像图片
+     * @return 头像 URL
+     */
+    String uploadAvatar(MultipartFile file);
 }

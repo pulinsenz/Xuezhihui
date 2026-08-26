@@ -41,13 +41,16 @@
           <template v-if="authStore.isLogin">
             <el-dropdown @command="handleCommand">
               <span class="user-info">
-                <el-avatar :size="30" class="avatar">{{ avatarText }}</el-avatar>
+                <el-avatar :size="30" class="avatar" :src="authStore.user?.userAvatar || undefined">{{ avatarText }}</el-avatar>
                 <span class="username">{{ authStore.user?.userName || authStore.user?.userAccount }}</span>
                 <el-tag v-if="authStore.isAdmin" size="small" type="warning" class="role-tag">管理员</el-tag>
               </span>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                  <el-dropdown-item command="profile">
+                    <el-icon><User /></el-icon>我的
+                  </el-dropdown-item>
+                  <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -106,6 +109,10 @@ const handleMenuSelect = (index) => {
 }
 
 const handleCommand = async (command) => {
+  if (command === 'profile') {
+    router.push('/profile')
+    return
+  }
   if (command === 'logout') {
     await ElMessageBox.confirm('确定退出登录吗？', '提示', { type: 'warning' })
     await authStore.logout()
