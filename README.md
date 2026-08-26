@@ -10,6 +10,7 @@ Vue3 + SpringBoot + FastAPI/LangGraph 前后端分离架构。五大角色 Agent
 
 - [项目简介](#项目简介)
 - [技术栈](#技术栈)
+- [项目演示](#项目演示)
 - [系统架构](#系统架构)
 - [项目结构](#项目结构)
 - [核心设计要点](#核心设计要点)
@@ -36,11 +37,11 @@ Vue3 + SpringBoot + FastAPI/LangGraph 前后端分离架构。五大角色 Agent
 | 模块 | 技术 |
 | --- | --- |
 | 前端 | Vue 3、Vite、Element Plus、Pinia、Axios、Vue Router、Vitest |
-| Java 业务服务 | Spring Boot 3、MyBatis-Plus、OpenFeign、Redis、SSE、JWT、Caffeine、腾讯云 COS、jsoup、knife4j |
+| Java 业务服务 | Spring Boot 3、MyBatis-Plus、OpenFeign、Redis、SSE、JWT、Caffeine、腾讯云 COS、knife4j |
 | Python Agent 服务 | FastAPI、LangGraph、LangChain、pymilvus、rank_bm25、sentence-transformers |
 | 存储 | MySQL（业务数据）、Redis（会话记忆 / Agent 状态 / 任务队列）、Milvus（向量库，依赖 etcd + MinIO） |
 | LLM | DeepSeek（OpenAI 兼容接口）；本地开发可用 MockLLM 兜底 |
-| 部署 | Docker Compose 一键编排（7 个服务） |
+| 部署 | Docker Compose 一键编排（8 个服务） |
 
 ## 项目演示
 
@@ -92,20 +93,32 @@ Vue3 + SpringBoot + FastAPI/LangGraph 前后端分离架构。五大角色 Agent
           Milvus    Redis        DeepSeek LLM
           向量库   会话/Agent状态    生成
 
-  文档入库链路：前端上传 → Java 解析（jsoup / pypdf / python-docx）→ 调用 Python 向量化接口 → 分块 → Milvus 入库 → 回调 Java 更新向量状态
+  文档入库链路：前端上传 → Java 接收校验（重复文件哈希检测）并落盘 → 调用 Python 向量化接口 → Python 解析文档（pypdf / python-docx）并语义分块 → Milvus 入库 → 回调 Java 更新向量状态
 ```
 
 **五大 Agent 协同流程：**
 
-```mermaid
-graph LR
-    A[用户提问] --> B[router_agent 路由]
-    B --> C[retrieve_agent 混合检索]
-    C --> D[tool_agent 工具调用]
-    D --> E[reflect_agent 反思校验]
-    E -->|"信息不充分 / 幻觉风险"| C
-    E --> F[answer_agent 组装回答]
-    F --> G[SSE 流式返回]
+```
+用户提问（前端 SSE 请求）
+   │
+   ▼
+router_agent（路由：意图识别 → 选择链路）
+   │
+   ▼
+retrieve_agent（混合检索：BM25 + 向量召回）
+   │
+   ▼
+tool_agent（工具调用：回调 Java 获取业务数据）
+   │
+   ▼
+reflect_agent（反思校验）
+   │              ▲
+   │  二次检索 ────┘（信息不充分 / 幻觉风险）
+   ▼
+answer_agent（组装回答）
+   │
+   ▼
+SSE 流式返回前端
 ```
 
 ## 项目结构
@@ -116,8 +129,10 @@ graph LR
 ├── java-backend/             # SpringBoot 业务服务（对外接口 + 权限 + 业务存储）
 ├── python-agent/             # FastAPI + LangGraph Agent 服务（AI 逻辑）
 ├── docs/                     # 项目设计文档（项目计划、项目结构）
-├── docker-compose.yml        # 一键编排：mysql、redis、etcd、minio、milvus、java、python
+├── assets/                   # README 截图资源
+├── docker-compose.yml        # 一键编排 8 个服务：mysql、redis、etcd、minio、milvus、java、python、frontend
 ├── docker-compose.pull-mirror.yml   # 国内镜像加速版本
+├── .env.example              # 环境变量模板（复制为 .env 后填写密钥）
 ├── .env                      # 部署密钥（DEEPSEEK_API_KEY / AGENT_TOKEN / JWT_SECRET，不入库）
 ├── mianshi/                  # 面试准备材料
 └── README.md
@@ -156,13 +171,14 @@ graph LR
 前置要求：已安装 Docker 与 Docker Compose。
 
 ```bash
-# 1. 配置部署密钥：编辑根目录 .env（docker compose 自动读取）
+# 1. 配置部署密钥：从模板复制 .env 并填写（docker compose 自动读取）
+cp .env.example .env
 #    DEEPSEEK_API_KEY=<必填，DeepSeek 平台获取>
 #    AGENT_TOKEN=<强随机值>   # Java 调 Python 的内部鉴权
 #    JWT_SECRET=<强随机值>    # Java 登录 JWT 签名
 #    MYSQL_ROOT_PASSWORD=<可选，默认 111111>
 
-# 2. 一键编排启动（mysql/redis/etcd/minio/milvus/java/python 共 7 个服务）
+# 2. 一键编排启动（mysql/redis/etcd/minio/milvus/java/python/frontend 共 8 个服务）
 docker compose up -d --build
 
 # 3. 查看日志
@@ -174,7 +190,7 @@ docker compose down
 
 启动后访问：
 
-- 前端：`http://localhost:5173`
+- 前端：`http://localhost`（Nginx 托管，端口 80）
 - Java 接口文档（knife4j）：`http://localhost:8123/api/doc.html`
 - Python Agent Swagger：`http://localhost:8000/docs`
 - MinIO 控制台：`http://localhost:9001`（minioadmin / minioadmin）
@@ -233,6 +249,8 @@ npm run dev
 | POST | `/api/auth/login` | 登录 |
 | POST | `/api/auth/logout` | 退出登录 |
 | GET | `/api/auth/me` | 当前用户信息 |
+| PUT | `/api/auth/profile` | 更新昵称 / 头像 / 简介 |
+| POST | `/api/auth/avatar` | 上传头像，返回公网 URL |
 
 **知识库**
 
