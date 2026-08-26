@@ -220,12 +220,11 @@
                 type="danger"
                 plain
                 @click="handlePurgeDoc(row)"
-                >彻底删除</el-button
+                >删除</el-button
               >
             </template>
-            <!-- 正常文档：打开 / 向量详情 / 下载对所有可查看者开放 -->
+            <!-- 正常文档：向量详情 / 下载对所有可查看者开放 -->
             <template v-else>
-              <el-button size="small" @click="handleOpenDoc(row)">打开</el-button>
               <el-button size="small" type="primary" plain @click="handleViewChunks(row)">向量详情</el-button>
               <el-button size="small" @click="handleDownloadDoc(row)">下载</el-button>
               <!-- 管理操作仅作者/协作者可见 -->
@@ -272,7 +271,7 @@
                   type="danger"
                   plain
                   @click="handlePurgeDoc(row)"
-                  >彻底删除</el-button
+                  >删除</el-button
                 >
               </template>
             </template>
@@ -383,7 +382,6 @@ import {
   downloadDocFile,
   favoriteKnowledge,
   getDocChunks,
-  getDocFile,
   getKnowledge,
   getTask,
   listDocs,
@@ -837,27 +835,6 @@ const blobErrorMessage = async (blob) => {
     return data && data.code !== 0 ? data.message || "文件操作失败" : null;
   } catch {
     return null;
-  }
-};
-
-// 打开：拉取原始文件，新标签页浏览器原生预览（PDF/文本内联，Office 自动下载）
-const handleOpenDoc = async (row) => {
-  const win = window.open("", "_blank"); // 同步开窗，规避弹窗拦截
-  if (!win) {
-    ElMessage.warning("浏览器拦截了新窗口，请允许弹窗后重试");
-    return;
-  }
-  try {
-    const blob = await getDocFile(knowledgeId, row.id);
-    const err = await blobErrorMessage(blob);
-    if (err) {
-      win.close();
-      ElMessage.error(err);
-      return;
-    }
-    win.location.href = URL.createObjectURL(blob);
-  } catch (e) {
-    win.close(); // 错误已由拦截器提示
   }
 };
 
