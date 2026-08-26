@@ -13,7 +13,10 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Paths;
 import java.util.Date;
 
@@ -47,6 +50,26 @@ public class LocalFileStorageService implements FileStorageService {
     @Override
     public String storeAvatar(MultipartFile file, Long userId) {
         return storeWeb(file, userId, "avatar");
+    }
+
+    @Override
+    public InputStream open(String fileUrl) throws IOException {
+        // 本地实现不处理远程 URL（COS 地址由 CosFileStorageService 代理），防止误用
+        if (StrUtil.startWithIgnoreCase(fileUrl, "http://")
+                || StrUtil.startWithIgnoreCase(fileUrl, "https://")) {
+            throw new IllegalArgumentException("本地存储不处理远程 URL: " + fileUrl);
+        }
+        File file = new File(fileUrl);
+        if (!file.exists() || !file.isFile()) {
+            throw new FileNotFoundException("文件不存在或已被清理: " + fileUrl);
+        }
+        return new FileInputStream(file);
+    }
+
+    @Override
+    public String presignedUrl(String fileUrl, int expireSeconds) {
+        // 本地路径无需签名：python worker 经共享卷按绝对路径直接读取
+        return fileUrl;
     }
 
     /**

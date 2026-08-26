@@ -4,7 +4,10 @@ import com.agent.rag.config.JwtProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.model.COSObject;
+import com.qcloud.cos.model.PutObjectRequest;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -16,17 +19,25 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -71,7 +82,22 @@ class KnowledgePublicControllerTest {
     private final List<String> createdTokens = new ArrayList<>();
     private final List<Long> createdUserIds = new ArrayList<>();
 
+    // 内存版 COS：文档/封面上传走 COS 后，任务消息签名与下载代理都需要 COSClient 替身返回可控结果
+    private final Map<String, byte[]> cosStore = new HashMap<>();
+
     private record LoginUser(String token, String account, long id) {
+    }
+
+    @BeforeEach
+    void setUpCosMock() throws Exception {
+        cosStore.clear();
+        when(cosClient.putObject(any(PutObjectRequest.class))).thenAnswer(inv -> {
+            PutObjectRequest req = inv.getArgument(0);
+            cosStore.put(req.getKey(), StreamUtils.copyToByteArray(req.getInputStream()));
+            return null;
+        });
+        when(cosClient.generatePresignedUrl(anyString(), anyString(), any(Date.class)))
+                .thenAnswer(inv -> new URL("https://test.cos.myqcloud.com/" + inv.getArgument(1) + "?q-sign-algorithm=sha1"));
     }
 
     @AfterEach

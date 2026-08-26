@@ -13,9 +13,11 @@ import com.agent.rag.dto.resp.MemberVO;
 import com.agent.rag.entity.KnowledgeDoc;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.service.KnowledgeService;
+import com.agent.rag.storage.FileStorageService;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.MediaTypeFactory;
@@ -32,6 +34,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -48,6 +52,9 @@ public class KnowledgeController {
 
     @Resource
     private KnowledgeService knowledgeService;
+
+    @Resource
+    private FileStorageService fileStorageService;
 
     /**
      * 创建知识库
@@ -251,7 +258,7 @@ public class KnowledgeController {
      * 文档内容文件（原始文件，inline 预览），供「打开」；可查看者均可访问
      */
     @GetMapping("/{id}/docs/{docId}/file")
-    public ResponseEntity<FileSystemResource> docFile(@PathVariable Long id, @PathVariable Long docId) {
+    public ResponseEntity<org.springframework.core.io.Resource> docFile(@PathVariable Long id, @PathVariable Long docId) {
         return buildFileResponse(knowledgeService.getViewableDoc(id, docId), true);
     }
 
@@ -259,7 +266,7 @@ public class KnowledgeController {
      * 文档内容文件（原始文件，attachment 下载），供「下载」；可查看者均可访问
      */
     @GetMapping("/{id}/docs/{docId}/download")
-    public ResponseEntity<FileSystemResource> docDownload(@PathVariable Long id, @PathVariable Long docId) {
+    public ResponseEntity<org.springframework.core.io.Resource> docDownload(@PathVariable Long id, @PathVariable Long docId) {
         return buildFileResponse(knowledgeService.getViewableDoc(id, docId), false);
     }
 
@@ -274,19 +281,37 @@ public class KnowledgeController {
     /**
      * 组装文件响应：inline=浏览器内预览（PDF/文本），attachment=触发下载。
      * 文件名按 RFC 5987（filename*=UTF-8''）编码，中文不乱码。
+     * fileUrl 为对象存储（COS）地址时经 Java 服务端流式代理转发，避免 302 直跳被前端 CORS 拦截。
      */
-    private ResponseEntity<FileSystemResource> buildFileResponse(KnowledgeDoc doc, boolean inline) {
+    private ResponseEntity<org.springframework.core.io.Resource> buildFileResponse(KnowledgeDoc doc, boolean inline) {
         if (StrUtil.isBlank(doc.getFileUrl())) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "文件地址为空");
-        }
-        File file = new File(doc.getFileUrl());
-        if (!file.exists() || !file.isFile()) {
-            throw new BusinessException(ErrorCode.NOT_FOUND, "文件不存在或已被清理");
         }
         String encodedName = URLEncoder.encode(doc.getName(), StandardCharsets.UTF_8).replace("+", "%20");
         String disposition = (inline ? "inline" : "attachment") + "; filename*=UTF-8''" + encodedName;
         MediaType mediaType = MediaTypeFactory.getMediaType(doc.getName())
                 .orElse(MediaType.APPLICATION_OCTET_STREAM);
+
+        String fileUrl = doc.getFileUrl();
+        if (StrUtil.startWithIgnoreCase(fileUrl, "http://")
+                || StrUtil.startWithIgnoreCase(fileUrl, "https://")) {
+            // 对象存储（如 COS）：服务端拉取内容流并流式返回，Spring 写完响应自动关闭流
+            try {
+                InputStream in = fileStorageService.open(fileUrl);
+                return ResponseEntity.ok()
+                        .contentType(mediaType)
+                        .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                        .body(new InputStreamResource(in));
+            } catch (IOException e) {
+                log.error("流式代理对象存储文件失败: url={}", fileUrl, e);
+                throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件读取失败");
+            }
+        }
+
+        File file = new File(fileUrl);
+        if (!file.exists() || !file.isFile()) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "文件不存在或已被清理");
+        }
         return ResponseEntity.ok()
                 .contentType(mediaType)
                 .contentLength(file.length())

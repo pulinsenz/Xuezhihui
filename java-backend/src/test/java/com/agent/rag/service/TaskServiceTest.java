@@ -9,7 +9,10 @@ import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.service.impl.TaskServiceImpl;
+import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.UserContext;
+import cn.hutool.json.JSONObject;
+import cn.hutool.json.JSONUtil;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +57,8 @@ class TaskServiceTest {
     private ListOperations<String, String> listOps;
     @Mock
     private KnowledgeDocMapper knowledgeDocMapper;
+    @Mock
+    private FileStorageService fileStorageService;
 
     private TaskServiceImpl taskService;
 
@@ -62,6 +67,7 @@ class TaskServiceTest {
         taskService = new TaskServiceImpl();
         ReflectionTestUtils.setField(taskService, "stringRedisTemplate", stringRedisTemplate);
         ReflectionTestUtils.setField(taskService, "knowledgeDocMapper", knowledgeDocMapper);
+        ReflectionTestUtils.setField(taskService, "fileStorageService", fileStorageService);
         ReflectionTestUtils.setField(taskService, "queueVectorize", "xzh:task:vectorize");
         // lenient：不同测试只用其中一个 mock，宽松处理未使用 stub
         lenient().when(stringRedisTemplate.opsForHash()).thenReturn(hashOps);
@@ -90,8 +96,42 @@ class TaskServiceTest {
         assertEquals("1", statusCaptor.getValue().get("user_id"));
         // 过期时间
         verify(stringRedisTemplate).expire(eq("xzh:task:" + taskId), any());
-        // 入队
+        // 入队：file_url 经 presignedUrl 转换后传给 Python worker
+        verify(fileStorageService).presignedUrl("/data/files/course.txt", 7200);
         verify(listOps).leftPush(eq("xzh:task:vectorize"), anyString());
+    }
+
+    @Test
+    void publishVectorize_localPath_presignedUrlReturnsAsIs() {
+        // 本地路径：presignedUrl 原样透传（worker 直读共享卷），消息里仍为绝对路径
+        when(fileStorageService.presignedUrl("/data/files/course.txt", 7200))
+                .thenReturn("/data/files/course.txt");
+
+        String taskId = taskService.publishVectorize(5L, 100L, "/data/files/course.txt", "course.txt");
+
+        ArgumentCaptor<String> msgCaptor = ArgumentCaptor.forClass(String.class);
+        verify(listOps).leftPush(eq("xzh:task:vectorize"), msgCaptor.capture());
+        JSONObject msg = JSONUtil.parseObj(msgCaptor.getValue());
+        assertEquals("/data/files/course.txt", msg.getStr("file_url"));
+        assertNotNull(taskId);
+    }
+
+    @Test
+    void publishVectorize_cosUrl_messageCarriesSignedUrl() {
+        // COS 私有对象：消息里应带临时签名 URL，Python worker 免凭证即可拉取
+        when(fileStorageService.presignedUrl(
+                "https://picture-1391878614.cos.ap-guangzhou.myqcloud.com/doc/202608/100/a.md", 7200))
+                .thenReturn("https://picture-1391878614.cos.ap-guangzhou.myqcloud.com/doc/202608/100/a.md?q-sign-algorithm=sha1");
+
+        String taskId = taskService.publishVectorize(5L, 100L,
+                "https://picture-1391878614.cos.ap-guangzhou.myqcloud.com/doc/202608/100/a.md", "a.md");
+
+        ArgumentCaptor<String> msgCaptor = ArgumentCaptor.forClass(String.class);
+        verify(listOps).leftPush(eq("xzh:task:vectorize"), msgCaptor.capture());
+        JSONObject msg = JSONUtil.parseObj(msgCaptor.getValue());
+        assertTrue(msg.getStr("file_url").startsWith("https://picture-1391878614.cos.ap-guangzhou.myqcloud.com/doc/202608/100/a.md?q-sign-algorithm="),
+                "COS 文档的任务消息应带签名 URL: " + msg.getStr("file_url"));
+        assertNotNull(taskId);
     }
 
     // ---------- 查询任务状态 ----------

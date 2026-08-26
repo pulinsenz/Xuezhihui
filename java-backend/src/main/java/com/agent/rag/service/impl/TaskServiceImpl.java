@@ -11,6 +11,7 @@ import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.service.TaskService;
+import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.UserContext;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -44,6 +45,9 @@ public class TaskServiceImpl implements TaskService {
     @Resource
     private KnowledgeDocMapper knowledgeDocMapper;
 
+    @Resource
+    private FileStorageService fileStorageService;
+
     @Value("${app.task.queue-vectorize}")
     private String queueVectorize;
 
@@ -53,12 +57,13 @@ public class TaskServiceImpl implements TaskService {
         User user = UserContext.getUser();
         String userId = user == null ? null : String.valueOf(user.getId());
 
-        // 1. 任务消息（Python worker 消费）
+        // 1. 任务消息（Python worker 消费）：file_url 为 COS 私有对象时带临时签名（2h），
+        //    python worker 无需 COS 凭证即可拉取；本地路径原样透传（worker 直读共享卷）
         Map<String, Object> message = new HashMap<>();
         message.put("task_id", taskId);
         message.put("knowledge_id", String.valueOf(knowledgeId));
         message.put("doc_id", String.valueOf(docId));
-        message.put("file_url", fileUrl);
+        message.put("file_url", fileStorageService.presignedUrl(fileUrl, 7200));
         message.put("name", name);
 
         // 2. 任务状态（Redis Hash，前端轮询）

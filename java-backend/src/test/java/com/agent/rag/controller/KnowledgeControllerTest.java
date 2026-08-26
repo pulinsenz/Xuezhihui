@@ -7,7 +7,10 @@ import com.agent.rag.config.JwtProperties;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.qcloud.cos.COSClient;
+import com.qcloud.cos.model.COSObject;
+import com.qcloud.cos.model.PutObjectRequest;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -20,11 +23,16 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -84,6 +93,28 @@ class KnowledgeControllerTest {
 
     private final List<String> createdTokens = new ArrayList<>();
     private final List<Long> createdUserIds = new ArrayList<>();
+
+    // 内存版 COS：putObject 存内容、getObject 按 key 取回、generatePresignedUrl 返回签名 URL，
+    // 让文档/封面上传全链路（上传→下载→签名）都经 @MockBean COSClient 走真实逻辑，而非依赖本地文件
+    private final Map<String, byte[]> cosStore = new HashMap<>();
+
+    @BeforeEach
+    void setUpCosMock() throws Exception {
+        cosStore.clear();
+        when(cosClient.putObject(any(PutObjectRequest.class))).thenAnswer(inv -> {
+            PutObjectRequest req = inv.getArgument(0);
+            cosStore.put(req.getKey(), StreamUtils.copyToByteArray(req.getInputStream()));
+            return null;
+        });
+        when(cosClient.getObject(anyString(), anyString())).thenAnswer(inv -> {
+            byte[] bytes = cosStore.get((String) inv.getArgument(1));
+            COSObject obj = new COSObject();
+            obj.setObjectContent(bytes == null ? new ByteArrayInputStream(new byte[0]) : new ByteArrayInputStream(bytes));
+            return obj;
+        });
+        when(cosClient.generatePresignedUrl(anyString(), anyString(), any(Date.class)))
+                .thenAnswer(inv -> new URL("https://test.cos.myqcloud.com/" + inv.getArgument(1) + "?q-sign-algorithm=sha1"));
+    }
 
     @AfterEach
     void tearDown() {
@@ -548,23 +579,23 @@ class KnowledgeControllerTest {
         String docId = docs(token, knowledgeId).get(0).get("id").asText();
         String fileUrl = jdbcTemplate.queryForObject("SELECT fileUrl FROM knowledge_doc WHERE id = ?",
                 String.class, Long.valueOf(docId));
-        assertTrue(StringUtils.hasText(fileUrl), "上传后应有本地文件地址");
-        File file = new File(fileUrl);
-        assertTrue(file.exists(), "上传后本地文件应存在");
+        assertTrue(fileUrl.startsWith("https://test.cos.myqcloud.com/doc/"), "上传后应为 COS 地址: " + fileUrl);
+        String cosKey = fileUrl.substring("https://test.cos.myqcloud.com/".length());
+        assertTrue(cosStore.containsKey(cosKey), "上传后 COS 对象应存在");
 
         String resp = mockMvc.perform(delete("/knowledge/{id}/docs/{docId}/purge", knowledgeId, docId)
                         .header("Authorization", "Bearer " + token))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(0, objectMapper.readTree(resp).get("code").asInt());
 
-        // 数据库是逻辑删除（记录保留）：deleteSource=purged，本地文件保留
+        // 数据库是逻辑删除（记录保留）：deleteSource=purged，COS 对象保留
         String deleteSource = jdbcTemplate.queryForObject("SELECT deleteSource FROM knowledge_doc WHERE id = ?",
                 String.class, Long.valueOf(docId));
         Integer isDelete = jdbcTemplate.queryForObject("SELECT isDelete FROM knowledge_doc WHERE id = ?",
                 Integer.class, Long.valueOf(docId));
         assertEquals("purged", deleteSource, "彻底删除应标记 deleteSource=purged");
         assertEquals(1, isDelete);
-        assertTrue(file.exists(), "彻底删除后本地文件应保留");
+        assertTrue(cosStore.containsKey(cosKey), "彻底删除后 COS 对象应保留");
 
         // 前端「已删除」分类也不展示彻底删除的文档
         assertEquals(0, docs(token, knowledgeId).size(), "正常列表不含该文档");
@@ -664,6 +695,30 @@ class KnowledgeControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().bytes(content))
                 .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("attachment")));
+    }
+
+    @Test
+    void docFile_cosUrl_streamsViaServerProxy() throws Exception {
+        // 存量文档迁移到 COS（私有对象）后，下载接口应经 Java 服务端 getObject 流式代理，而非 302 跳转
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "COS 打开测试");
+        upload(token, knowledgeId, "a.txt", "本地内容".getBytes(StandardCharsets.UTF_8));
+        String docId = docs(token, knowledgeId).get(0).get("id").asText();
+
+        String cosUrl = "https://test.cos.myqcloud.com/doc/202608/100/a.txt";
+        jdbcTemplate.update("UPDATE knowledge_doc SET fileUrl = ? WHERE id = ?", cosUrl, Long.valueOf(docId));
+
+        byte[] cosContent = "来自 COS 的私有内容".getBytes(StandardCharsets.UTF_8);
+        COSObject obj = new COSObject();
+        obj.setObjectContent(new ByteArrayInputStream(cosContent));
+        when(cosClient.getObject(anyString(), anyString())).thenReturn(obj);
+
+        mockMvc.perform(get("/knowledge/{id}/docs/{docId}/file", knowledgeId, docId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.TEXT_PLAIN))
+                .andExpect(content().bytes(cosContent))
+                .andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION, containsString("inline")));
     }
 
     @Test

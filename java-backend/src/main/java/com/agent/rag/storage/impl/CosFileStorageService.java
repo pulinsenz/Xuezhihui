@@ -13,6 +13,7 @@ import com.qcloud.cos.ClientConfig;
 import com.qcloud.cos.auth.BasicCOSCredentials;
 import com.qcloud.cos.exception.CosClientException;
 import com.qcloud.cos.exception.CosServiceException;
+import com.qcloud.cos.model.COSObject;
 import com.qcloud.cos.model.CannedAccessControlList;
 import com.qcloud.cos.model.ObjectMetadata;
 import com.qcloud.cos.model.PutObjectRequest;
@@ -56,8 +57,38 @@ public class CosFileStorageService implements FileStorageService {
 
     @Override
     public String store(MultipartFile file, Long userId) {
-        // 文档文件仍走本地共享卷
-        return localFileStorageService.store(file, userId);
+        // 文档同样上传 COS（私有对象，不设 ACL）：与机器无关，下载/向量化走签名+服务端代理；
+        // COS 未配置时回退本地共享卷，保证纯本地开发/离线可用
+        if (!cosConfigured()) {
+            return localFileStorageService.store(file, userId);
+        }
+        if (file == null || file.isEmpty()) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "文件不能为空");
+        }
+        String host = normalizeHost(cosProperties.getHost());
+        String originalName = StrUtil.nullToEmpty(file.getOriginalFilename());
+        String ext = FileUtil.extName(originalName);
+        String datePath = DateUtil.format(new Date(), "yyyyMM");
+        String key = StrUtil.format("doc/{}/{}/{}", datePath, userId,
+                IdUtil.fastSimpleUUID() + (StrUtil.isBlank(ext) ? "" : "." + ext));
+        try (InputStream in = file.getInputStream()) {
+            ObjectMetadata meta = new ObjectMetadata();
+            meta.setContentLength(file.getSize());
+            meta.setContentType(StrUtil.blankToDefault(file.getContentType(), "application/octet-stream"));
+            // 文档为私有对象：不设 ACL（默认私有），仅签名 URL / 服务端代理可读
+            client().putObject(new PutObjectRequest(cosProperties.getBucket(), key, in, meta));
+        } catch (IOException e) {
+            log.error("文档上传 COS 失败: file={}", originalName, e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件上传失败");
+        } catch (CosClientException e) {
+            // 网络/签名/服务端错误不吞成"系统内部异常"
+            String cosError = (e instanceof CosServiceException svc) ? svc.getErrorCode() : e.getMessage();
+            log.error("文档上传 COS 异常: key={}, cosError={}", key, cosError, e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件上传失败");
+        }
+        String url = host + "/" + key;
+        log.info("文档已上传 COS: key={}, url={}", key, url);
+        return url;
     }
 
     @Override
@@ -70,6 +101,65 @@ public class CosFileStorageService implements FileStorageService {
         return storeWeb(file, userId, "avatar");
     }
 
+    @Override
+    public InputStream open(String fileUrl) throws IOException {
+        if (!isCosUrl(fileUrl)) {
+            // 本地路径：委托本地实现读共享卷
+            return localFileStorageService.open(fileUrl);
+        }
+        String key = parseKey(fileUrl);
+        try {
+            COSObject object = client().getObject(cosProperties.getBucket(), key);
+            return object.getObjectContent();
+        } catch (CosClientException e) {
+            // 私有对象读取失败（如无权限/对象不存在）不吞成"系统内部异常"
+            String cosError = (e instanceof CosServiceException svc) ? svc.getErrorCode() : e.getMessage();
+            log.error("读取 COS 文件失败: key={}, cosError={}", key, cosError, e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件读取失败");
+        }
+    }
+
+    @Override
+    public String presignedUrl(String fileUrl, int expireSeconds) {
+        if (!isCosUrl(fileUrl)) {
+            // 本地路径无需签名，Python worker 直接读共享卷
+            return localFileStorageService.presignedUrl(fileUrl, expireSeconds);
+        }
+        String key = parseKey(fileUrl);
+        Date expiration = new Date(System.currentTimeMillis() + expireSeconds * 1000L);
+        try {
+            return client().generatePresignedUrl(cosProperties.getBucket(), key, expiration).toString();
+        } catch (CosClientException e) {
+            String cosError = (e instanceof CosServiceException svc) ? svc.getErrorCode() : e.getMessage();
+            log.error("生成 COS 签名 URL 失败: key={}, cosError={}", key, cosError, e);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "文件访问地址生成失败");
+        }
+    }
+
+    /**
+     * 是否为本实现管理的 COS URL：host 前缀匹配；非 COS 地址（本地路径/其它域）交由本地实现处理
+     */
+    private boolean isCosUrl(String fileUrl) {
+        if (StrUtil.isBlank(fileUrl) || !StrUtil.startWithIgnoreCase(fileUrl, "http")) {
+            return false;
+        }
+        String host = normalizeHost(cosProperties.getHost());
+        return StrUtil.isNotBlank(host) && fileUrl.toLowerCase().startsWith(host.toLowerCase());
+    }
+
+    /**
+     * 从 COS URL 解析对象 key：去掉 host 前缀与前导斜杠，剥离 query 参数（如签名残留）
+     */
+    private String parseKey(String fileUrl) {
+        String host = normalizeHost(cosProperties.getHost());
+        String withoutHost = fileUrl.substring(host.length());
+        int queryIdx = withoutHost.indexOf('?');
+        if (queryIdx >= 0) {
+            withoutHost = withoutHost.substring(0, queryIdx);
+        }
+        return withoutHost.replaceAll("^/+", "");
+    }
+
     /**
      * 公网图片上传 COS（封面/头像共用）：桶为私有时给对象单独加 public-read，
      * 前端 {@code <img>} 免鉴权即可直接加载。目录前缀区分业务（cover/avatar）。
@@ -80,8 +170,7 @@ public class CosFileStorageService implements FileStorageService {
         }
         String host = normalizeHost(cosProperties.getHost());
         // base 配置缺失时占位符会原样保留（如 ${cos.host}），不能当作可用值
-        if (StrUtil.isBlank(host) || StrUtil.isBlank(cosProperties.getBucket())
-                || !isConfigured(cosProperties.getSecretId()) || !isConfigured(cosProperties.getSecretKey())) {
+        if (!cosConfigured()) {
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "COS 未配置，无法上传图片");
         }
         String originalName = StrUtil.nullToEmpty(file.getOriginalFilename());
@@ -132,5 +221,15 @@ public class CosFileStorageService implements FileStorageService {
 
     private boolean isConfigured(String value) {
         return StrUtil.isNotBlank(value) && !value.startsWith("${");
+    }
+
+    /**
+     * COS 四项配置（host/bucket/secretId/secretKey）是否真实可用（占位符不算配置）
+     */
+    private boolean cosConfigured() {
+        return StrUtil.isNotBlank(normalizeHost(cosProperties.getHost()))
+                && StrUtil.isNotBlank(cosProperties.getBucket())
+                && isConfigured(cosProperties.getSecretId())
+                && isConfigured(cosProperties.getSecretKey());
     }
 }
