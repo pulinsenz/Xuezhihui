@@ -278,4 +278,21 @@ class AuthControllerTest {
         assertTrue(node.get("data").asText().startsWith("https://test.cos.myqcloud.com/avatar/"),
                 "头像应返回 COS 直链: " + node.get("data").asText());
     }
+
+    @Test
+    void uploadAvatar_rejectsNonImageType() throws Exception {
+        String token = registerAndGetToken();
+        // 非图片扩展名（含 svg 可嵌脚本格式）必须被拒
+        String[] banned = {"evil.txt", "logo.svg", "shell.sh"};
+        for (String filename : banned) {
+            MockMultipartFile file = new MockMultipartFile("file", filename,
+                    "application/octet-stream", new byte[]{1, 2, 3});
+            String resp = mockMvc.perform(multipart("/auth/avatar")
+                            .file(file)
+                            .header("Authorization", "Bearer " + token))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            JsonNode node = objectMapper.readTree(resp);
+            assertEquals(40000, node.get("code").asInt(), filename + " 应被头像白名单拒绝");
+        }
+    }
 }

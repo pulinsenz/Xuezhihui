@@ -24,7 +24,7 @@ describe('auth store', () => {
     })
 
     const store = useAuthStore()
-    await store.login('admin', 'admin12345')
+    await store.login('admin', 'mock-password-1')
 
     expect(store.token).toBe('token-1')
     expect(store.isLogin).toBe(true)

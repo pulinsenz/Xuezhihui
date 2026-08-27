@@ -789,4 +789,46 @@ class KnowledgeControllerTest {
         assertTrue(url.startsWith("https://test.cos.myqcloud.com/cover/"), "应返回 COS 直链: " + url);
         assertTrue(url.endsWith(".png"), "应保留扩展名");
     }
+
+    // ---------- 上传类型白名单 ----------
+
+    @Test
+    void uploadDoc_rejectsExtensionOutsideWhitelist() throws Exception {
+        String token = registerAndLogin();
+        long knowledgeId = createKnowledge(token, "白名单校验库");
+        // 可执行/脚本类扩展名必须在白名单外（注：html/xml 在文档白名单内，python-agent 可解析）
+        String[] banned = {".exe", ".sh", ".svg", ".php"};
+
+        for (String ext : banned) {
+            String filename = "恶意文件" + ext;
+            MockMultipartFile file = new MockMultipartFile("file", filename,
+                    "application/octet-stream", "malicious".getBytes(StandardCharsets.UTF_8));
+            String resp = mockMvc.perform(multipart("/knowledge/{id}/upload", knowledgeId)
+                            .file(file)
+                            .header("Authorization", "Bearer " + token))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            JsonNode node = objectMapper.readTree(resp);
+            assertEquals(40000, node.get("code").asInt(), ext + " 应在文档白名单外被拒");
+        }
+    }
+
+    @Test
+    void uploadCover_rejectsSvgAndNonImage() throws Exception {
+        String token = registerAndLogin();
+        // svg 可内嵌脚本，必须拒绝；jpg 在白名单内应通过
+        MockMultipartFile svg = new MockMultipartFile("file", "logo.svg", "image/svg+xml",
+                "<svg xmlns='http://www.w3.org/2000/svg'></svg>".getBytes(StandardCharsets.UTF_8));
+        String respSvg = mockMvc.perform(multipart("/knowledge/cover")
+                        .file(svg)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40000, objectMapper.readTree(respSvg).get("code").asInt(), "svg 封面应被拒");
+
+        MockMultipartFile jpg = new MockMultipartFile("file", "cover.jpg", "image/jpeg", "jpg-bytes".getBytes());
+        String respJpg = mockMvc.perform(multipart("/knowledge/cover")
+                        .file(jpg)
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, objectMapper.readTree(respJpg).get("code").asInt(), "jpg 封面上传应成功");
+    }
 }

@@ -31,6 +31,7 @@ import com.agent.rag.service.KnowledgeService;
 import com.agent.rag.service.TaskService;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.UserContext;
+import com.agent.rag.util.UploadFileTypeValidator;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -272,6 +273,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     @Override
     public String uploadDoc(Long knowledgeId, MultipartFile file) {
         getManageableKnowledge(knowledgeId);
+        // 类型白名单校验：与 python-agent 解析能力对齐，先于落盘/计算哈希
+        UploadFileTypeValidator.checkDocument(file);
         // 计算文件内容 SHA-256（先算哈希再落盘，供同文件去重）
         String fileHash = computeFileHash(file);
         // 该文件被管理员删除（封禁哈希黑名单 或 同库历史 admin 删除记录）→ 禁止用户再上传
@@ -594,6 +597,8 @@ public class KnowledgeServiceImpl implements KnowledgeService {
 
     @Override
     public String uploadCover(MultipartFile file) {
+        // 图片白名单校验：排除 svg 等可执行脚本格式，防存储型 XSS
+        UploadFileTypeValidator.checkImage(file);
         return fileStorageService.storeForWeb(file, UserContext.getUser().getId());
     }
 

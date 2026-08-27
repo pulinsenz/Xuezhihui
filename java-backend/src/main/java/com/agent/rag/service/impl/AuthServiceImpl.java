@@ -17,6 +17,7 @@ import com.agent.rag.service.AuthService;
 import com.agent.rag.service.LoginAttemptService;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.JwtUtil;
+import com.agent.rag.util.UploadFileTypeValidator;
 import com.agent.rag.util.UserContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
@@ -187,6 +188,8 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     public String uploadAvatar(MultipartFile file) {
+        // 图片白名单校验：排除 svg 等可执行脚本格式，防存储型 XSS
+        UploadFileTypeValidator.checkImage(file);
         User loginUser = getLoginUser();
         String url = fileStorageService.storeAvatar(file, loginUser.getId());
         log.info("头像上传成功: userId={}, url={}", loginUser.getId(), url);

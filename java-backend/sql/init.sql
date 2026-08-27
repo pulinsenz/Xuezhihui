@@ -113,9 +113,9 @@ CREATE TABLE IF NOT EXISTS `chat_message`
   COLLATE = utf8mb4_unicode_ci COMMENT ='对话消息';
 
 -- 7. 初始管理员账号（幂等：账号已存在则跳过）
--- 默认账号：admin  默认密码：admin12345（登录后建议修改）
+-- 默认账号：admin  默认密码为部署前在 .env 中配置的强随机值（其 BCrypt 哈希替换此处，登录后建议修改）
 INSERT IGNORE INTO `user` (`userAccount`, `userPassword`, `userName`, `userRole`)
-VALUES ('admin', '$2a$10$Db1RZ9oVxgAR4DDhoKY.2uv.OVB/BHkyCN88XCYxG2x1aQKbFLwzO', '管理员', 'admin');
+VALUES ('admin', '$2a$10$Nesmk0ZwWjn75wslpsrsruURLy2x4ByIfHTg6SQV20lT4er7/TuRC', '管理员', 'admin');
 
 -- 8. 兼容旧库：knowledge_doc 补 fileHash 列（已存在则跳过，幂等）
 SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS
@@ -213,10 +213,4 @@ CREATE TABLE IF NOT EXISTS `knowledge_member`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='知识库协作者';
-
--- ============================================================
--- 17. 原始数据导入（当前开发库快照，幂等）
--- 使用 INSERT IGNORE：主键/唯一键已存在则跳过，可重复执行
--- 空表（forbidden_file_hash / knowledge_favorite / knowledge_member）当前无数据
--- ============================================================
 
