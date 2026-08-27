@@ -29,11 +29,12 @@ services:
   etcd:
     image: quay.io/coreos/etcd:v3.5.14
 
+  # tag 与基文件 docker-compose.yml 保持一致（只换镜像源，不改版本）
   minio:
-    image: docker.m.daocloud.io/minio/minio:RELEASE.2024-05-10T01-41-38Z
+    image: docker.m.daocloud.io/minio/minio:RELEASE.2024-08-03T04-33-23Z
 
   milvus:
-    image: docker.m.daocloud.io/milvusdb/milvus:v2.4.6
+    image: docker.m.daocloud.io/milvusdb/milvus:v2.4.4
 
   # 前端构建/运行镜像走 DaoCloud 代理
   frontend:

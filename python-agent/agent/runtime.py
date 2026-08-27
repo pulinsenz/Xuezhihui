@@ -12,6 +12,7 @@ from storage.redis_store import RedisStore
 from storage.vector_store import LocalVectorStore
 
 llm = None
+user_llm = None
 embedding = None
 vector_store = None
 retriever = None
@@ -29,8 +30,17 @@ def create_vector_store(embedding_model):
 
 
 def init_runtime():
-    global llm, embedding, vector_store, retriever, redis_store, reranker
-    llm = LLMClient()
+    global llm, user_llm, embedding, vector_store, retriever, redis_store, reranker
+    llm = LLMClient()  # 管理员/默认：DEEPSEEK_API_KEY
+    # 普通用户 LLM：仅在有 USER_API_KEY 时创建；无 key 时 _pick_llm 回退到 llm
+    user_llm = None
+    if settings.user_api_key:
+        user_llm = LLMClient(
+            api_key=settings.user_api_key,
+            model=settings.user_llm_model,
+            base_url=settings.user_llm_base_url,
+            label="普通用户",
+        )
     embedding = EmbeddingModel(settings.embedding_model)
     vector_store = create_vector_store(embedding)
     retriever = HybridRetriever(vector_store, chunker=Chunker())

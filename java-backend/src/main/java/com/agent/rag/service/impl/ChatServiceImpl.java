@@ -147,19 +147,25 @@ public class ChatServiceImpl implements ChatService {
     }
 
     /**
-     * 注入受信用户身份：userId 只能来自登录态（JWT → ThreadLocal），
-     * 前端传的 user_id 一律以当前登录用户为准，杜绝身份伪造后回调他人数据
+     * 注入受信用户身份与角色：userId / userRole 只能来自登录态（JWT → ThreadLocal），
+     * 前端传的 user_id / user_role 一律以当前登录用户为准，杜绝身份伪造（Python 侧据此选 LLM）
      */
     private void fillUserId(ChatRequest request) {
         User user = UserContext.getUser();
         if (user != null) {
             request.setUserId(String.valueOf(user.getId()));
+            request.setUserRole(user.getUserRole());
         }
     }
 
     private String currentUserId() {
         User user = UserContext.getUser();
         return user == null ? null : String.valueOf(user.getId());
+    }
+
+    private String currentUserRole() {
+        User user = UserContext.getUser();
+        return user == null ? null : user.getUserRole();
     }
 
     /**
@@ -185,6 +191,11 @@ public class ChatServiceImpl implements ChatService {
         String userId = currentUserId();
         if (userId != null) {
             url.append("&user_id=").append(urlEncode(userId));
+        }
+        // 受信角色随 SSE 透传：Python 据此选普通用户/管理员 LLM
+        String userRole = currentUserRole();
+        if (StrUtil.isNotBlank(userRole)) {
+            url.append("&user_role=").append(urlEncode(userRole));
         }
         return url.toString();
     }

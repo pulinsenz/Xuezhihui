@@ -1,44 +1,47 @@
 """
-LLM 统一封装：DeepSeek（OpenAI 兼容接口）。
-生产强制要求 DEEPSEEK_API_KEY；仅开发可设 ALLOW_MOCK_LLM=true 用 MockLLM 兜底。
+LLM 统一封装：OpenAI 兼容接口（默认 DeepSeek；普通用户走 USER_API_KEY 的独立 LLM）。
+生产强制要求 API Key；仅开发可设 ALLOW_MOCK_LLM=true 用 MockLLM 兜底。
 """
 from typing import List
 
 from langchain_openai import ChatOpenAI
 
-from config import settings
+from config import DEEPSEEK_BASE_URL, settings
 from utils.logger_util import get_logger, agent_event
 from utils.exceptions import LLMError
 
 logger = get_logger("llm")
 
-DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-
 
 class LLMClient:
-    """LLM 客户端：chat(非流式) / stream(流式 token)"""
+    """LLM 客户端：chat(非流式) / stream(流式 token)
+    支持按 key/model/base_url 创建多实例：缺省用 DEEPSEEK_API_KEY（管理员），
+    也可用 USER_API_KEY 建普通用户实例。
+    """
 
-    def __init__(self):
-        self.api_key = settings.deepseek_api_key
-        self.model = settings.llm_model
+    def __init__(self, api_key=None, model=None, base_url=None, label="DeepSeek",
+                 temperature: float = 0.3, max_tokens: int = 1024):
+        self.api_key = api_key if api_key is not None else settings.deepseek_api_key
+        self.model = model if model is not None else settings.llm_model
+        self.base_url = base_url or DEEPSEEK_BASE_URL
         use_mock = (not self.api_key) and settings.allow_mock_llm
         if not self.api_key and not use_mock:
-            raise RuntimeError("DEEPSEEK_API_KEY 未配置且未开启 ALLOW_MOCK_LLM，拒绝启动")
+            raise RuntimeError(f"{label} 的 API Key 未配置且未开启 ALLOW_MOCK_LLM，拒绝启动")
         self._mock = MockLLM() if use_mock else None
         self._llm = None
         if self.api_key:
             self._llm = ChatOpenAI(
-                base_url=DEEPSEEK_BASE_URL,
+                base_url=self.base_url,
                 api_key=self.api_key,
                 model=self.model,
-                temperature=0.3,
-                max_tokens=1024,
+                temperature=temperature,
+                max_tokens=max_tokens,
                 timeout=60,
-                max_retries=2,  # DeepSeek 偶发失败自动重试
+                max_retries=2,  # 上游偶发失败自动重试
             )
-            logger.info("DeepSeek LLM 已就绪: model=%s", self.model)
+            logger.info("%s LLM 已就绪: model=%s, base_url=%s", label, self.model, self.base_url)
         else:
-            logger.warning("MockLLM 模式（仅开发调试，生产禁止）")
+            logger.warning("%s 无 API Key，MockLLM 模式（仅开发调试，生产禁止）", label)
 
     def chat(self, messages: List[dict], temperature: float = 0.3) -> str:
         """非流式对话。messages: [{"role": "system|user|assistant", "content": str}]"""

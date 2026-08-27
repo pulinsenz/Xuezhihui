@@ -145,8 +145,8 @@ class ChatControllerTest {
     }
 
     @Test
-    void chat_forwardsUserIdFromContext() throws Exception {
-        // 工具 Agent 回调业务数据依赖受信 userId：应由 Java 从登录态注入，前端不可伪造
+    void chat_forwardsUserIdAndRoleFromContext() throws Exception {
+        // 工具 Agent 回调业务数据依赖受信 userId；Python 侧按 userRole 选 LLM（普通用户/user）
         LoginResult login = registerAndLoginWithId();
         ChatResponse resp = new ChatResponse();
         resp.setAnswer("你有 2 个知识库。");
@@ -163,6 +163,8 @@ class ChatControllerTest {
         verify(pythonAgentClient).chat(captor.capture());
         assertEquals(String.valueOf(login.userId), captor.getValue().getUserId(),
                 "受信 userId 应透传给 Python Agent，供工具回调业务数据");
+        assertEquals("user", captor.getValue().getUserRole(),
+                "受信 userRole 应透传给 Python Agent，普通用户走新 LLM");
     }
 
     // ---------- 对话历史（会话列表 / 历史 / 删除） ----------

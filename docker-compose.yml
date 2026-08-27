@@ -115,6 +115,10 @@ services:
     container_name: xzh-python-agent
     environment:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
+      # 普通用户 LLM：独立密钥（必填）+ 独立模型/地址（走内部代理网关；:- 缺省注入，避免空串覆盖 Python 默认值）
+      USER_API_KEY: ${USER_API_KEY}
+      USER_LLM_MODEL: ${USER_LLM_MODEL:-deepseek-v4-flash-0731}
+      USER_LLM_BASE_URL: ${USER_LLM_BASE_URL:-http://101.43.101.178:8080/v1}
       AGENT_TOKEN: ${AGENT_TOKEN}
       VECTOR_STORE: milvus
       MILVUS_URI: http://milvus:19530

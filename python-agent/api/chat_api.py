@@ -26,6 +26,7 @@ class ChatRequest(BaseModel):
     query: str
     knowledge_id: Optional[str] = None
     user_id: Optional[str] = None  # 受信身份：Java 从 JWT 解析后注入，前端/外部不可伪造
+    user_role: Optional[str] = None  # 受信角色：user/admin，Java 从 JWT 解析后注入，决定用哪个 LLM
 
 
 class ChatResponse(BaseModel):
@@ -35,14 +36,28 @@ class ChatResponse(BaseModel):
     session_id: str
 
 
-def _build_state(query: str, session_id: str, knowledge_id: str, history: list, user_id: str = None) -> dict:
+def _pick_llm(user_role: str = None):
+    """按角色选 LLM：管理员走 DeepSeek，普通用户走 USER_API_KEY 的独立 LLM。
+    user_llm 未配置（无 USER_API_KEY）时回退 DeepSeek。"""
+    if user_role == "admin":
+        return runtime.llm
+    if runtime.user_llm is not None:
+        return runtime.user_llm
+    if runtime.llm is not None:
+        logger.warning("USER_API_KEY 未配置，普通用户 LLM 回退为 DeepSeek")
+        return runtime.llm
+    raise RuntimeError("LLM 未初始化")
+
+
+def _build_state(query: str, session_id: str, knowledge_id: str, history: list,
+                 user_id: str = None, user_role: str = None) -> dict:
     return {
         "query": query,
         "session_id": session_id,
         "knowledge_id": knowledge_id,
         "user_id": user_id,
         "history": history,
-        "llm": runtime.llm,
+        "llm": _pick_llm(user_role),
         "retriever": runtime.retriever,
         "retry_count": 0,
         "max_retries": MAX_RETRIES,
@@ -81,7 +96,8 @@ def chat(req: ChatRequest):
         raise HTTPException(status_code=400, detail="session_id 和 query 不能为空")
     history = runtime.redis_store.get_history(req.session_id)
     graph = get_graph()
-    result = graph.invoke(_build_state(req.query, req.session_id, req.knowledge_id, history, req.user_id))
+    result = graph.invoke(_build_state(req.query, req.session_id, req.knowledge_id, history,
+                                       req.user_id, req.user_role))
     answer = result.get("answer", "")
     route = result.get("route", "")
     sources = result.get("sources", [])
@@ -100,12 +116,12 @@ def chat(req: ChatRequest):
 
 
 @router.get("/stream")
-def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str = None):
+def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str = None, user_role: str = None):
     """SSE 流式对话：逐 token 输出 + thinking 思考过程事件，末尾带 done 事件（含回答/来源/路由）"""
     if not session_id or not query.strip():
         raise HTTPException(status_code=400, detail="session_id 和 query 不能为空")
     history = runtime.redis_store.get_history(session_id)
-    state = _build_state(query, session_id, knowledge_id, history, user_id)
+    state = _build_state(query, session_id, knowledge_id, history, user_id, user_role)
     graph = get_graph()
 
     def sse_event(payload: dict) -> str:

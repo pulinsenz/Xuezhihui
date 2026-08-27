@@ -36,3 +36,35 @@ def test_save_session_persist_failure_does_not_block(monkeypatch):
 
     chat_api._save_session("s1", "hi", "hi", "1001")  # 不应抛异常
     assert len(store.calls) == 2
+
+
+# ---------- 按角色选 LLM ----------
+
+class _FakeLLM:
+    def __init__(self, name):
+        self.name = name
+
+
+def test_pick_llm_admin_uses_deepseek(monkeypatch):
+    deepseek = _FakeLLM("deepseek")
+    monkeypatch.setattr(chat_api.runtime, "llm", deepseek)
+    monkeypatch.setattr(chat_api.runtime, "user_llm", _FakeLLM("user"))
+    assert chat_api._pick_llm("admin").name == "deepseek"
+
+
+def test_pick_llm_user_uses_user_llm(monkeypatch):
+    user_llm = _FakeLLM("user")
+    monkeypatch.setattr(chat_api.runtime, "llm", _FakeLLM("deepseek"))
+    monkeypatch.setattr(chat_api.runtime, "user_llm", user_llm)
+    assert chat_api._pick_llm("user").name == "user"
+    # 缺省角色（Java 未传）也按普通用户处理
+    assert chat_api._pick_llm(None).name == "user"
+    assert chat_api._pick_llm("").name == "user"
+
+
+def test_pick_llm_fallback_when_no_user_llm(monkeypatch):
+    """未配置 USER_API_KEY 时普通用户回退 DeepSeek"""
+    deepseek = _FakeLLM("deepseek")
+    monkeypatch.setattr(chat_api.runtime, "llm", deepseek)
+    monkeypatch.setattr(chat_api.runtime, "user_llm", None)
+    assert chat_api._pick_llm("user").name == "deepseek"

@@ -16,12 +16,20 @@ _BASE = Path(__file__).resolve().parent
 load_dotenv(_BASE / ".env", override=False)
 load_dotenv(_BASE.parent / ".env", override=False)
 
+# OpenAI 兼容网关 / 上游服务基地址
+DEEPSEEK_BASE_URL = "https://api.deepseek.com"
+
 
 @dataclass
 class Settings:
     # ---- LLM ----
     deepseek_api_key: str = os.getenv("DEEPSEEK_API_KEY", "")
     llm_model: str = os.getenv("LLM_MODEL", "deepseek-chat")
+    # 普通用户 LLM：独立密钥 + 独立模型/地址（走内部代理网关）
+    # 模型为 deepseek-v4-flash-0731；代理当前账号另有 deepseek-v4-pro-0813 可选（覆盖 USER_LLM_MODEL 切换）
+    user_api_key: str = os.getenv("USER_API_KEY", "")
+    user_llm_model: str = os.getenv("USER_LLM_MODEL", "deepseek-v4-flash-0731")
+    user_llm_base_url: str = os.getenv("USER_LLM_BASE_URL", "http://101.43.101.178:8080/v1")
     # 仅开发用：设 ALLOW_MOCK_LLM=true 才允许无 key 时用 MockLLM，生产禁止
     allow_mock_llm: bool = os.getenv("ALLOW_MOCK_LLM", "false").lower() == "true"
 
@@ -61,6 +69,8 @@ def validate_settings() -> None:
     errors = []
     if not settings.deepseek_api_key and not settings.allow_mock_llm:
         errors.append("DEEPSEEK_API_KEY 未配置（本地调试可设 ALLOW_MOCK_LLM=true，生产禁止）")
+    if not settings.user_api_key and not settings.allow_mock_llm:
+        errors.append("USER_API_KEY 未配置（普通用户 LLM 必需；本地调试可设 ALLOW_MOCK_LLM=true）")
     if not settings.agent_token:
         errors.append("AGENT_TOKEN 未配置（Java 调用鉴权必需）")
     if errors:

@@ -36,5 +36,11 @@ public class ChatRequest implements Serializable {
     @JsonProperty("user_id")
     private String userId;
 
+    /**
+     * 用户角色 user/admin（受信字段：仅 Java 从 JWT 解析后注入，决定 Python 侧用哪个 LLM）
+     */
+    @JsonProperty("user_role")
+    private String userRole;
+
     private static final long serialVersionUID = 1L;
 }
