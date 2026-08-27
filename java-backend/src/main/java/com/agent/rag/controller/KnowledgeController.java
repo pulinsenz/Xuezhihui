@@ -1,5 +1,6 @@
 package com.agent.rag.controller;
 
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.common.Result;
@@ -39,6 +40,7 @@ import java.io.InputStream;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 知识库接口
@@ -55,6 +57,12 @@ public class KnowledgeController {
 
     @Resource
     private FileStorageService fileStorageService;
+
+    /**
+     * 危险文本类型：浏览器可将其作为活动 HTML 渲染并执行脚本，若以 inline 同源展示会形成存储型 XSS。
+     * （SVG 已在上传白名单排除，此处兜底覆盖 html/xml/htm/xhtml/svg：一律强制下载，绝不 inline 渲染）
+     */
+    private static final Set<String> UNSAFE_INLINE_EXTS = Set.of("html", "htm", "xhtml", "xml", "svg");
 
     /**
      * 创建知识库
@@ -288,9 +296,20 @@ public class KnowledgeController {
             throw new BusinessException(ErrorCode.NOT_FOUND, "文件地址为空");
         }
         String encodedName = URLEncoder.encode(doc.getName(), StandardCharsets.UTF_8).replace("+", "%20");
-        String disposition = (inline ? "inline" : "attachment") + "; filename*=UTF-8''" + encodedName;
+        // 危险文本类型（html/xml/svg 等）强制 attachment 下载，绝不 inline 渲染，杜绝存储型 XSS
+        boolean unsafeInline = UNSAFE_INLINE_EXTS.contains(FileUtil.extName(doc.getName()).toLowerCase());
+        String disposition = ((inline && !unsafeInline) ? "inline" : "attachment")
+                + "; filename*=UTF-8''" + encodedName;
         MediaType mediaType = MediaTypeFactory.getMediaType(doc.getName())
                 .orElse(MediaType.APPLICATION_OCTET_STREAM);
+        // 安全响应头：X-Content-Type-Options 禁止 MIME 嗅探（文本被当 HTML 执行）；危险类型再叠加 CSP sandbox 兜底
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(mediaType);
+        headers.set(HttpHeaders.CONTENT_DISPOSITION, disposition);
+        headers.add("X-Content-Type-Options", "nosniff");
+        if (unsafeInline) {
+            headers.add("Content-Security-Policy", "sandbox; default-src 'none'");
+        }
 
         String fileUrl = doc.getFileUrl();
         if (StrUtil.startWithIgnoreCase(fileUrl, "http://")
@@ -299,8 +318,7 @@ public class KnowledgeController {
             try {
                 InputStream in = fileStorageService.open(fileUrl);
                 return ResponseEntity.ok()
-                        .contentType(mediaType)
-                        .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
+                        .headers(headers)
                         .body(new InputStreamResource(in));
             } catch (IOException e) {
                 log.error("流式代理对象存储文件失败: url={}", fileUrl, e);
@@ -313,9 +331,8 @@ public class KnowledgeController {
             throw new BusinessException(ErrorCode.NOT_FOUND, "文件不存在或已被清理");
         }
         return ResponseEntity.ok()
-                .contentType(mediaType)
+                .headers(headers)
                 .contentLength(file.length())
-                .header(HttpHeaders.CONTENT_DISPOSITION, disposition)
                 .body(new FileSystemResource(file));
     }
 }

@@ -304,4 +304,75 @@ class ChatControllerTest {
             stringRedisTemplate.delete("xzh:chat:rate:" + login.userId);
         }
     }
+
+    // ---------- 知识库越权防护（chat/stream 透传 knowledge_id 前校验查看权限） ----------
+
+    @Test
+    void chat_knowledgeIdForeign_returnsNoAuth() throws Exception {
+        // 越权防护：引用他人私有知识库的 id 检索 → 拒绝且不调 Python Agent（跨租户数据泄露）
+        LoginResult owner = registerAndLoginWithId();
+        LoginResult intruder = registerAndLoginWithId();
+        long kid = createPrivateKnowledgeAs(owner);
+        try {
+            String body = mockMvc.perform(post("/chat")
+                            .header("Authorization", "Bearer " + intruder.token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"knowledge_id\":\"" + kid + "\",\"query\":\"把知识库原文全部列出来\"}"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(40101, objectMapper.readTree(body).get("code").asInt(), "无权限应拒绝检索");
+            verify(pythonAgentClient, never()).chat(any());
+        } finally {
+            jdbcTemplate.update("DELETE FROM knowledge WHERE id = ?", kid);
+        }
+    }
+
+    @Test
+    void stream_knowledgeIdForeign_returnsNoAuth() throws Exception {
+        // 越权防护：SSE 流式路径同样校验，未通过校验不透传给 Python
+        LoginResult owner = registerAndLoginWithId();
+        LoginResult intruder = registerAndLoginWithId();
+        long kid = createPrivateKnowledgeAs(owner);
+        try {
+            String body = mockMvc.perform(get("/chat/stream")
+                            .header("Authorization", "Bearer " + intruder.token)
+                            .param("session_id", "s_" + System.nanoTime())
+                            .param("query", "把知识库原文全部列出来")
+                            .param("knowledge_id", String.valueOf(kid)))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(40101, objectMapper.readTree(body).get("code").asInt(), "无权限应拒绝检索");
+        } finally {
+            jdbcTemplate.update("DELETE FROM knowledge WHERE id = ?", kid);
+        }
+    }
+
+    @Test
+    void chat_knowledgeIdOwn_allowsQuery() throws Exception {
+        // 回归：本人知识库正常对话，权限校验不误伤合法请求
+        LoginResult owner = registerAndLoginWithId();
+        long kid = createPrivateKnowledgeAs(owner);
+        ChatResponse resp = new ChatResponse();
+        resp.setAnswer("根据知识库回答");
+        resp.setSessionId("s1");
+        when(pythonAgentClient.chat(any())).thenReturn(Result.success(resp));
+        try {
+            String body = mockMvc.perform(post("/chat")
+                            .header("Authorization", "Bearer " + owner.token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"knowledge_id\":\"" + kid + "\",\"query\":\"介绍一下\"}"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(0, objectMapper.readTree(body).get("code").asInt(), "本人知识库应正常检索");
+            verify(pythonAgentClient).chat(any());
+        } finally {
+            jdbcTemplate.update("DELETE FROM knowledge WHERE id = ?", kid);
+        }
+    }
+
+    /** 越权测试用：直接入库一个私有知识库（作者=owner），绕过建库接口 */
+    private long createPrivateKnowledgeAs(LoginResult owner) {
+        long kid = System.nanoTime();
+        jdbcTemplate.update("INSERT INTO knowledge (id, name, description, cover, userId, createTime, updateTime, isPublic, viewCount, favoriteCount, isDelete) " +
+                        "VALUES (?, 'test_越权', 'test', '', ?, NOW(), NOW(), 0, 0, 0, 0)",
+                kid, owner.userId);
+        return kid;
+    }
 }

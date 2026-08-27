@@ -13,6 +13,7 @@ import com.agent.rag.exception.BusinessException;
 import com.agent.rag.service.ChatHistoryService;
 import com.agent.rag.service.ChatRateLimitService;
 import com.agent.rag.service.ChatService;
+import com.agent.rag.service.KnowledgeService;
 import com.agent.rag.util.UserContext;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -56,9 +57,15 @@ public class ChatServiceImpl implements ChatService {
     @Resource
     private ChatRateLimitService chatRateLimitService;
 
+    @Resource
+    private KnowledgeService knowledgeService;
+
     @Override
     public ChatResponse chat(ChatRequest request) {
         validate(request);
+        // 越权防护：knowledge_id 会透传给 Python Agent 检索，转发前必须校验当前用户可查看该知识库，
+        // 否则任意登录用户可引用他人私有知识库的 id 读取其文档内容（跨租户数据泄露）
+        checkKnowledgeAccess(request.getKnowledgeId());
         if (StrUtil.isBlank(request.getSessionId())) {
             request.setSessionId(IdUtil.fastSimpleUUID());
         }
@@ -78,6 +85,8 @@ public class ChatServiceImpl implements ChatService {
     @Override
     public SseEmitter stream(ChatRequest request) {
         validate(request);
+        // 越权防护：knowledge_id 透传 Python 检索前校验查看权限（与 chat 同规）
+        checkKnowledgeAccess(request.getKnowledgeId());
         if (StrUtil.isBlank(request.getSessionId())) {
             request.setSessionId(IdUtil.fastSimpleUUID());
         }
@@ -197,6 +206,24 @@ public class ChatServiceImpl implements ChatService {
             throw new BusinessException(ErrorCode.NOT_LOGIN, "未登录");
         }
         return user.getId();
+    }
+
+    /**
+     * 知识库读取越权防护：/chat 与 /chat/stream 会把 knowledge_id 透传给 Python Agent 检索。
+     * 转发前必须先按「作者 / 协作者 / 收藏者 / 公开库」校验当前用户可查看该知识库：
+     * 无权时 getViewableKnowledge 抛 NO_AUTH，知识库不存在抛 NOT_FOUND，一律拒绝不发起检索。
+     */
+    private void checkKnowledgeAccess(String knowledgeId) {
+        if (StrUtil.isBlank(knowledgeId)) {
+            return;
+        }
+        Long id;
+        try {
+            id = Long.valueOf(knowledgeId);
+        } catch (NumberFormatException e) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "知识库参数错误");
+        }
+        knowledgeService.getViewableKnowledge(id);
     }
 
     private String buildStreamUrl(ChatRequest request) {
