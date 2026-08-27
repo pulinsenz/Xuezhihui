@@ -11,6 +11,7 @@ import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.LoginAttemptService;
+import com.agent.rag.service.TurnstileService;
 import com.agent.rag.service.impl.AuthServiceImpl;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.JwtUtil;
@@ -37,6 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -61,6 +63,8 @@ class AuthServiceTest {
     private FileStorageService fileStorageService;
     @Mock
     private LoginAttemptService loginAttemptService;
+    @Mock
+    private TurnstileService turnstileService;
 
     private JwtProperties jwtProperties;
     private LoginSecurityProperties loginSecurityProperties;
@@ -83,12 +87,21 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(authService, "fileStorageService", fileStorageService);
         ReflectionTestUtils.setField(authService, "loginAttemptService", loginAttemptService);
         ReflectionTestUtils.setField(authService, "loginSecurityProperties", loginSecurityProperties);
+        ReflectionTestUtils.setField(authService, "turnstileService", turnstileService);
+        // 默认放行人机验证门：单测聚焦业务逻辑，Turnstile 校验由 controller 集成测试覆盖
+        allowTurnstile();
     }
 
     /** 默认放行防爆破门（IP 配额充足、账号未锁定） */
     private void allowLoginAttempt() {
         when(loginAttemptService.consumeIpQuota(anyString())).thenReturn(true);
         when(loginAttemptService.checkLocked(anyString())).thenReturn(0L);
+    }
+
+    /** 默认放行人机验证门（单测关注业务逻辑，不关注 Turnstile） */
+    private void allowTurnstile() {
+        // lenient：仅 register 用例用到，其他用例不触发时不算多余 stub
+        lenient().when(turnstileService.verify(any(), any())).thenReturn(true);
     }
 
     @AfterEach
@@ -153,6 +166,18 @@ class AuthServiceTest {
         req.setCheckPassword("different");
         BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req));
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+    }
+
+    @Test
+    void register_turnstileVerifyFails_throwsParamsError() {
+        // 覆盖 allowTurnstile() 默认放行：人机验证不通过时必须拒绝注册（防批量机器人）
+        when(turnstileService.verify(any(), any())).thenReturn(false);
+        RegisterRequest req = validRegister();
+        req.setTurnstileToken("invalid-token");
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+        // 校验失败应短路，不得写入用户
+        verify(userMapper, never()).insert(any(User.class));
     }
 
     // ---------- 登录 ----------

@@ -50,6 +50,10 @@ app:
   file:
     storage:
       local-path: ./data/files
+  # 人机验证（Cloudflare Turnstile）：注册防批量机器人。生产配置 TURNSTILE_SECRET_KEY 后强制校验，
+  # 未配置（本地/测试）降级放行。前端需对应配置 VITE_TURNSTILE_SITE_KEY 渲染 widget
+  turnstile:
+    secret-key: ${TURNSTILE_SECRET_KEY:}
 #接口文档配置（生产环境默认关闭，本地开发开启增强模式）
 knife4j:
   enable: true

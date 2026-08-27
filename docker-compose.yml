@@ -94,6 +94,8 @@ services:
       COS_SECRETKEY: ${COS_SECRETKEY:-}
       COS_REGION: ${COS_REGION:-ap-guangzhou}
       COS_BUCKET: ${COS_BUCKET:-}
+      # 人机验证：注册防批量机器人（未配置则注册接口开放，上线必须填）
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:-}
     volumes:
       # 上传文件与 python-agent 共享（生产可换 COS 对象存储）
       - file-data:/app/data/files
@@ -153,7 +155,11 @@ services:
 
   # 前端：Nginx 托管 Vite 产物，对外唯一入口 :80（生产由 prod override 收敛端口）
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        # Cloudflare Turnstile 站点 key（公开值，注册人机验证；未配置则不渲染验证码）
+        VITE_TURNSTILE_SITE_KEY: ${VITE_TURNSTILE_SITE_KEY:-}
     container_name: xzh-frontend
     ports:
       - "80:80"

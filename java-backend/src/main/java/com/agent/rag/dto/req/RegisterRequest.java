@@ -32,5 +32,10 @@ public class RegisterRequest implements Serializable {
      */
     private String userName;
 
+    /**
+     * Cloudflare Turnstile 人机验证 token（生产配置 TURNSTILE_SECRET_KEY 后必填）
+     */
+    private String turnstileToken;
+
     private static final long serialVersionUID = 1L;
 }

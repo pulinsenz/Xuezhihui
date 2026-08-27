@@ -22,6 +22,7 @@ set -a; source .env; set +a
 : "${DEEPSEEK_API_KEY:?请在 .env 中设置 DEEPSEEK_API_KEY}"
 : "${AGENT_TOKEN:?请在 .env 中设置 AGENT_TOKEN}"
 : "${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}"
+: "${TURNSTILE_SECRET_KEY:?请在 .env 中设置 TURNSTILE_SECRET_KEY（Cloudflare Turnstile 人机验证，防批量注册薅 LLM）}"
 
 # 3. 预检：version + config（config 会真实解析 ports: !reset 等语法，失败提前暴露）
 docker compose version

@@ -15,6 +15,7 @@ import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.AuthService;
 import com.agent.rag.service.LoginAttemptService;
+import com.agent.rag.service.TurnstileService;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.JwtUtil;
 import com.agent.rag.util.UploadFileTypeValidator;
@@ -59,8 +60,15 @@ public class AuthServiceImpl implements AuthService {
     @Resource
     private LoginSecurityProperties loginSecurityProperties;
 
+    @Resource
+    private TurnstileService turnstileService;
+
     @Override
     public Long register(RegisterRequest request) {
+        // 人机验证：生产配置 TURNSTILE_SECRET_KEY 后强制，缺失/非法 token 拒绝注册（防批量机器人薅 LLM）
+        if (!turnstileService.verify(request.getTurnstileToken(), null)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "人机验证未通过，请重试");
+        }
         String userAccount = request.getUserAccount();
         String userPassword = request.getUserPassword();
         String checkPassword = request.getCheckPassword();
