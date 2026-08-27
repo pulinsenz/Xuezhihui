@@ -9,3 +9,7 @@ spring:
 security:
   login:
     ip-max-per-minute: 1000
+  # 对话限流阈值调高：多个 controller 集成测试会注册新账号反复对话，默认 50/30min 会打爆配额。
+  # 限流拦截本身由 ChatRateLimitServiceTest 用小阈值（@SpringBootTest properties 覆盖）单独验证
+  chat:
+    max-count-per-window: 10000

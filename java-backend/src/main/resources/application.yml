@@ -78,6 +78,7 @@ jwt:
   token-prefix: "Bearer "
   redis-prefix: "xzh:login:"
 #登录防爆破：账号连续失败锁定 + IP 限流（Redis 计数）。生产可按需调参
+#对话限流：普通用户窗口内对话次数上限（防脚本刷 LLM token），admin 不限
 security:
   login:
     max-fail-count: 5
@@ -85,3 +86,6 @@ security:
     lock-minutes: 15
     ip-max-per-minute: 20
     ip-window-seconds: 60
+  chat:
+    max-count-per-window: 50
+    window-minutes: 30

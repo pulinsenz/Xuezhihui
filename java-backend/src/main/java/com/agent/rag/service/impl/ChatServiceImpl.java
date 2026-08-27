@@ -11,6 +11,7 @@ import com.agent.rag.dto.resp.SessionVO;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.service.ChatHistoryService;
+import com.agent.rag.service.ChatRateLimitService;
 import com.agent.rag.service.ChatService;
 import com.agent.rag.util.UserContext;
 import jakarta.annotation.Resource;
@@ -52,12 +53,17 @@ public class ChatServiceImpl implements ChatService {
     @Value("${app.agent.token:}")
     private String agentToken;
 
+    @Resource
+    private ChatRateLimitService chatRateLimitService;
+
     @Override
     public ChatResponse chat(ChatRequest request) {
         validate(request);
         if (StrUtil.isBlank(request.getSessionId())) {
             request.setSessionId(IdUtil.fastSimpleUUID());
         }
+        // 用户级对话限流：防脚本刷 LLM token（普通用户配额，admin 不限）
+        enforceRateLimit();
         // 写侧越权防护：会话已存在则必须属于当前用户
         chatHistoryService.checkAccess(request.getSessionId(), requireUserId());
         fillUserId(request);
@@ -75,6 +81,8 @@ public class ChatServiceImpl implements ChatService {
         if (StrUtil.isBlank(request.getSessionId())) {
             request.setSessionId(IdUtil.fastSimpleUUID());
         }
+        // 用户级对话限流：防脚本刷 LLM token（普通用户配额，admin 不限）
+        enforceRateLimit();
         // 写侧越权防护：会话已存在则必须属于当前用户
         chatHistoryService.checkAccess(request.getSessionId(), requireUserId());
         SseEmitter emitter = new SseEmitter(300_000L);
@@ -143,6 +151,18 @@ public class ChatServiceImpl implements ChatService {
     private void validate(ChatRequest request) {
         if (request == null || StrUtil.isBlank(request.getQuery())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "问题内容不能为空");
+        }
+    }
+
+    /**
+     * 用户级对话限流：普通用户窗口内配额耗尽则拒绝，admin 不限。
+     * 在参数校验之后、真正发起 LLM 调用之前执行，拦截最省（无效请求不计配额，避免被利用刷爆自己的配额）。
+     */
+    private void enforceRateLimit() {
+        User user = UserContext.getUser();
+        if (user != null && !chatRateLimitService.consume(user.getId(), user.getUserRole())) {
+            log.warn("对话限流: userId={}", user.getId());
+            throw new BusinessException(ErrorCode.CHAT_TOO_FREQUENT, "对话过于频繁，请稍后再试");
         }
     }
 

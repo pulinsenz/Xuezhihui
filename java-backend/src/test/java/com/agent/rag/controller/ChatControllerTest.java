@@ -285,4 +285,23 @@ class ChatControllerTest {
             jdbcTemplate.update("DELETE FROM chat_session WHERE sessionId = ?", sid);
         }
     }
+
+    @Test
+    void chat_userExceedsRateLimit_returnsTooFrequent() throws Exception {
+        // 对话限流：预置 Redis 计数超过阈值后，普通用户对话被拒且不调 Python。
+        // 阈值由 application-test.yml 抬到 10000，这里直接预置超限值，不依赖真实调用次数。
+        LoginResult login = registerAndLoginWithId();
+        stringRedisTemplate.opsForValue().set("xzh:chat:rate:" + login.userId, "10001");
+        try {
+            String body = mockMvc.perform(post("/chat")
+                            .header("Authorization", "Bearer " + login.token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"query\":\"你好\"}"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(40005, objectMapper.readTree(body).get("code").asInt(), "超限后应返回对话频繁");
+            verify(pythonAgentClient, never()).chat(any());
+        } finally {
+            stringRedisTemplate.delete("xzh:chat:rate:" + login.userId);
+        }
+    }
 }
