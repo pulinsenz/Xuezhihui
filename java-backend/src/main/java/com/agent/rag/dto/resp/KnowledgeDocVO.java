@@ -53,7 +53,8 @@ public class KnowledgeDocVO implements Serializable {
         vo.setId(doc.getId());
         vo.setKnowledgeId(doc.getKnowledgeId());
         vo.setName(doc.getName());
-        vo.setFileUrl(doc.getFileUrl());
+        // 不回显服务器内部绝对路径（本地存储会泄露磁盘结构）；文档内容一律经 /docs/{id}/file 按 id 获取
+        vo.setFileUrl(null);
         vo.setFileSize(doc.getFileSize());
         vo.setFileType(doc.getFileType());
         vo.setVectorStatus(doc.getVectorStatus());

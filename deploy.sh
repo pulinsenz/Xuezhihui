@@ -24,6 +24,14 @@ set -a; source .env; set +a
 : "${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}"
 : "${TURNSTILE_SECRET_KEY:?请在 .env 中设置 TURNSTILE_SECRET_KEY（Cloudflare Turnstile 人机验证，防批量注册薅 LLM）}"
 
+# 3.5 安全建议（非阻塞）：生产强烈建议配置 Redis 鉴权与初始管理员密码
+if [ -z "${REDIS_PASSWORD:-}" ]; then
+  echo ">> 提示: 未设置 REDIS_PASSWORD，Redis 将无鉴权运行（生产建议：openssl rand -hex 16 生成并设置）"
+fi
+if [ -z "${ADMIN_PASSWORD:-}" ]; then
+  echo ">> 提示: 未设置 ADMIN_PASSWORD，admin 密码将由 Java 启动时随机生成并打印到日志（生产建议显式设置）"
+fi
+
 # 3. 预检：version + config（config 会真实解析 ports: !reset 等语法，失败提前暴露）
 docker compose version
 $COMPOSE config --quiet

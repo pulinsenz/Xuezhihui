@@ -112,10 +112,10 @@ CREATE TABLE IF NOT EXISTS `chat_message`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='对话消息';
 
--- 7. 初始管理员账号（幂等：账号已存在则跳过）
--- 默认账号：admin  默认密码为部署前在 .env 中配置的强随机值（其 BCrypt 哈希替换此处，登录后建议修改）
-INSERT IGNORE INTO `user` (`userAccount`, `userPassword`, `userName`, `userRole`)
-VALUES ('admin', '$2a$10$Nesmk0ZwWjn75wslpsrsruURLy2x4ByIfHTg6SQV20lT4er7/TuRC', '管理员', 'admin');
+-- 7. 初始管理员账号
+-- 由 AdminInitializer 在应用启动时创建（密码来自环境变量 ADMIN_PASSWORD，未配置则生成随机密码打印到日志）。
+-- 不再在此提交 BCrypt 哈希：提交公开仓库等于把可离线爆破的管理员凭据公之于众。
+-- 注意：本节留空是刻意为之，admin 账号由 Java 后端首次启动补齐。
 
 -- 8. 兼容旧库：knowledge_doc 补 fileHash 列（已存在则跳过，幂等）
 SET @col = (SELECT COUNT(*) FROM information_schema.COLUMNS

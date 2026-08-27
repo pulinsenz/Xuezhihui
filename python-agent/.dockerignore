@@ -1,0 +1,10 @@
+# 构建镜像时排除本地/敏感文件，避免打入容器镜像（含弱默认 token、ALLOW_MOCK_LLM 等）
+.env
+**/.env
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/
+.git/
+.gitignore
+.idea/

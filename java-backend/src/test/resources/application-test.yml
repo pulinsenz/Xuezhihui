@@ -6,6 +6,11 @@ spring:
     redis:
       database: 15
 
+# 测试 profile 固定内部鉴权 token（application.yml 已去掉 AGENT_TOKEN 默认值，测试须显式提供）
+app:
+  agent:
+    token: test-agent-token
+
 security:
   login:
     ip-max-per-minute: 1000

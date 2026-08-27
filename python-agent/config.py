@@ -45,9 +45,15 @@ class Settings:
     # ---- Redis 会话记忆 ----
     redis_host: str = os.getenv("REDIS_HOST", "localhost")
     redis_port: int = int(os.getenv("REDIS_PORT", "6379"))
+    # 生产通过 REDIS_PASSWORD 开启鉴权（与 Java / redis 服务同源）；留空则不鉴权（本地开发）
+    redis_password: str = os.getenv("REDIS_PASSWORD", "")
 
     # ---- 长任务消息队列（Redis List：Java 提交 / 本服务消费）----
     task_queue_vectorize: str = os.getenv("TASK_QUEUE_VECTORIZE", "xzh:task:vectorize")
+
+    # ---- 文件读取安全（防任意文件读取 /proc/self/environ、/app/.env 等）----
+    # 仅允许读取该目录内的本地文件；生产由 docker-compose 固定为共享卷 /app/data/files
+    file_base_dir: str = os.getenv("FILE_BASE_DIR", "/app/data/files")
 
     # ---- 内部鉴权（Java 调用时带 X-Agent-Token）----
     agent_token: str = os.getenv("AGENT_TOKEN", "")

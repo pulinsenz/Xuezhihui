@@ -21,6 +21,7 @@ class RedisStore:
         self.client = redis.Redis(
             host=host or os.getenv("REDIS_HOST", "localhost"),
             port=port or int(os.getenv("REDIS_PORT", "6379")),
+            password=os.getenv("REDIS_PASSWORD", "") or None,
             db=0,
             decode_responses=True,
             # 强制 RESP2：redis-py 8.x 默认 RESP3 会发 HELLO 命令，旧版 Redis 不支持

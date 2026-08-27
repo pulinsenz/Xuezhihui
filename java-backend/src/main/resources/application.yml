@@ -17,6 +17,8 @@ spring:
       database: 0
       host: 127.0.0.1
       port: 6379
+      # 生产通过 REDIS_PASSWORD 开启鉴权（配合 docker-compose redis requirepass）；留空则不鉴权（本地开发）
+      password: ${REDIS_PASSWORD:}
       timeout: 5000
   #文件上传配置
   servlet:
@@ -41,8 +43,11 @@ app:
   # Python Agent 服务地址（Feign 调用）+ 内部鉴权 token
   agent:
     base-url: http://localhost:8000
-    # 生产用环境变量 AGENT_TOKEN 注入；默认值与 python-agent/.env 一致
-    token: ${AGENT_TOKEN:dev-agent-token-change-me}
+    # 内部鉴权 token：必须由环境变量 AGENT_TOKEN 注入，缺失则启动失败（fail-closed，无公开默认值）
+    token: ${AGENT_TOKEN}
+  # 初始管理员：首次启动 admin 不存在时以其创建（ADMIN_PASSWORD 缺省则生成随机密码打印日志，见 AdminInitializer）
+  admin:
+    initial-password: ${ADMIN_PASSWORD:}
   # 长任务消息队列（Redis List）：Java 提交，Python worker 消费
   task:
     queue-vectorize: ${TASK_QUEUE_VECTORIZE:xzh:task:vectorize}

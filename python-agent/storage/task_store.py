@@ -20,6 +20,7 @@ class TaskStore:
         self.client = redis.Redis(
             host=host or os.getenv("REDIS_HOST", "localhost"),
             port=port or int(os.getenv("REDIS_PORT", "6379")),
+            password=os.getenv("REDIS_PASSWORD", "") or None,
             db=0,
             decode_responses=True,
             protocol=2,  # 兼容旧版 Redis（RESP2）

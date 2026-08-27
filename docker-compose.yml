@@ -29,6 +29,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: xzh-redis
+    # 生产通过 REDIS_PASSWORD 开启 requirepass；未设置则不带密码启动（本地开发）。
+    # 用 shell 条件判断：空值时不能拼出裸 --requirepass（redis 会报参数缺失而启动失败）
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    command: sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then exec redis-server --requirepass "$$REDIS_PASSWORD"; else exec redis-server; fi'
     ports:
       - "6379:6379"
     volumes:
@@ -86,8 +91,11 @@ services:
       SPRING_DATASOURCE_USERNAME: root
       SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-111111}
       SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       APP_AGENT_BASE_URL: http://python-agent:8000
       APP_AGENT_TOKEN: ${AGENT_TOKEN}
+      # 初始管理员密码（首次启动 admin 不存在时以其创建；未配置则生成随机密码打印到 Java 日志）
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # 腾讯云 COS（封面对象存储）：映射 application.yml 的 cos.client.* 占位符
       COS_HOST: ${COS_HOST:-}
       COS_SECRETID: ${COS_SECRETID:-}
@@ -128,6 +136,9 @@ services:
       VECTOR_STORE: milvus
       MILVUS_URI: http://milvus:19530
       REDIS_HOST: redis
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      # 文件读取安全：仅允许读取共享卷内的文件（防任意文件读取 /proc/self/environ 等）
+      FILE_BASE_DIR: /app/data/files
       LOG_LEVEL: INFO
       # 回调 Java（vector-callback/chat-save/user-stats）：config.py 默认 localhost 在容器内指向自身，
       # 必须显式指到 java 服务名；本机混合场景（Java 在宿主机）可在 .env 覆盖为 http://host.docker.internal:8123/api

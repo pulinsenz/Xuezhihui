@@ -1,7 +1,14 @@
 """
 知识库接口：文档向量化入库 / 删除向量（被 Java 调用）
+
+安全约束（防任意文件读取 / SSRF）：
+  - 本地路径必须位于 FILE_BASE_DIR 之内，否则拒绝（防读取 /proc/self/environ、/app/.env 等任意文件）；
+  - 远程仅 http(s)，且目标解析地址禁止内网/回环/链路本地/云元数据，并限制下载大小。
 """
+import ipaddress
+import socket
 import tempfile
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -10,6 +17,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from agent import runtime
+from config import settings
 from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("knowledge_api")
@@ -18,6 +26,9 @@ router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
 # 支持的文本文件类型
 TEXT_EXTS = {".txt", ".md", ".markdown", ".csv", ".json", ".html", ".xml"}
+
+# 远程下载大小上限：与 Java 上传上限(10MB)对齐，防无限下载拖垮服务
+MAX_DOWNLOAD_BYTES = 20 * 1024 * 1024
 
 
 class VectorizeRequest(BaseModel):
@@ -33,14 +44,16 @@ class DeleteRequest(BaseModel):
 
 
 def _load_file(file_url: str, name: str) -> str:
-    """加载文件文本：支持本地路径（开发）与 http(s) URL（生产 COS/对象存储）"""
+    """加载文件文本：支持本地路径（共享卷）与 http(s) URL（COS/对象存储）"""
     ext = Path(name).suffix.lower()
     local_path = file_url
     downloaded = file_url.startswith(("http://", "https://"))
     if downloaded:
         local_path = _download(file_url)
-    elif not Path(file_url).exists():
-        raise HTTPException(status_code=404, detail=f"文件不存在: {file_url}")
+    else:
+        _check_local_path(file_url)
+        if not Path(file_url).exists():
+            raise HTTPException(status_code=404, detail=f"文件不存在: {file_url}")
     try:
         return _parse(local_path, ext)
     finally:
@@ -48,16 +61,63 @@ def _load_file(file_url: str, name: str) -> str:
             Path(local_path).unlink(missing_ok=True)
 
 
+def _check_local_path(file_url: str) -> None:
+    """本地文件读取必须位于 FILE_BASE_DIR 之内，防止读取任意系统文件（/proc/self/environ、/app/.env 等）"""
+    base = Path(settings.file_base_dir).resolve()
+    target = Path(file_url).resolve()
+    if not target.is_relative_to(base):
+        raise HTTPException(status_code=403, detail="文件不在允许目录内")
+
+
 def _download(url: str) -> str:
-    """下载远程文件到临时文件"""
+    """下载远程文件到临时文件：SSRF 防护（拒内网/回环/元数据）+ 下载大小上限"""
+    if _is_private_target(url):
+        raise HTTPException(status_code=403, detail="不允许访问内网/回环地址")
     tmp = tempfile.NamedTemporaryFile(suffix=".download", delete=False)
     tmp.close()
     try:
-        urllib.request.urlretrieve(url, tmp.name)
+        req = urllib.request.Request(url, headers={"User-Agent": "xuezhihui-agent/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            with open(tmp.name, "wb") as out:
+                total = 0
+                while True:
+                    chunk = resp.read(64 * 1024)
+                    if not chunk:
+                        break
+                    total += len(chunk)
+                    if total > MAX_DOWNLOAD_BYTES:
+                        raise HTTPException(status_code=413, detail="文件超过下载大小上限")
+                    out.write(chunk)
+    except HTTPException:
+        Path(tmp.name).unlink(missing_ok=True)
+        raise
     except Exception as e:
         Path(tmp.name).unlink(missing_ok=True)
         raise HTTPException(status_code=502, detail=f"下载文件失败: {e}") from e
     return tmp.name
+
+
+def _is_private_target(url: str) -> bool:
+    """解析主机，命中内网/回环/链路本地/多播/保留地址即拒绝（防 SSRF 打内网与云元数据）"""
+    try:
+        host = urllib.parse.urlparse(url).hostname
+    except ValueError:
+        return True
+    if not host:
+        return True
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        # 解析失败视为不可达，直接拒绝，避免误放行
+        return True
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            continue
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_reserved:
+            return True
+    return False
 
 
 def _parse(path: str, ext: str) -> str:
