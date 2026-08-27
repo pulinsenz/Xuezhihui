@@ -22,6 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.nio.charset.StandardCharsets;
@@ -46,6 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * @author pulinsenz
  */
+@ActiveProfiles("test")
 @SpringBootTest(properties = {
         "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef",
         "cos.client.host=https://test.cos.myqcloud.com",
@@ -90,6 +92,9 @@ class AuthControllerTest {
         createdTokens.forEach(token ->
                 stringRedisTemplate.delete(jwtProperties.getRedisPrefix() + token));
         createdTokens.clear();
+        // 清理本测试账号的防爆破计数键（fail/lock），避免残留
+        stringRedisTemplate.delete("xzh:login:fail:" + testAccount);
+        stringRedisTemplate.delete("xzh:login:lock:" + testAccount);
     }
 
     private String postJson(String url, Object body) throws Exception {
@@ -183,6 +188,36 @@ class AuthControllerTest {
         login.setUserPassword("wrongpass1");
         JsonNode node = objectMapper.readTree(postJson("/auth/login", login));
         assertEquals(40002, node.get("code").asInt());
+    }
+
+    @Test
+    void login_bruteForce_locksAccount() throws Exception {
+        // 先注册
+        RegisterRequest register = new RegisterRequest();
+        register.setUserAccount(testAccount);
+        register.setUserPassword(testPassword);
+        register.setCheckPassword(testPassword);
+        postJson("/auth/register", register);
+
+        // 连续错误密码：前 4 次返回"账号或密码错误"，第 5 次触发锁定
+        LoginRequest wrong = new LoginRequest();
+        wrong.setUserAccount(testAccount);
+        wrong.setUserPassword("wrongpass1");
+        for (int i = 1; i <= 4; i++) {
+            JsonNode node = objectMapper.readTree(postJson("/auth/login", wrong));
+            assertEquals(40002, node.get("code").asInt(), "第 " + i + " 次失败应返回账号或密码错误");
+        }
+        JsonNode lockNode = objectMapper.readTree(postJson("/auth/login", wrong));
+        assertEquals(40003, lockNode.get("code").asInt(), "第 5 次失败应触发账号锁定");
+        assertTrue(lockNode.get("message").asText().contains("分钟后再试"),
+                "锁定提示应包含剩余时间: " + lockNode.get("message").asText());
+
+        // 锁定期间即使密码正确也返回 40003
+        LoginRequest correct = new LoginRequest();
+        correct.setUserAccount(testAccount);
+        correct.setUserPassword(testPassword);
+        JsonNode stillLocked = objectMapper.readTree(postJson("/auth/login", correct));
+        assertEquals(40003, stillLocked.get("code").asInt(), "锁定期间正确密码也不应放行");
     }
 
     private String registerAndGetToken() throws Exception {

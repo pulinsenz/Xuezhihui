@@ -24,11 +24,13 @@ public interface AuthService {
 
     /**
      * 登录：签发 JWT 并写入 Redis 白名单
+     * <p>防爆破：失败锁定 + IP 限流，详见 {@link LoginAttemptService}
      *
-     * @param request 登录请求
+     * @param request  登录请求
+     * @param clientIp 客户端 IP（由 Controller 解析传入，服务层不依赖 servlet）
      * @return token + 用户信息
      */
-    LoginResponse login(LoginRequest request);
+    LoginResponse login(LoginRequest request, String clientIp);
 
     /**
      * 登出：删除 Redis 白名单，token 立即失效

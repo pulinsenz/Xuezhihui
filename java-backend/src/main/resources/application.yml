@@ -73,3 +73,11 @@ jwt:
   header: Authorization
   token-prefix: "Bearer "
   redis-prefix: "xzh:login:"
+#登录防爆破：账号连续失败锁定 + IP 限流（Redis 计数）。生产可按需调参
+security:
+  login:
+    max-fail-count: 5
+    fail-window-minutes: 30
+    lock-minutes: 15
+    ip-max-per-minute: 20
+    ip-window-seconds: 60

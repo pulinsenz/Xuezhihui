@@ -8,6 +8,7 @@ import com.agent.rag.dto.resp.LoginResponse;
 import com.agent.rag.dto.resp.UserVO;
 import com.agent.rag.entity.User;
 import com.agent.rag.service.AuthService;
+import com.agent.rag.util.IpUtil;
 import com.agent.rag.util.JwtUtil;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
@@ -46,11 +47,12 @@ public class AuthController {
     }
 
     /**
-     * 登录
+     * 登录（含防爆破：账号失败锁定 + IP 限流）
      */
     @PostMapping("/login")
-    public Result<LoginResponse> login(@RequestBody LoginRequest request) {
-        return Result.success(authService.login(request));
+    public Result<LoginResponse> login(@RequestBody LoginRequest request, HttpServletRequest httpRequest) {
+        String clientIp = IpUtil.getClientIp(httpRequest);
+        return Result.success(authService.login(request, clientIp));
     }
 
     /**

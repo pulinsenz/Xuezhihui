@@ -14,6 +14,8 @@ public enum ErrorCode {
     PARAMS_ERROR(40000, "请求参数错误"),
     ACCOUNT_EXIST(40001, "账号已存在"),
     ACCOUNT_OR_PASSWORD_ERROR(40002, "账号或密码错误"),
+    LOGIN_LOCKED(40003, "登录失败次数过多，账号已锁定"),
+    LOGIN_TOO_FREQUENT(40004, "请求过于频繁，请稍后再试"),
     NOT_LOGIN(40100, "未登录"),
     NO_AUTH(40101, "无权限"),
     NOT_FOUND(40400, "请求数据不存在"),

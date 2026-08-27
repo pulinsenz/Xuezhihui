@@ -2,6 +2,7 @@ package com.agent.rag.service;
 
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.config.JwtProperties;
+import com.agent.rag.config.LoginSecurityProperties;
 import com.agent.rag.dto.req.LoginRequest;
 import com.agent.rag.dto.req.RegisterRequest;
 import com.agent.rag.dto.req.UpdateProfileRequest;
@@ -9,6 +10,7 @@ import com.agent.rag.dto.resp.LoginResponse;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.UserMapper;
+import com.agent.rag.service.LoginAttemptService;
 import com.agent.rag.service.impl.AuthServiceImpl;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.JwtUtil;
@@ -57,8 +59,11 @@ class AuthServiceTest {
     private ValueOperations<String, String> valueOperations;
     @Mock
     private FileStorageService fileStorageService;
+    @Mock
+    private LoginAttemptService loginAttemptService;
 
     private JwtProperties jwtProperties;
+    private LoginSecurityProperties loginSecurityProperties;
     private AuthServiceImpl authService;
 
     @BeforeEach
@@ -68,12 +73,22 @@ class AuthServiceTest {
         jwtProperties.setRedisPrefix("xzh:login:");
         jwtProperties.setExpireHours(1);
 
+        loginSecurityProperties = new LoginSecurityProperties();
+
         authService = new AuthServiceImpl();
         ReflectionTestUtils.setField(authService, "userMapper", userMapper);
         ReflectionTestUtils.setField(authService, "jwtUtil", jwtUtil);
         ReflectionTestUtils.setField(authService, "jwtProperties", jwtProperties);
         ReflectionTestUtils.setField(authService, "stringRedisTemplate", stringRedisTemplate);
         ReflectionTestUtils.setField(authService, "fileStorageService", fileStorageService);
+        ReflectionTestUtils.setField(authService, "loginAttemptService", loginAttemptService);
+        ReflectionTestUtils.setField(authService, "loginSecurityProperties", loginSecurityProperties);
+    }
+
+    /** 默认放行防爆破门（IP 配额充足、账号未锁定） */
+    private void allowLoginAttempt() {
+        when(loginAttemptService.consumeIpQuota(anyString())).thenReturn(true);
+        when(loginAttemptService.checkLocked(anyString())).thenReturn(0L);
     }
 
     @AfterEach
@@ -145,22 +160,29 @@ class AuthServiceTest {
     @Test
     void login_blankParams_throwsParamsError() {
         LoginRequest req = new LoginRequest();
-        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req));
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req, "127.0.0.1"));
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+        // 参数不合法时不消耗 IP 配额、不触库
+        verify(loginAttemptService, never()).consumeIpQuota(anyString());
+        verify(userMapper, never()).selectOne(any());
     }
 
     @Test
     void login_userNotExist_throwsAccountOrPasswordError() {
+        allowLoginAttempt();
         when(userMapper.selectOne(any())).thenReturn(null);
         LoginRequest req = new LoginRequest();
         req.setUserAccount("nobody");
         req.setUserPassword("pass12345");
-        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req));
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req, "127.0.0.1"));
         assertEquals(ErrorCode.ACCOUNT_OR_PASSWORD_ERROR.getCode(), e.getCode());
+        // 对不存在的账号同样记录失败：避免锁的存在性泄露账号存在与否
+        verify(loginAttemptService).recordFailure("nobody");
     }
 
     @Test
     void login_wrongPassword_throwsAccountOrPasswordError() {
+        allowLoginAttempt();
         User user = new User();
         user.setId(7L);
         user.setUserAccount("bob");
@@ -170,12 +192,62 @@ class AuthServiceTest {
         LoginRequest req = new LoginRequest();
         req.setUserAccount("bob");
         req.setUserPassword("wrong-pass");
-        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req));
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req, "127.0.0.1"));
         assertEquals(ErrorCode.ACCOUNT_OR_PASSWORD_ERROR.getCode(), e.getCode());
+        verify(loginAttemptService).recordFailure("bob");
+    }
+
+    @Test
+    void login_failureReachesThreshold_throwsLoginLocked() {
+        allowLoginAttempt();
+        User user = new User();
+        user.setId(7L);
+        user.setUserAccount("bob");
+        user.setUserPassword(BCrypt.hashpw("correct-pass"));
+        when(userMapper.selectOne(any())).thenReturn(user);
+        // 本次失败累计达到阈值，触发账号锁定
+        when(loginAttemptService.recordFailure("bob")).thenReturn(true);
+
+        LoginRequest req = new LoginRequest();
+        req.setUserAccount("bob");
+        req.setUserPassword("wrong-pass");
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req, "127.0.0.1"));
+        assertEquals(ErrorCode.LOGIN_LOCKED.getCode(), e.getCode());
+    }
+
+    @Test
+    void login_accountLocked_throwsLoginLockedWithoutQueryingDb() {
+        allowLoginAttempt();
+        // 账号已锁定（剩余 10 分钟）
+        when(loginAttemptService.checkLocked("bob")).thenReturn(600L);
+
+        LoginRequest req = new LoginRequest();
+        req.setUserAccount("bob");
+        req.setUserPassword("whatever");
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req, "127.0.0.1"));
+        assertEquals(ErrorCode.LOGIN_LOCKED.getCode(), e.getCode());
+        // 锁定短路：不再查库比对密码
+        verify(userMapper, never()).selectOne(any());
+        verify(loginAttemptService, never()).recordFailure(anyString());
+    }
+
+    @Test
+    void login_ipQuotaExhausted_throwsTooFrequent() {
+        when(loginAttemptService.consumeIpQuota(anyString())).thenReturn(false);
+
+        LoginRequest req = new LoginRequest();
+        req.setUserAccount("bob");
+        req.setUserPassword("pass12345");
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.login(req, "127.0.0.1"));
+        assertEquals(ErrorCode.LOGIN_TOO_FREQUENT.getCode(), e.getCode());
+        // IP 拦截：不查库、不计失败
+        verify(userMapper, never()).selectOne(any());
+        verify(loginAttemptService, never()).recordFailure(anyString());
     }
 
     @Test
     void login_success_returnsTokenAndWritesWhitelist() {
+        allowLoginAttempt();
         User user = new User();
         user.setId(7L);
         user.setUserAccount("bob");
@@ -188,13 +260,15 @@ class AuthServiceTest {
         LoginRequest req = new LoginRequest();
         req.setUserAccount("bob");
         req.setUserPassword("pass12345");
-        LoginResponse resp = authService.login(req);
+        LoginResponse resp = authService.login(req, "127.0.0.1");
 
         assertNotNull(resp.getToken());
         assertEquals("token123", resp.getToken());
         assertEquals("bob", resp.getUser().getUserAccount());
         // 白名单：xzh:login:{token} -> userId，TTL=1小时
         verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "token123"), eq("7"), eq(1L), eq(TimeUnit.HOURS));
+        // 成功后清除失败计数与锁定
+        verify(loginAttemptService).recordSuccess("bob");
     }
 
     // ---------- 登出 ----------

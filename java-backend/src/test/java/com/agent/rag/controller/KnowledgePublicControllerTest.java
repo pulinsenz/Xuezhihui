@@ -18,6 +18,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
@@ -52,6 +53,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * @author pulinsenz
  */
+@ActiveProfiles("test")
 @SpringBootTest(properties = {
         "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef",
         "cos.client.host=https://test.cos.myqcloud.com",

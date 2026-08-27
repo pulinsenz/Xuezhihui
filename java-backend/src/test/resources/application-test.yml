@@ -1,0 +1,11 @@
+# 测试专用 profile 覆盖层（经 @ActiveProfiles("test") 启用，叠加在 main application.yml 之上，不遮蔽主配置）
+# 1. Redis 用 db 15：与本地开发 db 0 隔离，避免集成测试的登录计数/锁键污染开发环境
+# 2. IP 限流阈值抬高：多个 controller 集成测试的登录全来自 127.0.0.1，默认 20/min 会打爆配额
+spring:
+  data:
+    redis:
+      database: 15
+
+security:
+  login:
+    ip-max-per-minute: 1000
