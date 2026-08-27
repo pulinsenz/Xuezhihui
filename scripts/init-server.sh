@@ -12,9 +12,10 @@ DEPLOY_DIR="${DEPLOY_DIR:-$HOME/xuezhihui}"
 SWAP_SIZE_GB="${SWAP_SIZE_GB:-4}"
 
 # 需要 root：非 root 时用 sudo 重新执行（apt/docker/swap 都需要提权）
+# 显式把 DEPLOY_DIR 传给 root 上下文，避免 sudo 重置 HOME 导致部署目录漂移到 /root/xuezhihui
 if [ "$(id -u)" -ne 0 ]; then
   echo ">> 需要 root，正在用 sudo 重新执行（DEPLOY_DIR=$DEPLOY_DIR 已按你的用户目录确定，不会变）..."
-  exec sudo bash "$0" "$@"
+  exec sudo DEPLOY_DIR="$DEPLOY_DIR" bash "$0" "$@"
 fi
 
 echo "==> [1/5] 系统基础依赖"

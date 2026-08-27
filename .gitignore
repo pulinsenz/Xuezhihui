@@ -6,8 +6,9 @@ mianshi/
 *.iml
 
 # 环境变量（可能含密钥，不入库）
+# 注意：.env.example 是模板，必须入库；只忽略真实 .env（含本地变体）
 .env
-.env.*
+.env.local
 
 # 本地文件存储（开发环境上传的文件）
 data/
