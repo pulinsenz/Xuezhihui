@@ -2,7 +2,8 @@
 app:
   cors:
     allowed-origin-patterns:
-      - https://your-frontend-domain.com
+      - https://xuezhihui.site
+      - http://xuezhihui.site
 knife4j:
   enable: false
 # 生产彻底关闭 OpenAPI 文档：只关 knife4j 时 springdoc 的 /v3/api-docs 仍会无鉴权暴露全部接口地图

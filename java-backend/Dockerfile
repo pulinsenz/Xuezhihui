@@ -23,4 +23,5 @@ RUN useradd -m -u 1001 appuser \
     && chown -R appuser:appuser /app /app/data
 USER appuser
 EXPOSE 8123
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# JAVA_OPTS 注入 JVM 参数（生产经 docker-compose 传 -Xms256m -Xmx512m，防止 JVM 按宿主机 25% 起堆吃满内存）
+ENTRYPOINT ["sh", "-c", "exec java ${JAVA_OPTS:-} -jar app.jar"]

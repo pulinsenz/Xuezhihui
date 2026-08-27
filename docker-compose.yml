@@ -94,6 +94,8 @@ services:
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       APP_AGENT_BASE_URL: http://python-agent:8000
       APP_AGENT_TOKEN: ${AGENT_TOKEN}
+      # JVM 内存上限（2C4G 服务器：限制堆大小，避免 JVM 默认按宿主机 25% 起堆吃掉 1G+）
+      JAVA_OPTS: ${JAVA_OPTS:--Xms256m -Xmx512m}
       # 初始管理员密码（首次启动 admin 不存在时以其创建；未配置则生成随机密码打印到 Java 日志）
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       # 腾讯云 COS（封面对象存储）：映射 application.yml 的 cos.client.* 占位符

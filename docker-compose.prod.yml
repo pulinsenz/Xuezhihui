@@ -1,7 +1,10 @@
-# 学智汇 生产 override：对外端口收敛 + 应用 profile + 日志轮转 + 重启策略 + HTTPS 预留
+# 学智汇 生产 override：对外端口收敛 + 应用 profile + 日志轮转 + 重启策略 + 内存上限 + HTTPS 预留
 # 用法：docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 # 效果：合并后仅 frontend 对外暴露 :80，中间件/后端端口全部关闭（仅内网互访）。
 #       docker compose config 可立即校验合并结果。
+# 2C4G 服务器内存预算（+4G swap）：mysql 1g / redis 256m / etcd 512m / minio 512m /
+#   milvus 1.5g / java 1g / python 2g / frontend 256m，合计上限约 7g（并发峰值由 swap 兜底，
+#   各服务不会同时打满；mem_limit 是上限防止单服务挤占他人）。
 
 # 日志轮转锚点（json-file driver：单文件 20MB，最多 5 份，共 ~100MB/服务）
 x-logging: &default-logging
@@ -16,42 +19,55 @@ services:
     # `!reset []` 是 Compose spec 官方写法：把 base 的 ports 整体替换为空列表。
     # 若目标 Docker 解析报错，可改回 `ports: []`（语义相同）。
     ports: !reset []
+    mem_limit: 1g
     logging: *default-logging
 
   redis:
     ports: !reset []
+    mem_limit: 256m
+    logging: *default-logging
+
+  etcd:
+    ports: !reset []
+    mem_limit: 512m
     logging: *default-logging
 
   minio:
     ports: !reset []
+    mem_limit: 512m
     logging: *default-logging
 
   milvus:
     ports: !reset []
+    mem_limit: 1536m
     logging: *default-logging
 
   # ---- 应用：关闭公网端口 + prod profile + 自动重启 ----
   java-backend:
     ports: !reset []
     restart: unless-stopped
+    mem_limit: 1g
     environment:
-      # 切 prod：关闭 knife4j 文档（application-prod.yml）；同源部署浏览器不触发 CORS，无需改白名单
+      # 切 prod：关闭 knife4j/springdoc 文档（application-prod.yml）；同源部署浏览器不触发 CORS，无需改白名单
       SPRING_PROFILES_ACTIVE: prod
     logging: *default-logging
 
   python-agent:
     ports: !reset []
     restart: unless-stopped
+    mem_limit: 2g
     logging: *default-logging
 
   frontend:
     restart: unless-stopped
+    mem_limit: 256m
     logging: *default-logging
-    # ========== HTTPS 后补占位（上线后接入）==========
-    # 1) nginx.conf 增加 listen 443 ssl 的 server 块（代理逻辑与 80 一致），80 → 301 跳 443
-    # 2) 放开下方注释：
+    volumes:
+      # ACME HTTP-01 校验目录（宿主与容器共享，acme.sh --webroot 写此目录签发证书，nginx 负责应答）
+      - /var/www/acme-challenge:/var/www/acme-challenge
+      # ==== 证书挂载（HTTPS：证书就位后由 scripts/enable-https.sh 自动取消注释）====
+      # - /etc/letsencrypt/live/xuezhihui.site/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      # - /etc/letsencrypt/live/xuezhihui.site/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+    # ==== 443 端口（HTTPS：证书就位后由 scripts/enable-https.sh 自动取消注释）====
     # ports:
     #   - "443:443"
-    # volumes:
-    #   - /etc/letsencrypt/live/你的域名/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
-    #   - /etc/letsencrypt/live/你的域名/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
