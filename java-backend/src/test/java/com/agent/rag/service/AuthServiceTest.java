@@ -24,11 +24,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -39,6 +42,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -96,6 +100,15 @@ class AuthServiceTest {
     private void allowLoginAttempt() {
         when(loginAttemptService.consumeIpQuota(anyString())).thenReturn(true);
         when(loginAttemptService.checkLocked(anyString())).thenReturn(0L);
+    }
+
+    /**
+     * Mock 白名单 SCAN 遍历：默认返回空 cursor（无旧会话）。
+     * 需要断言"旧 token 被清理"的用例覆盖此 stub 传入有数据的光标。
+     */
+    @SuppressWarnings("unchecked")
+    private Cursor<String> emptyWhitelistCursor() {
+        return mock(Cursor.class);
     }
 
     /** 默认放行人机验证门（单测关注业务逻辑，不关注 Turnstile） */
@@ -281,6 +294,8 @@ class AuthServiceTest {
         when(userMapper.selectOne(any())).thenReturn(user);
         when(jwtUtil.createToken(7L, "user")).thenReturn("token123");
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        // 单点登录：默认无旧会话（scan 返回空 cursor）
+        when(stringRedisTemplate.scan(any(ScanOptions.class))).thenReturn(emptyWhitelistCursor());
 
         LoginRequest req = new LoginRequest();
         req.setUserAccount("bob");
@@ -294,6 +309,43 @@ class AuthServiceTest {
         verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "token123"), eq("7"), eq(1L), eq(TimeUnit.HOURS));
         // 成功后清除失败计数与锁定
         verify(loginAttemptService).recordSuccess("bob");
+    }
+
+    @Test
+    void login_singleSession_evictsOldTokensOfSameUser() {
+        allowLoginAttempt();
+        User user = new User();
+        user.setId(7L);
+        user.setUserAccount("bob");
+        user.setUserPassword(BCrypt.hashpw("pass12345"));
+        user.setUserRole("user");
+        when(userMapper.selectOne(any())).thenReturn(user);
+        when(jwtUtil.createToken(7L, "user")).thenReturn("new-token");
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        // 模拟白名单中存在该账号两个旧会话 + 一个其他账号会话
+        Cursor<String> cursor = mock(Cursor.class);
+        when(cursor.hasNext()).thenReturn(true, true, true, false);
+        when(cursor.next()).thenReturn(
+                "xzh:login:old-token-1",   // 属于本账号 → 删除
+                "xzh:login:old-token-2",   // 属于本账号 → 删除
+                "xzh:login:other-token");  // 其他账号 → 保留
+        when(stringRedisTemplate.opsForValue().get("xzh:login:old-token-1")).thenReturn("7");
+        when(stringRedisTemplate.opsForValue().get("xzh:login:old-token-2")).thenReturn("7");
+        when(stringRedisTemplate.opsForValue().get("xzh:login:other-token")).thenReturn("99");
+        when(stringRedisTemplate.scan(any(ScanOptions.class))).thenReturn(cursor);
+
+        LoginRequest req = new LoginRequest();
+        req.setUserAccount("bob");
+        req.setUserPassword("pass12345");
+        authService.login(req, "127.0.0.1");
+
+        // 后登录挤掉先登录：旧会话 token 被删，其他账号的会话不受影响
+        verify(stringRedisTemplate).delete("xzh:login:old-token-1");
+        verify(stringRedisTemplate).delete("xzh:login:old-token-2");
+        verify(stringRedisTemplate, never()).delete("xzh:login:other-token");
+        // 新 token 仍写入白名单
+        verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "new-token"), eq("7"), eq(1L), eq(TimeUnit.HOURS));
     }
 
     // ---------- 登出 ----------
