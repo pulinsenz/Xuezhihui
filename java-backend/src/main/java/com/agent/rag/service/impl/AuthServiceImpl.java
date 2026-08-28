@@ -23,8 +23,6 @@ import com.agent.rag.util.UserContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.redis.core.Cursor;
-import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -142,9 +140,18 @@ public class AuthServiceImpl implements AuthService {
         loginAttemptService.recordSuccess(userAccount);
         // 签发 JWT
         String token = jwtUtil.createToken(user.getId(), user.getUserRole());
-        // 单点登录互斥：同一账号只允许一个在线会话，先清掉该账号全部旧 token，再写新 token。
+        // 单点登录互斥：同一账号只允许一个在线会话，先删掉该账号旧 token 的白名单 key，再写新 token。
         // 旧设备下次请求时白名单查不到 → 拦截器返回"登录已失效" → 被强制下线（后登录挤掉先登录）。
-        evictOldLoginTokens(user.getId());
+        // 实现：每用户维护 xzh:login:user:{userId} → 当前活跃 token，登录时精确删除旧 key（O(1)，
+        // 不依赖 SCAN 全量遍历——SCAN 在大量 key 下可能漏掉部分 key，导致旧会话未被踢下线）。
+        String userTokenKey = jwtProperties.getRedisPrefix() + "user:" + user.getId();
+        String oldToken = stringRedisTemplate.opsForValue().get(userTokenKey);
+        if (StrUtil.isNotBlank(oldToken)) {
+            stringRedisTemplate.delete(jwtProperties.getRedisPrefix() + oldToken);
+            log.info("单点登录: 已下线该账号旧会话 userId={}", user.getId());
+        }
+        // 记录当前活跃 token，TTL 与 token 过期时间一致
+        stringRedisTemplate.opsForValue().set(userTokenKey, token, jwtProperties.getExpireHours(), TimeUnit.HOURS);
         // 写入 Redis 白名单，TTL 与 token 过期时间一致，支持强制下线
         stringRedisTemplate.opsForValue().set(
                 jwtProperties.getRedisPrefix() + token,
@@ -153,30 +160,6 @@ public class AuthServiceImpl implements AuthService {
                 TimeUnit.HOURS);
         log.info("登录成功: userId={}, userAccount={}", user.getId(), userAccount);
         return new LoginResponse(token, UserVO.from(user));
-    }
-
-    /**
-     * 单点登录：删除指定用户的所有登录 token（SCAN 遍历白名单，避免 KEYS 阻塞 Redis）。
-     * 调用时机：登录成功写入新 token 之前，实现同账号互斥下线。
-     */
-    private void evictOldLoginTokens(Long userId) {
-        String prefix = jwtProperties.getRedisPrefix();
-        String userIdStr = String.valueOf(userId);
-        long removed = 0;
-        Cursor<String> cursor = stringRedisTemplate.scan(
-                ScanOptions.scanOptions().match(prefix + "*").count(100).build());
-        try (cursor) {
-            while (cursor.hasNext()) {
-                String key = cursor.next();
-                if (userIdStr.equals(stringRedisTemplate.opsForValue().get(key))) {
-                    stringRedisTemplate.delete(key);
-                    removed++;
-                }
-            }
-        }
-        if (removed > 0) {
-            log.info("单点登录: 已下线该账号旧会话 userId={}, removed={}", userId, removed);
-        }
     }
 
     /** 剩余秒数向上取整为分钟，最小 1 */
