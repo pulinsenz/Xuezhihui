@@ -70,9 +70,12 @@ services:
     environment:
       ETCD_ENDPOINTS: etcd:2379
       MINIO_ADDRESS: minio:9000
-      # 与 MinIO 服务同源凭据：改 MinIO 密码必须同步此处，否则 Milvus 无法读写对象存储
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      # Milvus 不识别 MINIO_ACCESS_KEY（那是 MinIO 服务的变量名）；
+      # Milvus 用配置项 minio.accessKeyID/minio.secretAccessKey，对应环境变量
+      # 为 MINIO_ACCESSKEYID / MINIO_SECRETACCESSKEY（点→下划线、全大写）。
+      # 否则会落到镜像内置 milvus.yaml 的默认 minioadmin，与 MinIO 实际 root 凭据不匹配导致启动崩溃。
+      MINIO_ACCESSKEYID: ${MINIO_ACCESS_KEY}
+      MINIO_SECRETACCESSKEY: ${MINIO_SECRET_KEY}
     ports:
       - "19530:19530"
     volumes:
