@@ -52,7 +52,7 @@ if [ ! -f .env ]; then
   cp .env.example .env
   echo "!! 已生成 ${DEPLOY_DIR}/.env（模板）。请编辑填入密钥后重新运行本脚本："
   echo "   DEEPSEEK_API_KEY / USER_API_KEY / AGENT_TOKEN / JWT_SECRET"
-  echo "   TURNSTILE_SECRET_KEY / VITE_TURNSTILE_SITE_KEY"
+  echo "   （注册防刷为自研算术验证码，自托管，无需额外密钥）"
   echo "   生产强烈建议一并设置 REDIS_PASSWORD / ADMIN_PASSWORD（见 .env.example 注释）"
   exit 1
 fi

@@ -17,7 +17,11 @@ FROM ${JRE_IMAGE}
 WORKDIR /app
 COPY --from=build /build/target/*.jar app.jar
 # 非 root 运行（安全基线）
-RUN useradd -m -u 1001 appuser \
+RUN apt-get update \
+    # Java2D 生成算术验证码图片需要字体（temurin JRE 精简镜像无字体，缺失则 drawString 画不出文字）
+    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 1001 appuser \
     && mkdir -p /app/data/files \
     # 上传文件目录归 appuser，保证共享卷可写（Docker 首次挂载空卷会继承该所有权）
     && chown -R appuser:appuser /app /app/data

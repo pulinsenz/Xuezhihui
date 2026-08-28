@@ -10,8 +10,9 @@ import com.agent.rag.dto.resp.LoginResponse;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.UserMapper;
+import com.agent.rag.service.CaptchaService;
 import com.agent.rag.service.LoginAttemptService;
-import com.agent.rag.service.TurnstileService;
+import com.agent.rag.service.RegisterAttemptService;
 import com.agent.rag.service.impl.AuthServiceImpl;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.JwtUtil;
@@ -64,7 +65,9 @@ class AuthServiceTest {
     @Mock
     private LoginAttemptService loginAttemptService;
     @Mock
-    private TurnstileService turnstileService;
+    private CaptchaService captchaService;
+    @Mock
+    private RegisterAttemptService registerAttemptService;
 
     private JwtProperties jwtProperties;
     private LoginSecurityProperties loginSecurityProperties;
@@ -87,9 +90,10 @@ class AuthServiceTest {
         ReflectionTestUtils.setField(authService, "fileStorageService", fileStorageService);
         ReflectionTestUtils.setField(authService, "loginAttemptService", loginAttemptService);
         ReflectionTestUtils.setField(authService, "loginSecurityProperties", loginSecurityProperties);
-        ReflectionTestUtils.setField(authService, "turnstileService", turnstileService);
-        // 默认放行人机验证门：单测聚焦业务逻辑，Turnstile 校验由 controller 集成测试覆盖
-        allowTurnstile();
+        ReflectionTestUtils.setField(authService, "captchaService", captchaService);
+        ReflectionTestUtils.setField(authService, "registerAttemptService", registerAttemptService);
+        // 默认放行防刷门：单测聚焦业务逻辑，验证码/IP 限流由 controller 集成测试覆盖
+        allowAntiBot();
     }
 
     /** 默认放行防爆破门（IP 配额充足、账号未锁定） */
@@ -98,10 +102,11 @@ class AuthServiceTest {
         when(loginAttemptService.checkLocked(anyString())).thenReturn(0L);
     }
 
-    /** 默认放行人机验证门（单测关注业务逻辑，不关注 Turnstile） */
-    private void allowTurnstile() {
+    /** 默认放行注册防刷门（IP 配额充足 + 验证码通过），单测关注业务逻辑 */
+    private void allowAntiBot() {
         // lenient：仅 register 用例用到，其他用例不触发时不算多余 stub
-        lenient().when(turnstileService.verify(any(), any())).thenReturn(true);
+        lenient().when(registerAttemptService.consumeIpQuota(anyString())).thenReturn(true);
+        lenient().when(captchaService.verify(any(), any())).thenReturn(true);
     }
 
     @AfterEach
@@ -137,7 +142,7 @@ class AuthServiceTest {
             return 1;
         });
 
-        Long userId = authService.register(validRegister());
+        Long userId = authService.register(validRegister(), "127.0.0.1");
 
         assertEquals(100L, userId);
         verify(userMapper).insert(any(User.class));
@@ -147,7 +152,7 @@ class AuthServiceTest {
     void register_accountExists_throwsAccountExist() {
         when(userMapper.selectCount(any())).thenReturn(1L);
         BusinessException e = assertThrows(BusinessException.class,
-                () -> authService.register(validRegister()));
+                () -> authService.register(validRegister(), "127.0.0.1"));
         assertEquals(ErrorCode.ACCOUNT_EXIST.getCode(), e.getCode());
     }
 
@@ -156,7 +161,7 @@ class AuthServiceTest {
         RegisterRequest req = validRegister();
         req.setUserPassword("123");
         req.setCheckPassword("123");
-        BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req));
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req, "127.0.0.1"));
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
     }
 
@@ -164,20 +169,32 @@ class AuthServiceTest {
     void register_checkPasswordMismatch_throwsParamsError() {
         RegisterRequest req = validRegister();
         req.setCheckPassword("different");
-        BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req));
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req, "127.0.0.1"));
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
     }
 
     @Test
-    void register_turnstileVerifyFails_throwsParamsError() {
-        // 覆盖 allowTurnstile() 默认放行：人机验证不通过时必须拒绝注册（防批量机器人）
-        when(turnstileService.verify(any(), any())).thenReturn(false);
+    void register_captchaVerifyFails_throwsParamsError() {
+        // 覆盖 allowAntiBot() 默认放行：验证码不通过时必须拒绝注册（防批量机器人）
+        when(captchaService.verify(any(), any())).thenReturn(false);
         RegisterRequest req = validRegister();
-        req.setTurnstileToken("invalid-token");
-        BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req));
+        req.setCaptchaId("challenge-1");
+        req.setCaptchaAnswer("42");
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req, "127.0.0.1"));
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
         // 校验失败应短路，不得写入用户
         verify(userMapper, never()).insert(any(User.class));
+    }
+
+    @Test
+    void register_ipQuotaExhausted_throwsTooFrequent() {
+        // 注册 IP 限流命中：短路返回，不查库、不调验证码
+        when(registerAttemptService.consumeIpQuota(anyString())).thenReturn(false);
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> authService.register(validRegister(), "127.0.0.1"));
+        assertEquals(ErrorCode.REGISTER_TOO_FREQUENT.getCode(), e.getCode());
+        verify(userMapper, never()).insert(any(User.class));
+        verify(captchaService, never()).verify(any(), any());
     }
 
     // ---------- 登录 ----------

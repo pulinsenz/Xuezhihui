@@ -28,10 +28,16 @@
         <el-form-item prop="checkPassword">
           <el-input v-model="registerForm.checkPassword" type="password" show-password placeholder="确认密码" :prefix-icon="Lock" @keyup.enter="handleRegister" />
         </el-form-item>
-        <!-- Cloudflare Turnstile 人机验证（注册防批量机器人）：配置 VITE_TURNSTILE_SITE_KEY 后渲染 -->
-        <div v-if="turnstileEnabled" class="turnstile-wrap">
-          <div ref="turnstileContainer" class="turnstile"></div>
-        </div>
+        <!-- 注册算术验证码（自研，防批量机器人薅 LLM token）：点击图片刷新 -->
+        <el-form-item prop="captchaAnswer">
+          <div class="captcha-row">
+            <div class="captcha-img" :title="captchaImage ? '看不清？点击图片刷新' : '验证码加载失败，点击重试'" @click="refreshCaptcha">
+              <el-icon v-if="!captchaImage" class="captcha-img-loading"><Loading /></el-icon>
+              <img v-else :src="captchaImageSrc" alt="验证码" />
+            </div>
+            <el-input v-model="captchaAnswer" placeholder="验证码计算结果" :prefix-icon="Key" @keyup.enter="handleRegister" />
+          </div>
+        </el-form-item>
         <el-button type="primary" class="submit-btn" size="large" :loading="loading" @click="handleRegister">
           注 册
         </el-button>
@@ -41,18 +47,19 @@
 </template>
 
 <script setup>
-import { reactive, ref, onMounted, onBeforeUnmount } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { User, Lock, Postcard } from '@element-plus/icons-vue'
+import { User, Lock, Postcard, Key, Loading } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
+import { getCaptcha } from '../api/auth'
 
 /**
  * 登录 / 注册表单，供登录弹窗与登录页复用。
  * 登录成功后 emit('success')，导航等动作由父组件决定。
  *
- * 注册防刷：Cloudflare Turnstile 人机验证。
- * - 配置 VITE_TURNSTILE_SITE_KEY 后渲染 widget，token 随注册请求提交，后端 siteverify 校验；
- * - 未配置（本地开发）则跳过渲染、跳过传参，后端亦降级放行。
+ * 注册防刷：自研算术验证码（替代 Cloudflare Turnstile，国内服务器可用）。
+ * 进入注册 tab 时向后端 GET /auth/captcha 拉取一道算术题图片 + challengeId，
+ * 用户输入计算结果后随注册请求提交；后端一次性校验（答案存 Redis，GET+DEL 原子消费防重放）。
  */
 const emit = defineEmits(['success'])
 const authStore = useAuthStore()
@@ -65,58 +72,39 @@ const registerFormRef = ref()
 const loginForm = reactive({ userAccount: '', userPassword: '' })
 const registerForm = reactive({ userAccount: '', userName: '', userPassword: '', checkPassword: '' })
 
-// ---------- Cloudflare Turnstile ----------
-const turnstileSiteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || ''
-const turnstileEnabled = !!turnstileSiteKey
-const turnstileContainer = ref(null)
-const turnstileToken = ref('')
-let turnstileWidgetId = null
-let turnstileScriptPromise = null
+// ---------- 算术验证码 ----------
+const captchaId = ref('')
+const captchaImage = ref('') // base64
+const captchaAnswer = ref('')
+const captchaImageSrc = computed(() =>
+  captchaImage.value ? `data:image/png;base64,${captchaImage.value}` : ''
+)
 
-/** 动态加载 Turnstile 官方脚本（仅启用时加载一次，避免拖慢无验证码环境首屏） */
-function loadTurnstileScript() {
-  if (window.turnstile) return Promise.resolve()
-  if (!turnstileScriptPromise) {
-    turnstileScriptPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script')
-      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit'
-      script.async = true
-      script.onload = resolve
-      script.onerror = () => reject(new Error('Turnstile 脚本加载失败'))
-      document.head.appendChild(script)
-    })
-  }
-  return turnstileScriptPromise
-}
-
-async function initTurnstile() {
-  if (!turnstileEnabled) return
+/** 拉取一道新验证码（挑战 id 与图片），并清空已输入的答案 */
+async function refreshCaptcha() {
   try {
-    await loadTurnstileScript()
-    turnstileWidgetId = window.turnstile.render(turnstileContainer.value, {
-      sitekey: turnstileSiteKey,
-      callback: (token) => { turnstileToken.value = token },
-      'expired-callback': () => { turnstileToken.value = '' },
-      'error-callback': () => { turnstileToken.value = '' },
-    })
+    const data = await getCaptcha()
+    captchaId.value = data.challengeId
+    captchaImage.value = data.imageBase64
+    captchaAnswer.value = ''
   } catch (e) {
-    console.error('Turnstile 初始化失败', e)
+    // 错误信息已由请求拦截器提示；清空状态，用户点击图片可重试
+    captchaId.value = ''
+    captchaImage.value = ''
+    captchaAnswer.value = ''
   }
 }
 
-function destroyTurnstile() {
-  if (turnstileWidgetId && window.turnstile) {
-    try {
-      window.turnstile.remove(turnstileWidgetId)
-    } catch (e) {
-      // 忽略销毁异常
-    }
-    turnstileWidgetId = null
+// 进入注册 tab 时拉取验证码，离开时清空（防止用旧验证码提交）
+watch(activeTab, (tab) => {
+  if (tab === 'register') {
+    refreshCaptcha()
+  } else {
+    captchaId.value = ''
+    captchaImage.value = ''
+    captchaAnswer.value = ''
   }
-}
-
-onMounted(initTurnstile)
-onBeforeUnmount(destroyTurnstile)
+}, { immediate: true })
 
 const loginRules = {
   userAccount: [{ required: true, message: '请输入账号', trigger: 'blur' }],
@@ -136,6 +124,13 @@ const registerRules = {
     {
       validator: (_, value, cb) =>
         value === registerForm.userPassword ? cb() : cb(new Error('两次输入的密码不一致')),
+      trigger: 'blur',
+    },
+  ],
+  captchaAnswer: [
+    {
+      validator: (_, value, cb) =>
+        !captchaId.value || (value && value.trim()) ? cb() : cb(new Error('请输入验证码计算结果')),
       trigger: 'blur',
     },
   ],
@@ -161,9 +156,9 @@ const handleRegister = async () => {
   if (loading.value) return
   const valid = await registerFormRef.value?.validate().catch(() => false)
   if (!valid) return
-  // 启用 Turnstile 时必须已完成人机验证（token 可能过期被清空，需重试）
-  if (turnstileEnabled && !turnstileToken.value) {
-    ElMessage.warning('请先完成人机验证')
+  // 验证码须已加载且答案非空（验证码可能仍在加载/刷新失败）
+  if (!captchaId.value || !captchaAnswer.value.trim()) {
+    ElMessage.warning('请先输入验证码计算结果')
     return
   }
   loading.value = true
@@ -173,14 +168,16 @@ const handleRegister = async () => {
       registerForm.userPassword,
       registerForm.checkPassword,
       registerForm.userName,
-      turnstileToken.value
+      captchaId.value,
+      captchaAnswer.value
     )
     ElMessage.success('注册成功，请登录')
     activeTab.value = 'login'
     loginForm.userAccount = registerForm.userAccount
     loginForm.userPassword = ''
   } catch (e) {
-    // 错误信息已由拦截器提示
+    // 注册失败（含验证码错误/过期）：旧验证码已被服务端消费，刷新一道新验证码
+    refreshCaptcha()
   } finally {
     loading.value = false
   }
@@ -192,9 +189,32 @@ const handleRegister = async () => {
   width: 100%;
   margin-top: 4px;
 }
-.turnstile-wrap {
+.captcha-row {
   display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+.captcha-img {
+  flex-shrink: 0;
+  width: 150px;
+  height: 46px;
+  border: 1px solid var(--el-border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #f4f4f4;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  margin: 12px 0 4px;
+}
+.captcha-img img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.captcha-img-loading {
+  color: var(--el-text-color-placeholder);
+  font-size: 18px;
 }
 </style>

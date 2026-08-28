@@ -3,6 +3,9 @@ import request from './request'
 /** 登录 */
 export const login = (data) => request.post('/auth/login', data)
 
+/** 获取注册算术验证码（自研，返回 challengeId + 图片 base64） */
+export const getCaptcha = () => request.get('/auth/captcha')
+
 /** 注册 */
 export const register = (data) => request.post('/auth/register', data)
 

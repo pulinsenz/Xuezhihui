@@ -14,8 +14,9 @@ import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.UserMapper;
 import com.agent.rag.service.AuthService;
+import com.agent.rag.service.CaptchaService;
 import com.agent.rag.service.LoginAttemptService;
-import com.agent.rag.service.TurnstileService;
+import com.agent.rag.service.RegisterAttemptService;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.JwtUtil;
 import com.agent.rag.util.UploadFileTypeValidator;
@@ -61,18 +62,22 @@ public class AuthServiceImpl implements AuthService {
     private LoginSecurityProperties loginSecurityProperties;
 
     @Resource
-    private TurnstileService turnstileService;
+    private CaptchaService captchaService;
+
+    @Resource
+    private RegisterAttemptService registerAttemptService;
 
     @Override
-    public Long register(RegisterRequest request) {
-        // 人机验证：生产配置 TURNSTILE_SECRET_KEY 后强制，缺失/非法 token 拒绝注册（防批量机器人薅 LLM）
-        if (!turnstileService.verify(request.getTurnstileToken(), null)) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "人机验证未通过，请重试");
+    public Long register(RegisterRequest request, String clientIp) {
+        // 防批量注册 1：IP 限流（每次尝试都消耗配额，粗粒度 flood control，防验证码 OCR/人海）
+        if (!registerAttemptService.consumeIpQuota(clientIp)) {
+            log.warn("注册限流: ip={}", clientIp);
+            throw new BusinessException(ErrorCode.REGISTER_TOO_FREQUENT);
         }
         String userAccount = request.getUserAccount();
         String userPassword = request.getUserPassword();
         String checkPassword = request.getCheckPassword();
-        // 参数校验
+        // 参数校验（在验证码之前：参数错误不浪费一次性验证码）
         if (StrUtil.isBlank(userAccount) || StrUtil.isBlank(userPassword) || StrUtil.isBlank(checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号、密码不能为空");
         }
@@ -84,6 +89,11 @@ public class AuthServiceImpl implements AuthService {
         }
         if (!userPassword.equals(checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "两次输入的密码不一致");
+        }
+        // 防批量注册 2：算术验证码一次性校验（答案存 Redis，GET+DEL 原子消费防重放/穷举；
+        // 验证码通过后才查账号唯一性，防批量脚本枚举账号 + 薅 LLM token）
+        if (!captchaService.verify(request.getCaptchaId(), request.getCaptchaAnswer())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "验证码错误或已过期，请刷新后重试");
         }
         // 账号唯一校验
         Long count = userMapper.selectCount(new LambdaQueryWrapper<User>()

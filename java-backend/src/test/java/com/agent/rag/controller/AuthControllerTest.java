@@ -55,6 +55,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "cos.client.secret-key=test-secret-key",
         "cos.client.region=ap-guangzhou",
         "cos.client.bucket=test-bucket"
+        // 注册/登录 IP 限流豁免见 src/test/resources/application-test.yml（集成测试共享 127.0.0.1）
 })
 @AutoConfigureMockMvc
 class AuthControllerTest {
@@ -104,19 +105,34 @@ class AuthControllerTest {
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
     }
 
+    /** 获取一道新算术验证码并从 Redis 读答案（测试环境可直接访问 Redis），构造完整注册请求 */
+    private RegisterRequest validRegisterWithCaptcha() throws Exception {
+        JsonNode captchaNode = objectMapper.readTree(mockMvc.perform(get("/auth/captcha"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertEquals(0, captchaNode.get("code").asInt(), "验证码获取应成功");
+        String challengeId = captchaNode.get("data").get("challengeId").asText();
+        String answer = stringRedisTemplate.opsForValue().get("xzh:captcha:" + challengeId);
+        assertNotNull(answer, "验证码答案应已写入 Redis: " + challengeId);
+
+        RegisterRequest req = new RegisterRequest();
+        req.setUserAccount(testAccount);
+        req.setUserPassword(testPassword);
+        req.setCheckPassword(testPassword);
+        req.setCaptchaId(challengeId);
+        req.setCaptchaAnswer(answer);
+        return req;
+    }
+
     @Test
     void register_login_me_logout_fullFlow() throws Exception {
         // ---- 注册 ----
-        RegisterRequest register = new RegisterRequest();
-        register.setUserAccount(testAccount);
-        register.setUserPassword(testPassword);
-        register.setCheckPassword(testPassword);
+        RegisterRequest register = validRegisterWithCaptcha();
         JsonNode regNode = objectMapper.readTree(postJson("/auth/register", register));
         assertEquals(0, regNode.get("code").asInt(), "注册应成功");
         assertTrue(regNode.get("data").asLong() > 0, "应返回 userId");
 
-        // ---- 重复注册：账号已存在 ----
-        JsonNode dupNode = objectMapper.readTree(postJson("/auth/register", register));
+        // ---- 重复注册：账号已存在（需重新获取验证码，因为上一个已被一次性消费）----
+        JsonNode dupNode = objectMapper.readTree(postJson("/auth/register", validRegisterWithCaptcha()));
         assertEquals(40001, dupNode.get("code").asInt());
 
         // ---- 登录 ----
@@ -164,6 +180,57 @@ class AuthControllerTest {
     }
 
     @Test
+    void getCaptcha_returnsChallengeAndImage() throws Exception {
+        JsonNode node = objectMapper.readTree(mockMvc.perform(get("/auth/captcha"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertEquals(0, node.get("code").asInt(), "验证码获取应成功");
+        assertFalse(node.get("data").get("challengeId").asText().isEmpty());
+        assertFalse(node.get("data").get("imageBase64").asText().isEmpty());
+    }
+
+    @Test
+    void register_wrongCaptcha_rejects() throws Exception {
+        // 拿一道验证码但提交错误答案 → 必须拒绝且不写入用户
+        JsonNode captchaNode = objectMapper.readTree(mockMvc.perform(get("/auth/captcha"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        RegisterRequest req = new RegisterRequest();
+        req.setUserAccount(testAccount);
+        req.setUserPassword(testPassword);
+        req.setCheckPassword(testPassword);
+        req.setCaptchaId(captchaNode.get("data").get("challengeId").asText());
+        req.setCaptchaAnswer("99999"); // 故意写错
+
+        JsonNode node = objectMapper.readTree(postJson("/auth/register", req));
+        assertEquals(40000, node.get("code").asInt(), "验证码错误应拒绝注册");
+        Long count = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                .eq(User::getUserAccount, testAccount));
+        assertEquals(0, count, "验证码错误不得写入用户");
+    }
+
+    @Test
+    void register_captchaReplay_rejects() throws Exception {
+        // 同一验证码提交两次：第一次成功消费，第二次必须被拒（防重放）。
+        // 同账号第二次若验证码未被消费会返回"账号已存在"(40001)，断言 40000 可证明验证码已被一次性消费
+        JsonNode captchaNode = objectMapper.readTree(mockMvc.perform(get("/auth/captcha"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        String challengeId = captchaNode.get("data").get("challengeId").asText();
+        String answer = stringRedisTemplate.opsForValue().get("xzh:captcha:" + challengeId);
+
+        RegisterRequest req = new RegisterRequest();
+        req.setUserAccount(testAccount);
+        req.setUserPassword(testPassword);
+        req.setCheckPassword(testPassword);
+        req.setCaptchaId(challengeId);
+        req.setCaptchaAnswer(answer);
+
+        JsonNode first = objectMapper.readTree(postJson("/auth/register", req));
+        assertEquals(0, first.get("code").asInt(), "第一次提交应成功");
+        JsonNode replay = objectMapper.readTree(postJson("/auth/register", req));
+        assertEquals(40000, replay.get("code").asInt(), "同一验证码二次提交应被拒（防重放）");
+        assertTrue(replay.get("message").asText().contains("验证码"), "错误信息应提示验证码: " + replay.get("message").asText());
+    }
+
+    @Test
     void register_invalidParams_returnsParamsError() throws Exception {
         RegisterRequest register = new RegisterRequest();
         register.setUserAccount("abc");        // 账号过短
@@ -176,11 +243,7 @@ class AuthControllerTest {
     @Test
     void login_wrongPassword_returnsError() throws Exception {
         // 先注册
-        RegisterRequest register = new RegisterRequest();
-        register.setUserAccount(testAccount);
-        register.setUserPassword(testPassword);
-        register.setCheckPassword(testPassword);
-        postJson("/auth/register", register);
+        postJson("/auth/register", validRegisterWithCaptcha());
 
         // 错误密码登录
         LoginRequest login = new LoginRequest();
@@ -193,11 +256,7 @@ class AuthControllerTest {
     @Test
     void login_bruteForce_locksAccount() throws Exception {
         // 先注册
-        RegisterRequest register = new RegisterRequest();
-        register.setUserAccount(testAccount);
-        register.setUserPassword(testPassword);
-        register.setCheckPassword(testPassword);
-        postJson("/auth/register", register);
+        postJson("/auth/register", validRegisterWithCaptcha());
 
         // 连续错误密码：前 4 次返回"账号或密码错误"，第 5 次触发锁定
         LoginRequest wrong = new LoginRequest();
@@ -221,11 +280,7 @@ class AuthControllerTest {
     }
 
     private String registerAndGetToken() throws Exception {
-        RegisterRequest register = new RegisterRequest();
-        register.setUserAccount(testAccount);
-        register.setUserPassword(testPassword);
-        register.setCheckPassword(testPassword);
-        JsonNode regNode = objectMapper.readTree(postJson("/auth/register", register));
+        JsonNode regNode = objectMapper.readTree(postJson("/auth/register", validRegisterWithCaptcha()));
         assertEquals(0, regNode.get("code").asInt(), "注册应成功");
 
         LoginRequest login = new LoginRequest();

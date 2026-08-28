@@ -83,7 +83,7 @@ class ChatControllerTest {
         String reg = mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                Map.of("userAccount", account, "userPassword", pass, "checkPassword", pass))))
+                                RegisterTestSupport.registerBody(mockMvc, objectMapper, stringRedisTemplate, account, pass))))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         long uid = objectMapper.readTree(reg).get("data").asLong();
         String login = mockMvc.perform(post("/auth/login")

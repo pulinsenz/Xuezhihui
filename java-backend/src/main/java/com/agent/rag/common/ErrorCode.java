@@ -17,6 +17,7 @@ public enum ErrorCode {
     LOGIN_LOCKED(40003, "登录失败次数过多，账号已锁定"),
     LOGIN_TOO_FREQUENT(40004, "请求过于频繁，请稍后再试"),
     CHAT_TOO_FREQUENT(40005, "对话过于频繁，请稍后再试"),
+    REGISTER_TOO_FREQUENT(40006, "注册过于频繁，请稍后再试"),
     NOT_LOGIN(40100, "未登录"),
     NO_AUTH(40101, "无权限"),
     NOT_FOUND(40400, "请求数据不存在"),

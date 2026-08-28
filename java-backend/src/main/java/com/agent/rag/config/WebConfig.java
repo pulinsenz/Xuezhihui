@@ -31,9 +31,10 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(loginInterceptor)
                 .addPathPatterns("/**")
                 .excludePathPatterns(
-                        // 登录注册无需鉴权
+                        // 登录注册无需鉴权（含注册前置的验证码获取）
                         "/auth/login",
                         "/auth/register",
+                        "/auth/captcha",
                         // 内部接口：Python Agent 工具回调，无 JWT，改由 X-Agent-Token 在 Controller 内校验
                         "/internal/**",
                         // 知识库封面静态资源：<img> 无法携带 JWT，须公开；仅 cover/ 子目录被映射，不含用户文档

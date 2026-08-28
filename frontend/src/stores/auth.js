@@ -27,8 +27,8 @@ export const useAuthStore = defineStore('auth', {
       localStorage.setItem('token', data.token)
       localStorage.setItem('user', JSON.stringify(data.user))
     },
-    async register(account, password, checkPassword, userName, turnstileToken) {
-      await apiRegister({ userAccount: account, userPassword: password, checkPassword, userName, turnstileToken })
+    async register(account, password, checkPassword, userName, captchaId, captchaAnswer) {
+      await apiRegister({ userAccount: account, userPassword: password, checkPassword, userName, captchaId, captchaAnswer })
     },
     async fetchCurrentUser() {
       const user = await getCurrentUser()

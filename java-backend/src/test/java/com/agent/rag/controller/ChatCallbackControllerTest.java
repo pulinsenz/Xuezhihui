@@ -7,7 +7,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.nio.charset.StandardCharsets;
@@ -27,6 +29,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  *
  * @author pulinsenz
  */
+@ActiveProfiles("test")
 @SpringBootTest(properties = {
         "jwt.secret=test-secret-for-integration-tests-0123456789abcdef0123456789abcdef",
         "app.agent.token=test-agent-token"
@@ -42,6 +45,8 @@ class ChatCallbackControllerTest {
     private ObjectMapper objectMapper;
     @Autowired
     private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
 
     private final List<String> createdSessionIds = new ArrayList<>();
     private final List<Long> createdUserIds = new ArrayList<>();
@@ -65,7 +70,7 @@ class ChatCallbackControllerTest {
         String reg = mockMvc.perform(post("/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
-                                Map.of("userAccount", account, "userPassword", pass, "checkPassword", pass))))
+                                RegisterTestSupport.registerBody(mockMvc, objectMapper, stringRedisTemplate, account, pass))))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         long uid = objectMapper.readTree(reg).get("data").asLong();
         createdUserIds.add(uid);

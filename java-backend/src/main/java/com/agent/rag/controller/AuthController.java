@@ -4,10 +4,12 @@ import com.agent.rag.common.Result;
 import com.agent.rag.dto.req.LoginRequest;
 import com.agent.rag.dto.req.RegisterRequest;
 import com.agent.rag.dto.req.UpdateProfileRequest;
+import com.agent.rag.dto.resp.CaptchaVO;
 import com.agent.rag.dto.resp.LoginResponse;
 import com.agent.rag.dto.resp.UserVO;
 import com.agent.rag.entity.User;
 import com.agent.rag.service.AuthService;
+import com.agent.rag.service.CaptchaService;
 import com.agent.rag.util.IpUtil;
 import com.agent.rag.util.JwtUtil;
 import jakarta.annotation.Resource;
@@ -36,14 +38,25 @@ public class AuthController {
     private AuthService authService;
 
     @Resource
+    private CaptchaService captchaService;
+
+    @Resource
     private JwtUtil jwtUtil;
 
     /**
-     * 注册
+     * 获取注册算术验证码（公开免鉴权；注册前先调用，提交时回传 challengeId + 答案）
+     */
+    @GetMapping("/captcha")
+    public Result<CaptchaVO> captcha() {
+        return Result.success(captchaService.create());
+    }
+
+    /**
+     * 注册（防批量机器人：算术验证码一次性校验 + IP 限流）
      */
     @PostMapping("/register")
-    public Result<Long> register(@RequestBody RegisterRequest request) {
-        return Result.success(authService.register(request));
+    public Result<Long> register(@RequestBody RegisterRequest request, HttpServletRequest httpRequest) {
+        return Result.success(authService.register(request, IpUtil.getClientIp(httpRequest)));
     }
 
     /**

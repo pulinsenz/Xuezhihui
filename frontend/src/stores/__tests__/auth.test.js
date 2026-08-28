@@ -47,17 +47,18 @@ describe('auth store', () => {
     expect(store.isAdmin).toBe(false)
   })
 
-  it('register 调用注册接口但不保存登录态', async () => {
+  it('register 调用注册接口（含算术验证码 challengeId + 答案）但不保存登录态', async () => {
     authApi.register.mockResolvedValue(1)
     const store = useAuthStore()
-    await store.register('newuser', 'pass12345', 'pass12345', '新同学', 'turnstile-token-1')
+    await store.register('newuser', 'pass12345', 'pass12345', '新同学', 'challenge-1', '51')
 
     expect(authApi.register).toHaveBeenCalledWith({
       userAccount: 'newuser',
       userPassword: 'pass12345',
       checkPassword: 'pass12345',
       userName: '新同学',
-      turnstileToken: 'turnstile-token-1',
+      captchaId: 'challenge-1',
+      captchaAnswer: '51',
     })
     expect(store.isLogin).toBe(false)
   })

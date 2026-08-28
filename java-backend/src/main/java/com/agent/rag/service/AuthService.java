@@ -17,10 +17,11 @@ public interface AuthService {
     /**
      * 注册
      *
-     * @param request 注册请求
+     * @param request  注册请求（含算术验证码 challengeId + 答案）
+     * @param clientIp 客户端 IP（由 Controller 解析传入，服务层不依赖 servlet），用于注册 IP 限流
      * @return 新用户 id
      */
-    Long register(RegisterRequest request);
+    Long register(RegisterRequest request, String clientIp);
 
     /**
      * 登录：签发 JWT 并写入 Redis 白名单
