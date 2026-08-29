@@ -45,9 +45,9 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class CaptchaService {
 
-    private static final int WIDTH = 150;
-    private static final int HEIGHT = 46;
-    private static final int FONT_SIZE = 18;
+    private static final int WIDTH = 160;
+    private static final int HEIGHT = 52;
+    private static final int FONT_SIZE = 24;
     /** 乘法用个位数，保证答案好算；加减用两位数 */
     private static final int A_MIN = 10, A_MAX = 99;
 
@@ -97,7 +97,7 @@ public class CaptchaService {
                 int x = randomInt(2, 9);
                 int y = randomInt(3, 9);
                 answer = x * y;
-                text = x + " x " + y;
+                text = x + " × " + y;
             }
         }
 
@@ -133,7 +133,8 @@ public class CaptchaService {
             }
             boolean ok = stored.equals(answer.trim());
             if (!ok) {
-                log.warn("验证码答案错误: challengeId={}", challengeId);
+                // 打印实际答案便于排障：用户提交的与正确答案不一致 → 大概率是图片可读性问题或看错运算符
+                log.warn("验证码答案错误: challengeId={}, 用户提交={}, 正确答案={}", challengeId, answer.trim(), stored);
             }
             return ok;
         } catch (DataAccessException e) {
@@ -153,40 +154,42 @@ public class CaptchaService {
         return ThreadLocalRandom.current().nextInt(min, max + 1);
     }
 
-    /** 绘制算术题 PNG：浅灰底 + 噪点 + 干扰线 + 逐字符随机旋转/颜色，抗简单 OCR 且保持可读 */
+    /**
+     * 绘制算术题 PNG：高可读性设计。
+     * <p>
+     * 历史教训：初版逐字符随机旋转 ±17° + 90 个噪点 + 3 条干扰线把算式搅成"要猜的谜题"，
+     * 用户读错数字导致注册失败（"图片和答案不匹配"）。算术验证码的价值是挡住无头绪批量脚本，
+     * 不需要靠毁掉可读性对抗 OCR——本版改为：小幅旋转(±3°)、浅色零星噪点、无干扰线、
+     * 大字体、数字间明显间距，保证人一眼读出算式。
+     */
     private byte[] renderPng(String text) throws IOException {
         BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
         try {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            g.setColor(new Color(244, 244, 244));
+            g.setColor(new Color(250, 250, 250));
             g.fillRect(0, 0, WIDTH, HEIGHT);
-            // 噪点
-            for (int i = 0; i < 90; i++) {
-                g.setColor(new Color(randomInt(0, 200), randomInt(0, 200), randomInt(0, 200)));
+            // 浅色零星噪点（不落笔画上不易察觉，对 OCR 意义不大，只保持图片"非纯色"）
+            for (int i = 0; i < 30; i++) {
+                g.setColor(new Color(215, 215, 215));
                 g.fillRect(secureRandom.nextInt(WIDTH), secureRandom.nextInt(HEIGHT), 1, 1);
             }
-            // 干扰线
-            for (int i = 0; i < 3; i++) {
-                g.setColor(new Color(randomInt(0, 200), randomInt(0, 200), randomInt(0, 200)));
-                g.drawLine(secureRandom.nextInt(WIDTH), secureRandom.nextInt(HEIGHT),
-                        secureRandom.nextInt(WIDTH), secureRandom.nextInt(HEIGHT));
-            }
-            // 逐字符绘制
+            // 逐字符绘制：统一深灰色，字符独立小幅旋转（±0.05 弧度≈±3°），间距充足
             Font font = new Font(Font.SANS_SERIF, Font.BOLD, FONT_SIZE);
             g.setFont(font);
             FontMetrics fm = g.getFontMetrics();
             int baseline = (HEIGHT - fm.getHeight()) / 2 + fm.getAscent();
-            int x = 8;
+            int x = 12;
+            Color[] palette = {new Color(40, 50, 70), new Color(60, 60, 60), new Color(35, 70, 70)};
             for (char c : text.toCharArray()) {
                 Graphics2D g2 = (Graphics2D) g.create();
-                g2.setColor(new Color(randomInt(20, 120), randomInt(20, 120), randomInt(20, 120)));
+                g2.setColor(palette[secureRandom.nextInt(palette.length)]);
                 int charWidth = fm.charWidth(c);
-                g2.rotate((secureRandom.nextDouble() - 0.5) * 0.3, x + charWidth / 2.0, baseline);
+                g2.rotate((secureRandom.nextDouble() - 0.5) * 0.1, x + charWidth / 2.0, baseline);
                 g2.drawString(String.valueOf(c), x, baseline);
                 g2.dispose();
-                x += charWidth + 2;
+                x += charWidth + 6;
             }
         } finally {
             g.dispose();
