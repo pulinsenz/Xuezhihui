@@ -9,7 +9,7 @@
           <el-input v-model="loginForm.userPassword" type="password" show-password placeholder="密码" :prefix-icon="Lock" @keyup.enter="handleLogin" />
         </el-form-item>
         <el-button type="primary" class="submit-btn" size="large" :loading="loading" @click="handleLogin">
-          登 录
+          登录
         </el-button>
       </el-form>
     </el-tab-pane>
@@ -28,18 +28,17 @@
         <el-form-item prop="checkPassword">
           <el-input v-model="registerForm.checkPassword" type="password" show-password placeholder="确认密码" :prefix-icon="Lock" @keyup.enter="handleRegister" />
         </el-form-item>
-        <!-- 注册算术验证码（自研，防批量机器人薅 LLM token）：点击图片刷新 -->
         <el-form-item prop="captchaAnswer">
           <div class="captcha-row">
             <div class="captcha-img" :title="captchaImage ? '看不清？点击图片刷新' : '验证码加载失败，点击重试'" @click="refreshCaptcha">
               <el-icon v-if="!captchaImage" class="captcha-img-loading"><Loading /></el-icon>
               <img v-else :src="captchaImageSrc" alt="验证码" />
             </div>
-            <el-input v-model="captchaAnswer" placeholder="验证码计算结果" :prefix-icon="Key" @keyup.enter="handleRegister" />
+            <el-input v-model="registerForm.captchaAnswer" placeholder="验证码计算结果" :prefix-icon="Key" @keyup.enter="handleRegister" />
           </div>
         </el-form-item>
         <el-button type="primary" class="submit-btn" size="large" :loading="loading" @click="handleRegister">
-          注 册
+          注册
         </el-button>
       </el-form>
     </el-tab-pane>
@@ -53,14 +52,6 @@ import { User, Lock, Postcard, Key, Loading } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { getCaptcha } from '../api/auth'
 
-/**
- * 登录 / 注册表单，供登录弹窗与登录页复用。
- * 登录成功后 emit('success')，导航等动作由父组件决定。
- *
- * 注册防刷：自研算术验证码（替代 Cloudflare Turnstile，国内服务器可用）。
- * 进入注册 tab 时向后端 GET /auth/captcha 拉取一道算术题图片 + challengeId，
- * 用户输入计算结果后随注册请求提交；后端一次性校验（答案存 Redis，GET+DEL 原子消费防重放）。
- */
 const emit = defineEmits(['success'])
 const authStore = useAuthStore()
 
@@ -70,39 +61,40 @@ const loading = ref(false)
 const loginFormRef = ref()
 const registerFormRef = ref()
 const loginForm = reactive({ userAccount: '', userPassword: '' })
-const registerForm = reactive({ userAccount: '', userName: '', userPassword: '', checkPassword: '' })
+const registerForm = reactive({
+  userAccount: '',
+  userName: '',
+  userPassword: '',
+  checkPassword: '',
+  captchaAnswer: '',
+})
 
-// ---------- 算术验证码 ----------
 const captchaId = ref('')
-const captchaImage = ref('') // base64
-const captchaAnswer = ref('')
+const captchaImage = ref('')
 const captchaImageSrc = computed(() =>
   captchaImage.value ? `data:image/png;base64,${captchaImage.value}` : ''
 )
 
-/** 拉取一道新验证码（挑战 id 与图片），并清空已输入的答案 */
 async function refreshCaptcha() {
   try {
     const data = await getCaptcha()
     captchaId.value = data.challengeId
     captchaImage.value = data.imageBase64
-    captchaAnswer.value = ''
+    registerForm.captchaAnswer = ''
   } catch (e) {
-    // 错误信息已由请求拦截器提示；清空状态，用户点击图片可重试
     captchaId.value = ''
     captchaImage.value = ''
-    captchaAnswer.value = ''
+    registerForm.captchaAnswer = ''
   }
 }
 
-// 进入注册 tab 时拉取验证码，离开时清空（防止用旧验证码提交）
 watch(activeTab, (tab) => {
   if (tab === 'register') {
     refreshCaptcha()
   } else {
     captchaId.value = ''
     captchaImage.value = ''
-    captchaAnswer.value = ''
+    registerForm.captchaAnswer = ''
   }
 }, { immediate: true })
 
@@ -146,7 +138,7 @@ const handleLogin = async () => {
     ElMessage.success('登录成功')
     emit('success')
   } catch (e) {
-    // 错误信息已由拦截器提示
+    // 错误信息已由请求拦截器提示
   } finally {
     loading.value = false
   }
@@ -156,8 +148,7 @@ const handleRegister = async () => {
   if (loading.value) return
   const valid = await registerFormRef.value?.validate().catch(() => false)
   if (!valid) return
-  // 验证码须已加载且答案非空（验证码可能仍在加载/刷新失败）
-  if (!captchaId.value || !captchaAnswer.value.trim()) {
+  if (!captchaId.value || !registerForm.captchaAnswer.trim()) {
     ElMessage.warning('请先输入验证码计算结果')
     return
   }
@@ -169,14 +160,13 @@ const handleRegister = async () => {
       registerForm.checkPassword,
       registerForm.userName,
       captchaId.value,
-      captchaAnswer.value
+      registerForm.captchaAnswer
     )
     ElMessage.success('注册成功，请登录')
     activeTab.value = 'login'
     loginForm.userAccount = registerForm.userAccount
     loginForm.userPassword = ''
   } catch (e) {
-    // 注册失败（含验证码错误/过期）：旧验证码已被服务端消费，刷新一道新验证码
     refreshCaptcha()
   } finally {
     loading.value = false

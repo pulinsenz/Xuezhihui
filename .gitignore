@@ -15,3 +15,4 @@ data/
 
 # 数据库备份/导出（可能含用户密码哈希与隐私，严禁提交；本地副本放 data/backup/）
 backup/
+memory/
