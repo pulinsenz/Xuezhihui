@@ -187,8 +187,8 @@ const handleRegister = async () => {
 }
 .captcha-img {
   flex-shrink: 0;
-  width: 150px;
-  height: 46px;
+  width: 164px;
+  height: 52px;
   border: 1px solid var(--el-border-color);
   border-radius: 4px;
   overflow: hidden;
