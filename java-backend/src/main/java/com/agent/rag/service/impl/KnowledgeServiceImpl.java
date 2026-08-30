@@ -12,17 +12,20 @@ import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.req.KnowledgeUpdateRequest;
 import com.agent.rag.dto.req.MemberInviteRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
+import com.agent.rag.dto.resp.KnowledgeInvitationVO;
 import com.agent.rag.dto.resp.MemberVO;
 import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
 import com.agent.rag.entity.KnowledgeDoc;
 import com.agent.rag.entity.KnowledgeFavorite;
+import com.agent.rag.entity.KnowledgeInvitation;
 import com.agent.rag.entity.KnowledgeMember;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeFavoriteMapper;
+import com.agent.rag.mapper.KnowledgeInvitationMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.mapper.KnowledgeMemberMapper;
 import com.agent.rag.mapper.ForbiddenFileHashMapper;
@@ -85,6 +88,9 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     @Resource
     private TaskService taskService;
 
+    @Resource
+    private KnowledgeInvitationMapper knowledgeInvitationMapper;
+
     @Override
     public Long createKnowledge(KnowledgeCreateRequest request) {
         if (request == null || StrUtil.isBlank(request.getName())) {
@@ -133,13 +139,18 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         // 我拥有的知识库
         List<Knowledge> owned = knowledgeMapper.selectList(new LambdaQueryWrapper<Knowledge>()
                 .eq(Knowledge::getUserId, userId));
+        // 我参与协作的知识库
+        Set<Long> memberIds = myMemberKnowledgeIds(userId);
+        List<Knowledge> memberManaged = memberIds.isEmpty() ? List.of()
+                : knowledgeMapper.selectBatchIds(memberIds);
         // 我收藏的知识库（源库被删除时 selectBatchIds 自动过滤）
         Set<Long> favIds = myFavoriteIds(userId);
         List<Knowledge> favorited = favIds.isEmpty() ? List.of()
                 : knowledgeMapper.selectBatchIds(favIds);
-        // 合并去重（收藏不能是本人库，理论无重叠，按 id 去重兜底）
+        // 合并去重（协作/收藏可能与本人库重叠，按 id 去重兜底）
         Map<Long, Knowledge> merged = new LinkedHashMap<>();
         owned.forEach(k -> merged.put(k.getId(), k));
+        memberManaged.forEach(k -> merged.putIfAbsent(k.getId(), k));
         favorited.forEach(k -> merged.putIfAbsent(k.getId(), k));
         List<Knowledge> all = new ArrayList<>(merged.values());
         // createTime 理论上不为空（DB 默认），null 时排最后，避免排序 NPE
@@ -623,7 +634,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     public void addMember(Long knowledgeId, MemberInviteRequest request) {
         getOwnedKnowledge(knowledgeId);
         if (request == null || (request.getUserId() == null && StrUtil.isBlank(request.getUserAccount()))) {
-            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请提供目标用户 id 或账号");
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请提供目标用户id或者账号");
         }
         User target;
         if (request.getUserId() != null) {
@@ -639,11 +650,11 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         if (target.getId().equals(userId)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "不能邀请自己");
         }
-        int rows = knowledgeMemberMapper.insertIgnore(knowledgeId, target.getId());
+        int rows = sendMemberInvitation(knowledgeId, userId, target);
         if (rows == 0) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "该用户已是协作者");
         }
-        log.info("邀请协作者成功: knowledgeId={}, userId={}", knowledgeId, target.getId());
+        log.info("邀请消息已发送: knowledgeId={}, inviterId={}, targetUserId={}", knowledgeId, userId, target.getId());
     }
 
     @Override
@@ -659,10 +670,168 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         log.info("移除协作者成功: knowledgeId={}, userId={}", knowledgeId, userId);
     }
 
-    /**
-     * 查询知识库（逻辑删除过滤），不存在抛异常
-     */
+    private int sendMemberInvitation(Long knowledgeId, Long inviterId, User target) {
+        if (knowledgeMemberMapper.selectCount(new LambdaQueryWrapper<KnowledgeMember>()
+                .eq(KnowledgeMember::getKnowledgeId, knowledgeId)
+                .eq(KnowledgeMember::getUserId, target.getId())) > 0) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "该用户已是协作者");
+        }
+        KnowledgeInvitation pending = knowledgeInvitationMapper.selectOne(new LambdaQueryWrapper<KnowledgeInvitation>()
+                .eq(KnowledgeInvitation::getKnowledgeId, knowledgeId)
+                .eq(KnowledgeInvitation::getTargetUserId, target.getId())
+                .eq(KnowledgeInvitation::getStatus, "PENDING"));
+        if (pending != null) {
+            KnowledgeInvitation update = new KnowledgeInvitation();
+            update.setId(pending.getId());
+            update.setInviterId(inviterId);
+            update.setMessage(buildInvitationMessage(knowledgeId, inviterId, target.getId()));
+            update.setReadTime(null);
+            knowledgeInvitationMapper.updateById(update);
+            return 1;
+        }
+        KnowledgeInvitation invitation = new KnowledgeInvitation();
+        invitation.setKnowledgeId(knowledgeId);
+        invitation.setInviterId(inviterId);
+        invitation.setTargetUserId(target.getId());
+        invitation.setStatus("PENDING");
+        invitation.setMessage(buildInvitationMessage(knowledgeId, inviterId, target.getId()));
+        return knowledgeInvitationMapper.insert(invitation);
+    }
+
+    @Override
+    public List<KnowledgeInvitationVO> listInvitations() {
+        Long currentUserId = UserContext.getUser().getId();
+        List<KnowledgeInvitation> invitations = knowledgeInvitationMapper.selectList(new LambdaQueryWrapper<KnowledgeInvitation>()
+                .eq(KnowledgeInvitation::getTargetUserId, currentUserId)
+                .or()
+                .eq(KnowledgeInvitation::getInviterId, currentUserId)
+                .orderByDesc(KnowledgeInvitation::getCreateTime));
+        Map<String, KnowledgeInvitation> latestByThread = new LinkedHashMap<>();
+        for (KnowledgeInvitation invitation : invitations) {
+            Long peerId = currentUserId.equals(invitation.getTargetUserId())
+                    ? invitation.getInviterId()
+                    : invitation.getTargetUserId();
+            String threadKey = invitation.getKnowledgeId() + ":" + peerId;
+            latestByThread.putIfAbsent(threadKey, invitation);
+        }
+        List<KnowledgeInvitationVO> vos = new ArrayList<>();
+        for (KnowledgeInvitation invitation : latestByThread.values()) {
+            KnowledgeInvitationVO vo = toInvitationVO(invitation, currentUserId);
+            if (vo != null) {
+                vos.add(vo);
+            }
+        }
+        return vos;
+    }
+
+    @Override
+    public void readInvitation(Long invitationId) {
+        KnowledgeInvitation invitation = getTargetInvitation(invitationId);
+        if (invitation.getReadTime() != null) {
+            return;
+        }
+        KnowledgeInvitation update = new KnowledgeInvitation();
+        update.setId(invitation.getId());
+        update.setReadTime(java.time.LocalDateTime.now());
+        knowledgeInvitationMapper.updateById(update);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Long acceptInvitation(Long invitationId) {
+        KnowledgeInvitation invitation = getTargetInvitation(invitationId);
+        if (!("PENDING".equals(invitation.getStatus()))) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "邀请已处理");
+        }
+        Knowledge knowledge = getKnowledgeOrThrow(invitation.getKnowledgeId());
+        KnowledgeInvitation update = new KnowledgeInvitation();
+        update.setId(invitation.getId());
+        update.setStatus("ACCEPTED");
+        update.setHandleTime(java.time.LocalDateTime.now());
+        if (invitation.getReadTime() == null) {
+            update.setReadTime(java.time.LocalDateTime.now());
+        }
+        knowledgeInvitationMapper.updateById(update);
+        knowledgeMemberMapper.insertIgnore(knowledge.getId(), invitation.getTargetUserId());
+        log.info("接受邀请成功: invitationId={}, knowledgeId={}, targetUserId={}", invitationId, knowledge.getId(), invitation.getTargetUserId());
+        return knowledge.getId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void rejectInvitation(Long invitationId) {
+        KnowledgeInvitation invitation = getTargetInvitation(invitationId);
+        if (!("PENDING".equals(invitation.getStatus()))) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "邀请已处理");
+        }
+        KnowledgeInvitation update = new KnowledgeInvitation();
+        update.setId(invitation.getId());
+        update.setStatus("REJECTED");
+        update.setHandleTime(java.time.LocalDateTime.now());
+        if (invitation.getReadTime() == null) {
+            update.setReadTime(java.time.LocalDateTime.now());
+        }
+        knowledgeInvitationMapper.updateById(update);
+        log.info("拒绝邀请成功: invitationId={}, knowledgeId={}, targetUserId={}", invitationId, invitation.getKnowledgeId(), invitation.getTargetUserId());
+    }
+
+    private KnowledgeInvitation getTargetInvitation(Long invitationId) {
+        if (invitationId == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "邀请 id 不能为空");
+        }
+        KnowledgeInvitation invitation = knowledgeInvitationMapper.selectById(invitationId);
+        if (invitation == null) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "邀请不存在");
+        }
+        Long currentUserId = UserContext.getUser().getId();
+        if (!currentUserId.equals(invitation.getTargetUserId())) {
+            throw new BusinessException(ErrorCode.NO_AUTH, "无权处理该邀请");
+        }
+        return invitation;
+    }
+
+    private String buildInvitationMessage(Long knowledgeId, Long inviterId, Long targetUserId) {
+        Knowledge knowledge = knowledgeMapper.selectAnyById(knowledgeId);
+        User inviter = userMapper.selectById(inviterId);
+        String knowledgeName = knowledge == null ? "未命名知识库" : StrUtil.blankToDefault(knowledge.getName(), "未命名知识库");
+        String inviterName = inviter == null ? "协作者" : StrUtil.blankToDefault(inviter.getUserName(), inviter.getUserAccount());
+        return inviterName + " 邀请你协作《" + knowledgeName + "》，接受后即可获得共同编辑权限。";
+    }
+
+    private KnowledgeInvitationVO toInvitationVO(KnowledgeInvitation invitation, Long currentUserId) {
+        Knowledge knowledge = knowledgeMapper.selectAnyById(invitation.getKnowledgeId());
+        if (knowledge == null) {
+            return null;
+        }
+        User inviter = userMapper.selectById(invitation.getInviterId());
+        User target = userMapper.selectById(invitation.getTargetUserId());
+        KnowledgeInvitationVO vo = new KnowledgeInvitationVO();
+        vo.setId(invitation.getId());
+        vo.setKnowledgeId(invitation.getKnowledgeId());
+        vo.setKnowledgeName(knowledge.getName());
+        vo.setKnowledgeCover(knowledge.getCover());
+        vo.setInviterId(invitation.getInviterId());
+        if (inviter != null) {
+            vo.setInviterName(StrUtil.blankToDefault(inviter.getUserName(), inviter.getUserAccount()));
+            vo.setInviterAvatar(inviter.getUserAvatar());
+        }
+        vo.setTargetUserId(invitation.getTargetUserId());
+        if (target != null) {
+            vo.setTargetUserName(StrUtil.blankToDefault(target.getUserName(), target.getUserAccount()));
+            vo.setTargetUserAvatar(target.getUserAvatar());
+        }
+        vo.setDirection(currentUserId.equals(invitation.getTargetUserId()) ? "incoming" : "outgoing");
+        vo.setStatus(invitation.getStatus());
+        vo.setMessage(invitation.getMessage());
+        vo.setReadTime(invitation.getReadTime());
+        vo.setHandleTime(invitation.getHandleTime());
+        vo.setCreateTime(invitation.getCreateTime());
+        vo.setUpdateTime(invitation.getUpdateTime());
+        return vo;
+    }
+
     private Knowledge getKnowledgeOrThrow(Long knowledgeId) {
+
         if (knowledgeId == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "知识库 id 不能为空");
         }
@@ -698,6 +867,15 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         return knowledgeFavoriteMapper.selectList(new LambdaQueryWrapper<KnowledgeFavorite>()
                         .eq(KnowledgeFavorite::getUserId, userId))
                 .stream().map(KnowledgeFavorite::getKnowledgeId).collect(java.util.stream.Collectors.toSet());
+    }
+
+    /**
+     * 当前用户参与协作的知识库 id 集合
+     */
+    private Set<Long> myMemberKnowledgeIds(Long userId) {
+        return knowledgeMemberMapper.selectList(new LambdaQueryWrapper<KnowledgeMember>()
+                        .eq(KnowledgeMember::getUserId, userId))
+                .stream().map(KnowledgeMember::getKnowledgeId).collect(java.util.stream.Collectors.toSet());
     }
 
     /**

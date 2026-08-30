@@ -113,6 +113,8 @@ class KnowledgePublicControllerTest {
             jdbcTemplate.update("DELETE FROM knowledge_favorite WHERE userId = ?", uid);
             jdbcTemplate.update("DELETE km FROM knowledge_member km JOIN knowledge k ON km.knowledgeId = k.id WHERE k.userId = ?", uid);
             jdbcTemplate.update("DELETE FROM knowledge_member WHERE userId = ?", uid);
+            jdbcTemplate.update("DELETE ki FROM knowledge_invitation ki JOIN knowledge k ON ki.knowledgeId = k.id WHERE k.userId = ?", uid);
+            jdbcTemplate.update("DELETE FROM knowledge_invitation WHERE inviterId = ? OR targetUserId = ?", uid, uid);
             jdbcTemplate.update("DELETE kd FROM knowledge_doc kd JOIN knowledge k ON kd.knowledgeId = k.id WHERE k.userId = ?", uid);
             jdbcTemplate.update("DELETE FROM knowledge WHERE userId = ?", uid);
             jdbcTemplate.update("DELETE FROM user WHERE id = ?", uid);
@@ -379,15 +381,36 @@ class KnowledgePublicControllerTest {
         String before = upload(b.token(), kbId, "x.txt", "x".getBytes(StandardCharsets.UTF_8));
         assertEquals(40101, code(before), "非协作者不可上传");
 
-        // A 按账号邀请 B
+        // A 按账号发送邀请消息给 B
         String invite = mockMvc.perform(post("/knowledge/{id}/members", kbId)
                         .header("Authorization", "Bearer " + a.token())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(Map.of("userAccount", b.account()))))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
-        assertEquals(0, code(invite), "邀请协作者应成功");
+        assertEquals(0, code(invite), "邀请消息应发送成功");
 
-        // B 成为协作者后可上传
+        // B 先能在消息中心看到邀请，但此时还不能上传
+        String inbox = mockMvc.perform(get("/knowledge/invitations").header("Authorization", "Bearer " + b.token()))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        JsonNode messages = data(inbox);
+        assertEquals(0, code(inbox));
+        assertTrue(messages.size() > 0, "B 应能看到邀请消息");
+        long invitationId = messages.get(0).get("id").asLong();
+        assertEquals("PENDING", messages.get(0).get("status").asText());
+
+        String stillBlocked = upload(b.token(), kbId, "before-accept.txt", "仍未接受".getBytes(StandardCharsets.UTF_8));
+        assertEquals(40101, code(stillBlocked), "未接受前仍不可上传");
+
+        // B 接受后可上传
+        String accept = mockMvc.perform(post("/knowledge/invitations/{id}/accept", invitationId)
+                        .header("Authorization", "Bearer " + b.token()))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(0, code(accept), "接受邀请应成功");
+
+        String myList = mockMvc.perform(get("/knowledge/list").header("Authorization", "Bearer " + b.token()))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertNotNull(findById(data(myList), kbId), "接受邀请后应出现在知识库列表");
+
         String after = upload(b.token(), kbId, "a.txt", "协作者上传内容".getBytes(StandardCharsets.UTF_8));
         assertEquals(0, code(after), "协作者应可上传文档");
         assertTrue(StringUtils.hasText(objectMapper.readTree(after).get("data").asText()));

@@ -214,3 +214,25 @@ CREATE TABLE IF NOT EXISTS `knowledge_member`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='知识库协作者';
 
+-- 17. 知识库邀请消息表（消息中心使用，接受后才进入协作者表）
+CREATE TABLE IF NOT EXISTS `knowledge_invitation`
+(
+    `id`            bigint      NOT NULL AUTO_INCREMENT COMMENT 'id',
+    `knowledgeId`   bigint      NOT NULL COMMENT '知识库id',
+    `inviterId`     bigint      NOT NULL COMMENT '邀请人id',
+    `targetUserId`  bigint      NOT NULL COMMENT '被邀请人id',
+    `status`        varchar(16) NOT NULL DEFAULT 'PENDING' COMMENT '状态:PENDING/ACCEPTED/REJECTED',
+    `message`       varchar(1000) DEFAULT NULL COMMENT '邀请文案',
+    `readTime`      datetime    DEFAULT NULL COMMENT '阅读时间',
+    `handleTime`    datetime    DEFAULT NULL COMMENT '处理时间',
+    `createTime`    datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updateTime`    datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    PRIMARY KEY (`id`),
+    KEY `idx_targetUserId` (`targetUserId`),
+    KEY `idx_inviterId` (`inviterId`),
+    KEY `idx_knowledgeId` (`knowledgeId`),
+    KEY `idx_status` (`status`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='知识库邀请消息';
+

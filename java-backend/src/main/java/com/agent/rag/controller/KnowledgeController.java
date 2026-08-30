@@ -9,6 +9,7 @@ import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.KnowledgeUpdateRequest;
 import com.agent.rag.dto.req.MemberInviteRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
+import com.agent.rag.dto.resp.KnowledgeInvitationVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.dto.resp.MemberVO;
 import com.agent.rag.entity.KnowledgeDoc;
@@ -153,6 +154,40 @@ public class KnowledgeController {
     @PostMapping("/{id}/members")
     public Result<Boolean> addMember(@PathVariable Long id, @RequestBody MemberInviteRequest request) {
         knowledgeService.addMember(id, request);
+        return Result.success(true);
+    }
+
+    /**
+     * 消息中心：当前用户的知识库邀请消息
+     */
+    @GetMapping("/invitations")
+    public Result<List<KnowledgeInvitationVO>> invitations() {
+        return Result.success(knowledgeService.listInvitations());
+    }
+
+    /**
+     * 标记邀请为已读
+     */
+    @PostMapping("/invitations/{id}/read")
+    public Result<Boolean> readInvitation(@PathVariable Long id) {
+        knowledgeService.readInvitation(id);
+        return Result.success(true);
+    }
+
+    /**
+     * 接受邀请
+     */
+    @PostMapping("/invitations/{id}/accept")
+    public Result<Long> acceptInvitation(@PathVariable Long id) {
+        return Result.success(knowledgeService.acceptInvitation(id));
+    }
+
+    /**
+     * 拒绝邀请
+     */
+    @PostMapping("/invitations/{id}/reject")
+    public Result<Boolean> rejectInvitation(@PathVariable Long id) {
+        knowledgeService.rejectInvitation(id);
         return Result.success(true);
     }
 

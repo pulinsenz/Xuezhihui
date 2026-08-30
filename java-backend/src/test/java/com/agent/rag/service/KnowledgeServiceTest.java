@@ -5,14 +5,18 @@ import com.agent.rag.common.ErrorCode;
 import com.agent.rag.common.VectorStatus;
 import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
+import com.agent.rag.dto.req.MemberInviteRequest;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
 import com.agent.rag.entity.KnowledgeDoc;
+import com.agent.rag.entity.KnowledgeInvitation;
+import com.agent.rag.entity.KnowledgeMember;
 import com.agent.rag.entity.User;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeFavoriteMapper;
+import com.agent.rag.mapper.KnowledgeInvitationMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.mapper.KnowledgeMemberMapper;
 import com.agent.rag.mapper.UserMapper;
@@ -30,6 +34,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -56,6 +61,8 @@ class KnowledgeServiceTest {
     @Mock
     private KnowledgeMemberMapper knowledgeMemberMapper;
     @Mock
+    private KnowledgeInvitationMapper knowledgeInvitationMapper;
+    @Mock
     private UserMapper userMapper;
     @Mock
     private ForbiddenFileHashMapper forbiddenFileHashMapper;
@@ -75,6 +82,7 @@ class KnowledgeServiceTest {
         ReflectionTestUtils.setField(knowledgeService, "knowledgeDocMapper", knowledgeDocMapper);
         ReflectionTestUtils.setField(knowledgeService, "knowledgeFavoriteMapper", knowledgeFavoriteMapper);
         ReflectionTestUtils.setField(knowledgeService, "knowledgeMemberMapper", knowledgeMemberMapper);
+        ReflectionTestUtils.setField(knowledgeService, "knowledgeInvitationMapper", knowledgeInvitationMapper);
         ReflectionTestUtils.setField(knowledgeService, "userMapper", userMapper);
         ReflectionTestUtils.setField(knowledgeService, "forbiddenFileHashMapper", forbiddenFileHashMapper);
         ReflectionTestUtils.setField(knowledgeService, "fileStorageService", fileStorageService);
@@ -165,11 +173,40 @@ class KnowledgeServiceTest {
         Knowledge k1 = ownedKnowledge(1L);
         k1.setName("知识库A");
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(k1));
+        when(knowledgeFavoriteMapper.selectList(any())).thenReturn(List.of());
+        when(knowledgeMemberMapper.selectList(any())).thenReturn(List.of());
         when(knowledgeDocMapper.selectCount(any())).thenReturn(3L);
 
         List<KnowledgeVO> list = knowledgeService.listMyKnowledge();
         assertEquals(1, list.size());
         assertEquals(3L, list.get(0).getDocCount());
+    }
+
+    @Test
+    void listMyKnowledge_includesMemberKnowledge() {
+        Knowledge owned = ownedKnowledge(1L);
+        owned.setName("我的库");
+        owned.setCreateTime(LocalDateTime.now().minusDays(1));
+        Knowledge memberKb = new Knowledge();
+        memberKb.setId(2L);
+        memberKb.setUserId(99L);
+        memberKb.setName("协作库");
+        memberKb.setCreateTime(LocalDateTime.now());
+        KnowledgeMember member = new KnowledgeMember();
+        member.setKnowledgeId(2L);
+        member.setUserId(1L);
+
+        when(knowledgeMapper.selectList(any())).thenReturn(List.of(owned));
+        when(knowledgeMemberMapper.selectList(any())).thenReturn(List.of(member));
+        when(knowledgeFavoriteMapper.selectList(any())).thenReturn(List.of());
+        when(knowledgeMapper.selectBatchIds(any())).thenReturn(List.of(memberKb));
+        when(knowledgeDocMapper.selectCount(any())).thenReturn(0L);
+
+        List<KnowledgeVO> list = knowledgeService.listMyKnowledge();
+
+        assertEquals(2, list.size());
+        assertEquals("协作库", list.get(0).getName());
+        assertEquals(false, list.get(0).getIsOwner());
     }
 
     @Test
@@ -267,6 +304,52 @@ class KnowledgeServiceTest {
         BusinessException e = assertThrows(BusinessException.class,
                 () -> knowledgeService.uploadDoc(5L, sampleFile()));
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+    }
+
+    // ---------- 邀请消息 ----------
+
+    @Test
+    void addMember_sendsInvitationInsteadOfDirectMemberInsert() {
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        User target = new User();
+        target.setId(2L);
+        target.setUserAccount("alice");
+        target.setUserName("Alice");
+        when(userMapper.selectOne(any())).thenReturn(target);
+        when(knowledgeMemberMapper.selectCount(any())).thenReturn(0L);
+        when(knowledgeInvitationMapper.selectOne(any())).thenReturn(null);
+        when(knowledgeInvitationMapper.insert(any(KnowledgeInvitation.class))).thenReturn(1);
+
+        MemberInviteRequest request = new MemberInviteRequest();
+        request.setUserAccount("alice");
+        knowledgeService.addMember(5L, request);
+
+        verify(knowledgeInvitationMapper).insert(any(KnowledgeInvitation.class));
+        verify(knowledgeMemberMapper, never()).insertIgnore(any(), any());
+    }
+
+    @Test
+    void acceptInvitation_addsMemberAndMarksHandled() {
+        User invitee = new User();
+        invitee.setId(2L);
+        UserContext.setUser(invitee);
+
+        KnowledgeInvitation invitation = new KnowledgeInvitation();
+        invitation.setId(100L);
+        invitation.setKnowledgeId(5L);
+        invitation.setInviterId(1L);
+        invitation.setTargetUserId(2L);
+        invitation.setStatus("PENDING");
+        when(knowledgeInvitationMapper.selectById(100L)).thenReturn(invitation);
+        when(knowledgeMapper.selectById(5L)).thenReturn(ownedKnowledge(5L));
+        when(knowledgeInvitationMapper.updateById(any(KnowledgeInvitation.class))).thenReturn(1);
+        when(knowledgeMemberMapper.insertIgnore(5L, 2L)).thenReturn(1);
+
+        Long knowledgeId = knowledgeService.acceptInvitation(100L);
+
+        assertEquals(5L, knowledgeId);
+        verify(knowledgeMemberMapper).insertIgnore(5L, 2L);
+        verify(knowledgeInvitationMapper).updateById(any(KnowledgeInvitation.class));
     }
 
     // ---------- 彻底删除 ----------

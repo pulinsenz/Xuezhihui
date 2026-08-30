@@ -4,6 +4,7 @@ import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.KnowledgeUpdateRequest;
 import com.agent.rag.dto.req.MemberInviteRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
+import com.agent.rag.dto.resp.KnowledgeInvitationVO;
 import com.agent.rag.dto.resp.MemberVO;
 import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
@@ -162,6 +163,26 @@ public interface KnowledgeService {
      * 邀请协作者（仅作者，按 userId 或 userAccount）
      */
     void addMember(Long knowledgeId, MemberInviteRequest request);
+
+    /**
+     * 消息中心：当前用户收到/发出的知识库邀请消息
+     */
+    List<KnowledgeInvitationVO> listInvitations();
+
+    /**
+     * 标记邀请为已读
+     */
+    void readInvitation(Long invitationId);
+
+    /**
+     * 接受邀请，成为协作者
+     */
+    Long acceptInvitation(Long invitationId);
+
+    /**
+     * 拒绝邀请
+     */
+    void rejectInvitation(Long invitationId);
 
     /**
      * 移除协作者（仅作者）

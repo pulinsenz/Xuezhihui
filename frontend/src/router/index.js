@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
+import { useUiStore } from '../stores/ui'
 import MainLayout from '../layouts/MainLayout.vue'
 
 const routes = [
@@ -19,6 +20,7 @@ const routes = [
       { path: 'knowledge', name: 'KnowledgeList', component: () => import('../views/KnowledgeListView.vue') },
       { path: 'knowledge/:id', name: 'KnowledgeDetail', component: () => import('../views/KnowledgeDetailView.vue') },
       { path: 'public-knowledge', name: 'PublicKnowledge', component: () => import('../views/PublicKnowledgeView.vue') },
+      { path: 'messages', name: 'Messages', component: () => import('../views/KnowledgeMessagesView.vue'), meta: { loginRequired: true } },
       { path: 'profile', name: 'Profile', component: () => import('../views/ProfileView.vue') },
       { path: 'settings', name: 'Settings', component: () => import('../views/SettingsView.vue') },
       { path: 'admin/users', name: 'AdminUsers', component: () => import('../views/AdminUsersView.vue'), meta: { admin: true } },
@@ -36,9 +38,16 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
+  const uiStore = useUiStore()
   // 公开页（登录页）直接放行
   if (to.meta.public) {
     next()
+    return
+  }
+  if (to.meta.loginRequired && !authStore.isLogin) {
+    uiStore.openLogin()
+    ElMessage.warning('请先登录')
+    next('/chat')
     return
   }
   // 默认聊天界面：未登录也可浏览，登录通过右上角弹窗完成

@@ -18,6 +18,12 @@
           <el-icon><Compass /></el-icon>
           <span>公开知识库</span>
         </el-menu-item>
+        <el-menu-item index="/messages">
+          <el-badge :value="messageStore.unreadCount" :hidden="messageStore.unreadCount === 0" class="menu-badge">
+            <el-icon><Bell /></el-icon>
+          </el-badge>
+          <span>消息</span>
+        </el-menu-item>
         <el-menu-item index="/settings">
           <el-icon><Setting /></el-icon>
           <span>设置</span>
@@ -74,22 +80,27 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
+import { Bell, ChatDotRound, Collection, Compass, Folder, Setting, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
+import { useMessageStore } from '../stores/messages'
 import { useUiStore } from '../stores/ui'
 import LoginDialog from '../components/LoginDialog.vue'
 import logo from '../assets/logo.png'
 
 const authStore = useAuthStore()
+const messageStore = useMessageStore()
 const uiStore = useUiStore()
 const router = useRouter()
+let refreshTimer = null
 
 const activeMenu = computed(() => {
   const path = router.currentRoute.value.path
   if (path.startsWith('/admin')) return path
   if (path.startsWith('/chat')) return '/chat'
+  if (path.startsWith('/messages')) return '/messages'
   if (path.startsWith('/knowledge')) return '/knowledge'
   return path
 })
@@ -116,9 +127,41 @@ const handleCommand = async (command) => {
   if (command === 'logout') {
     await ElMessageBox.confirm('确定退出登录吗？', '提示', { type: 'warning' })
     await authStore.logout()
+    messageStore.clear()
     router.push('/chat')
   }
 }
+
+const syncMessages = async () => {
+  if (authStore.isLogin) {
+    await messageStore.loadInvitations()
+  } else {
+    messageStore.clear()
+  }
+}
+
+watch(
+  () => authStore.isLogin,
+  () => {
+    syncMessages().catch(() => {})
+  },
+  { immediate: true },
+)
+
+onMounted(() => {
+  refreshTimer = window.setInterval(() => {
+    if (authStore.isLogin) {
+      messageStore.loadInvitations().catch(() => {})
+    }
+  }, 30000)
+})
+
+onUnmounted(() => {
+  if (refreshTimer) {
+    window.clearInterval(refreshTimer)
+    refreshTimer = null
+  }
+})
 </script>
 
 <style scoped>
@@ -152,6 +195,11 @@ const handleCommand = async (command) => {
   --el-menu-text-color: #cfd3dc;
   --el-menu-hover-bg-color: #2a2f3a;
   --el-menu-active-color: #409eff;
+}
+.menu-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
 }
 .header {
   display: flex;

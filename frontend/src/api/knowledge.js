@@ -92,3 +92,15 @@ export const batchVectorizeDoc = (id, docIds) => request.post(`/knowledge/${id}/
 
 /** 长任务状态查询（上传向量化后轮询） */
 export const getTask = (taskId) => request.get(`/task/${taskId}`)
+
+/** 消息中心：邀请列表 */
+export const listKnowledgeInvitations = () => request.get('/knowledge/invitations')
+
+/** 消息中心：标记邀请已读 */
+export const readKnowledgeInvitation = (id) => request.post(`/knowledge/invitations/${id}/read`)
+
+/** 消息中心：接受邀请 */
+export const acceptKnowledgeInvitation = (id) => request.post(`/knowledge/invitations/${id}/accept`)
+
+/** 消息中心：拒绝邀请 */
+export const rejectKnowledgeInvitation = (id) => request.post(`/knowledge/invitations/${id}/reject`)

@@ -44,7 +44,7 @@ app:
   agent:
     base-url: http://localhost:8000
     # 内部鉴权 token：必须由环境变量 AGENT_TOKEN 注入，缺失则启动失败（fail-closed，无公开默认值）
-    token: ${AGENT_TOKEN}
+    token: ${AGENT_TOKEN:changeme-in-production}
   # 初始管理员：首次启动 admin 不存在时以其创建（ADMIN_PASSWORD 缺省则生成随机密码打印日志，见 AdminInitializer）
   admin:
     initial-password: ${ADMIN_PASSWORD:}

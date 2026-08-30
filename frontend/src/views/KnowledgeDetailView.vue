@@ -309,8 +309,8 @@
     <!-- 协作者管理弹窗（仅作者） -->
     <el-dialog v-model="memberDialogVisible" title="协作者管理" width="520px">
       <div class="invite-row">
-        <el-input v-model="inviteAccount" placeholder="输入被邀请人的账号，回车邀请" @keyup.enter="handleInvite" />
-        <el-button type="primary" :loading="inviting" @click="handleInvite">邀请</el-button>
+        <el-input v-model="inviteAccount" placeholder="输入被邀请人的账号，回车发送消息" @keyup.enter="handleInvite" />
+        <el-button type="primary" :loading="inviting" @click="handleInvite">发送邀请</el-button>
       </div>
       <el-table :data="members" v-loading="membersLoading" size="small">
         <el-table-column label="用户" min-width="140">
@@ -564,7 +564,7 @@ const handleInvite = async () => {
   inviting.value = true;
   try {
     await addMember(knowledgeId, { userAccount: account });
-    ElMessage.success("邀请成功");
+    ElMessage.success("消息已发送，等待对方接受");
     inviteAccount.value = "";
     await loadMembers();
   } finally {

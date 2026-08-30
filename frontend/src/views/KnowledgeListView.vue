@@ -3,7 +3,7 @@
     <div class="page-header">
       <div>
         <h2>我的知识库</h2>
-        <p class="sub">上传课程资料、校园文档，搭建你的专属知识库；收藏的他人知识库也会出现在这里</p>
+        <p class="sub">上传课程资料、校园文档，搭建你的专属知识库；收藏和协作中的知识库也会出现在这里</p>
       </div>
       <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建知识库</el-button>
     </div>
@@ -13,8 +13,9 @@
     <el-row v-loading="loading" :gutter="16" class="kb-row">
       <el-col v-for="kb in list" :key="kb.id" :xs="24" :sm="12" :md="8" :lg="6" :xl="6">
         <el-card shadow="hover" class="kb-card" @click="goDetail(kb.id)">
-          <!-- 自己的库右上角“我的”；收藏的库显示“已收藏” -->
+          <!-- 自己的库右上角“我的”；协作中的库显示“协作中”；收藏的库显示“已收藏” -->
           <el-tag v-if="kb.isOwner" type="success" effect="dark" size="small" class="mine-badge">我的</el-tag>
+          <el-tag v-else-if="kb.isMember" type="primary" effect="dark" size="small" class="mine-badge">协作中</el-tag>
           <el-tag v-else type="warning" effect="plain" size="small" class="mine-badge">已收藏</el-tag>
 
           <img v-if="kb.cover" :src="kb.cover" class="kb-cover-img" alt="封面" />
@@ -39,6 +40,7 @@
               <el-button size="small" type="primary" plain :icon="Edit" @click="openEditDialog(kb)">编辑</el-button>
               <el-button size="small" type="danger" link :icon="Delete" @click="handleDelete(kb)">删除</el-button>
             </template>
+            <el-button v-else-if="kb.isMember" size="small" type="primary" link @click="goDetail(kb.id)">进入</el-button>
             <el-button v-else size="small" type="warning" link @click="handleUnfavorite(kb)">取消收藏</el-button>
           </div>
         </el-card>
