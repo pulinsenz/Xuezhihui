@@ -9,24 +9,85 @@ const routes = [
     path: '/login',
     name: 'Login',
     component: () => import('../views/LoginView.vue'),
-    meta: { public: true },
+    meta: { public: true, title: '登录' },
   },
   {
     path: '/',
     component: MainLayout,
     children: [
-      { path: '', redirect: '/chat' },
-      { path: 'chat/:sessionId?', name: 'Chat', component: () => import('../views/ChatView.vue') },
-      { path: 'knowledge', name: 'KnowledgeList', component: () => import('../views/KnowledgeListView.vue') },
-      { path: 'knowledge/:id', name: 'KnowledgeDetail', component: () => import('../views/KnowledgeDetailView.vue') },
-      { path: 'public-knowledge', name: 'PublicKnowledge', component: () => import('../views/PublicKnowledgeView.vue') },
-      { path: 'messages', name: 'Messages', component: () => import('../views/KnowledgeMessagesView.vue'), meta: { loginRequired: true } },
-      { path: 'profile', name: 'Profile', component: () => import('../views/ProfileView.vue') },
-      { path: 'settings', name: 'Settings', component: () => import('../views/SettingsView.vue') },
-      { path: 'admin/users', name: 'AdminUsers', component: () => import('../views/AdminUsersView.vue'), meta: { admin: true } },
-      { path: 'admin/knowledge', name: 'AdminKnowledge', component: () => import('../views/AdminKnowledgeView.vue'), meta: { admin: true } },
-      { path: 'admin/knowledge/:id', name: 'AdminKnowledgeDetail', component: () => import('../views/AdminKnowledgeDetailView.vue'), meta: { admin: true } },
-      { path: ':pathMatch(.*)*', name: 'NotFound', component: () => import('../views/NotFoundView.vue') },
+      {
+        path: 'dashboard',
+        name: 'Dashboard',
+        component: () => import('../views/DashboardView.vue'),
+        meta: { public: true, title: '仪表盘' },
+      },
+      { path: '', redirect: '/dashboard' },
+      {
+        path: 'chat/:sessionId?',
+        name: 'Chat',
+        component: () => import('../views/ChatView.vue'),
+        meta: { title: '对话' },
+      },
+      {
+        path: 'knowledge',
+        name: 'KnowledgeList',
+        component: () => import('../views/KnowledgeListView.vue'),
+        meta: { loginRequired: true, title: '我的知识库' },
+      },
+      {
+        path: 'knowledge/:id',
+        name: 'KnowledgeDetail',
+        component: () => import('../views/KnowledgeDetailView.vue'),
+        meta: { title: '知识库详情' },
+      },
+      {
+        path: 'public-knowledge',
+        name: 'PublicKnowledge',
+        component: () => import('../views/PublicKnowledgeView.vue'),
+        meta: { public: true, title: '公开知识库' },
+      },
+      {
+        path: 'messages',
+        name: 'Messages',
+        component: () => import('../views/KnowledgeMessagesView.vue'),
+        meta: { loginRequired: true, title: '消息中心' },
+      },
+      {
+        path: 'profile',
+        name: 'Profile',
+        component: () => import('../views/ProfileView.vue'),
+        meta: { loginRequired: true, title: '个人资料' },
+      },
+      {
+        path: 'settings',
+        name: 'Settings',
+        component: () => import('../views/SettingsView.vue'),
+        meta: { loginRequired: true, title: '设置' },
+      },
+      {
+        path: 'admin/users',
+        name: 'AdminUsers',
+        component: () => import('../views/AdminUsersView.vue'),
+        meta: { admin: true, loginRequired: true, title: '用户管理' },
+      },
+      {
+        path: 'admin/knowledge',
+        name: 'AdminKnowledge',
+        component: () => import('../views/AdminKnowledgeView.vue'),
+        meta: { admin: true, loginRequired: true, title: '全局知识库' },
+      },
+      {
+        path: 'admin/knowledge/:id',
+        name: 'AdminKnowledgeDetail',
+        component: () => import('../views/AdminKnowledgeDetailView.vue'),
+        meta: { admin: true, loginRequired: true, title: '全局知识库详情' },
+      },
+      {
+        path: ':pathMatch(.*)*',
+        name: 'NotFound',
+        component: () => import('../views/NotFoundView.vue'),
+        meta: { title: '未找到' },
+      },
     ],
   },
 ]
@@ -39,31 +100,33 @@ const router = createRouter({
 router.beforeEach((to, from, next) => {
   const authStore = useAuthStore()
   const uiStore = useUiStore()
-  // 公开页（登录页）直接放行
+
   if (to.meta.public) {
     next()
     return
   }
+
   if (to.meta.loginRequired && !authStore.isLogin) {
     uiStore.openLogin()
     ElMessage.warning('请先登录')
-    next('/chat')
+    next('/dashboard')
     return
   }
-  // 默认聊天界面：未登录也可浏览，登录通过右上角弹窗完成
-  // 管理员专属页 → 未登录或非管理员均拦截
+
   if (to.meta.admin) {
     if (!authStore.isLogin) {
+      uiStore.openLogin()
       ElMessage.warning('请先登录')
-      next('/chat')
+      next('/dashboard')
       return
     }
     if (!authStore.isAdmin) {
       ElMessage.error('无权限访问该页面')
-      next('/knowledge')
+      next('/dashboard')
       return
     }
   }
+
   next()
 })
 

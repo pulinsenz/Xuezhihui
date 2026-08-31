@@ -2,6 +2,7 @@ package com.agent.rag.service;
 
 import com.agent.rag.dto.req.LoginRequest;
 import com.agent.rag.dto.req.RegisterRequest;
+import com.agent.rag.dto.req.ChangePasswordRequest;
 import com.agent.rag.dto.req.UpdateProfileRequest;
 import com.agent.rag.dto.resp.LoginResponse;
 import com.agent.rag.entity.User;
@@ -51,6 +52,14 @@ public interface AuthService {
      * @param request 资料请求
      */
     void updateProfile(UpdateProfileRequest request);
+
+    /**
+     * 修改当前用户密码，成功后应使当前登录态失效
+     *
+     * @param request 修改密码请求
+     * @param token 当前请求携带的裸 token
+     */
+    LoginResponse changePassword(ChangePasswordRequest request, String token);
 
     /**
      * 上传当前用户头像，返回可公网加载的 URL

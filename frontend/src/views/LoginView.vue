@@ -1,13 +1,17 @@
 <template>
   <div class="login-page">
-    <div class="login-card">
-      <div class="brand">
+    <div class="login-shell">
+      <div class="login-brand">
         <img class="brand-logo" :src="logo" alt="学智汇" />
         <h1>学智汇</h1>
-        <p>多 Agent 协同 RAG 校园问答系统</p>
+        <p>AI RAG 工作台</p>
       </div>
 
-      <AuthForm @success="handleSuccess" />
+      <div class="login-card">
+        <AuthForm @success="handleSuccess" />
+      </div>
+
+      <div class="login-foot">© 2026 学智汇. All rights reserved.</div>
     </div>
   </div>
 </template>
@@ -21,44 +25,85 @@ const router = useRouter()
 const route = useRoute()
 
 const handleSuccess = () => {
-  router.push(route.query.redirect || '/chat')
+  router.push(route.query.redirect || '/dashboard')
 }
 </script>
 
 <style scoped>
 .login-page {
-  height: 100vh;
+  position: relative;
+  min-height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1f3a93 0%, #409eff 100%);
+  padding: 32px 20px;
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(14, 165, 233, 0.08), transparent 36%),
+    linear-gradient(225deg, rgba(20, 184, 166, 0.12), transparent 38%),
+    linear-gradient(180deg, #f8fbfd 0%, #eef7f7 100%);
 }
-.login-card {
-  width: 400px;
-  background: #fff;
-  border-radius: 12px;
-  padding: 32px 36px 24px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(14, 165, 233, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 165, 233, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+  opacity: 0.6;
+  pointer-events: none;
 }
-.brand {
+
+.login-shell {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 440px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+}
+
+.login-brand {
   text-align: center;
-  margin-bottom: 20px;
 }
+
 .brand-logo {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 12px;
+  width: 74px;
+  height: 74px;
   display: block;
-  border-radius: 10px;
-  object-fit: contain;
+  margin: 0 auto 10px;
+  border-radius: 20px;
+  box-shadow: 0 18px 32px rgba(20, 184, 166, 0.24);
 }
-.brand h1 {
-  font-size: 24px;
-  color: #303133;
+
+.login-brand h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
 }
-.brand p {
+
+.login-brand p {
   margin-top: 6px;
   font-size: 13px;
-  color: #909399;
+  color: #64748b;
+}
+
+.login-card {
+  width: 100%;
+  padding: 28px 32px 24px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 28px;
+  box-shadow: 0 28px 70px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(18px);
+}
+
+.login-foot {
+  font-size: 12px;
+  color: #94a3b8;
 }
 </style>

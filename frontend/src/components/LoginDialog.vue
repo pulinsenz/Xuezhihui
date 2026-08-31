@@ -5,10 +5,11 @@
     width="420px"
     align-center
     destroy-on-close
+    class="login-dialog"
   >
     <div class="dialog-brand">
       <img class="brand-logo" :src="logo" alt="学智汇" />
-      <p>多 Agent 协同 RAG 校园问答系统</p>
+      <p>AI RAG 工作台</p>
     </div>
     <AuthForm @success="handleSuccess" />
   </el-dialog>
@@ -30,16 +31,19 @@ const handleSuccess = () => {
   text-align: center;
   margin-bottom: 16px;
 }
+
 .brand-logo {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   margin: 0 auto 8px;
   display: block;
-  border-radius: 8px;
-  object-fit: contain;
+  border-radius: 16px;
+  object-fit: cover;
+  box-shadow: 0 12px 24px rgba(20, 184, 166, 0.22);
 }
+
 .dialog-brand p {
   font-size: 12px;
-  color: #909399;
+  color: #64748b;
 }
 </style>

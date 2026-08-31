@@ -3,6 +3,7 @@ package com.agent.rag.service;
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.config.JwtProperties;
 import com.agent.rag.config.LoginSecurityProperties;
+import com.agent.rag.dto.req.ChangePasswordRequest;
 import com.agent.rag.dto.req.LoginRequest;
 import com.agent.rag.dto.req.RegisterRequest;
 import com.agent.rag.dto.req.UpdateProfileRequest;
@@ -119,6 +120,7 @@ class AuthServiceTest {
         User user = new User();
         user.setId(id);
         user.setUserAccount("bob");
+        user.setUserPassword(BCrypt.hashpw("old-pass-123"));
         user.setUserRole("user");
         return user;
     }
@@ -430,6 +432,58 @@ class AuthServiceTest {
         req.setUserName("ok");
         BusinessException e = assertThrows(BusinessException.class, () -> authService.updateProfile(req));
         assertEquals(ErrorCode.NOT_LOGIN.getCode(), e.getCode());
+    }
+
+    // ---------- 修改密码 ----------
+
+    @Test
+    void changePassword_success_updatesHashAndInvalidatesCurrentToken() {
+        UserContext.setUser(loggedInUser(7L));
+        when(jwtUtil.createToken(7L, "user")).thenReturn("new-token");
+        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+
+        ChangePasswordRequest req = new ChangePasswordRequest();
+        req.setOldPassword("old-pass-123");
+        req.setNewPassword("new-pass-456");
+        req.setCheckPassword("new-pass-456");
+
+        authService.changePassword(req, "token-abc");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).updateById(captor.capture());
+        User update = captor.getValue();
+        assertEquals(7L, update.getId());
+        assertNotNull(update.getUserPassword());
+        verify(stringRedisTemplate).delete(jwtProperties.getRedisPrefix() + "token-abc");
+        verify(stringRedisTemplate).delete(jwtProperties.getRedisPrefix() + "user:7");
+        verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "user:7"), eq("new-token"), eq(1L), eq(TimeUnit.HOURS));
+        verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "new-token"), eq("7"), eq(1L), eq(TimeUnit.HOURS));
+    }
+
+    @Test
+    void changePassword_wrongOldPassword_throwsParamsError() {
+        UserContext.setUser(loggedInUser(7L));
+        ChangePasswordRequest req = new ChangePasswordRequest();
+        req.setOldPassword("wrong-old");
+        req.setNewPassword("new-pass-456");
+        req.setCheckPassword("new-pass-456");
+
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.changePassword(req, "token-abc"));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+        verify(userMapper, never()).updateById(any(User.class));
+        verify(stringRedisTemplate, never()).delete(anyString());
+    }
+
+    @Test
+    void changePassword_mismatchNewPassword_throwsParamsError() {
+        UserContext.setUser(loggedInUser(7L));
+        ChangePasswordRequest req = new ChangePasswordRequest();
+        req.setOldPassword("old-pass-123");
+        req.setNewPassword("new-pass-456");
+        req.setCheckPassword("other-pass");
+
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.changePassword(req, "token-abc"));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
     }
 
     // ---------- 头像上传 ----------

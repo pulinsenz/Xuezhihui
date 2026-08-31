@@ -20,12 +20,15 @@ export const useAuthStore = defineStore('auth', {
     isAdmin: (state) => state.user?.userRole === 'admin',
   },
   actions: {
+    setSession(token, user) {
+      this.token = token
+      this.user = user
+      localStorage.setItem('token', token)
+      localStorage.setItem('user', JSON.stringify(user))
+    },
     async login(account, password) {
       const data = await apiLogin({ userAccount: account, userPassword: password })
-      this.token = data.token
-      this.user = data.user
-      localStorage.setItem('token', data.token)
-      localStorage.setItem('user', JSON.stringify(data.user))
+      this.setSession(data.token, data.user)
     },
     async register(account, password, checkPassword, userName, captchaId, captchaAnswer) {
       await apiRegister({ userAccount: account, userPassword: password, checkPassword, userName, captchaId, captchaAnswer })

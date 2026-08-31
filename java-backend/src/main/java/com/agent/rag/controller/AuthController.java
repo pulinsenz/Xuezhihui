@@ -1,6 +1,7 @@
 package com.agent.rag.controller;
 
 import com.agent.rag.common.Result;
+import com.agent.rag.dto.req.ChangePasswordRequest;
 import com.agent.rag.dto.req.LoginRequest;
 import com.agent.rag.dto.req.RegisterRequest;
 import com.agent.rag.dto.req.UpdateProfileRequest;
@@ -93,6 +94,14 @@ public class AuthController {
     public Result<Boolean> updateProfile(@RequestBody UpdateProfileRequest request) {
         authService.updateProfile(request);
         return Result.success(true);
+    }
+
+    /**
+     * 修改密码（原密码 + 新密码确认）
+     */
+    @PutMapping("/password")
+    public Result<LoginResponse> changePassword(@RequestBody ChangePasswordRequest request, HttpServletRequest httpRequest) {
+        return Result.success(authService.changePassword(request, jwtUtil.resolveToken(httpRequest)));
     }
 
     /**

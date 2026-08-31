@@ -6,6 +6,7 @@ import com.agent.rag.common.ErrorCode;
 import com.agent.rag.config.JwtProperties;
 import com.agent.rag.config.LoginSecurityProperties;
 import com.agent.rag.dto.req.LoginRequest;
+import com.agent.rag.dto.req.ChangePasswordRequest;
 import com.agent.rag.dto.req.RegisterRequest;
 import com.agent.rag.dto.req.UpdateProfileRequest;
 import com.agent.rag.dto.resp.LoginResponse;
@@ -214,6 +215,49 @@ public class AuthServiceImpl implements AuthService {
         update.setEditTime(LocalDateTime.now());
         userMapper.updateById(update);
         log.info("更新资料成功: userId={}", loginUser.getId());
+    }
+
+    @Override
+    public LoginResponse changePassword(ChangePasswordRequest request, String token) {
+        User loginUser = getLoginUser();
+        String oldPassword = StrUtil.trimToNull(request.getOldPassword());
+        String newPassword = StrUtil.trimToNull(request.getNewPassword());
+        String checkPassword = StrUtil.trimToNull(request.getCheckPassword());
+        if (oldPassword == null || newPassword == null || checkPassword == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "原密码、新密码、确认密码不能为空");
+        }
+        if (newPassword.length() < 8 || newPassword.length() > 32) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "新密码长度应在 8-32 位");
+        }
+        if (!newPassword.equals(checkPassword)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "两次输入的新密码不一致");
+        }
+        String currentPassword = StrUtil.trimToNull(loginUser.getUserPassword());
+        if (currentPassword == null) {
+            throw new BusinessException(ErrorCode.USER_NOT_EXIST);
+        }
+        if (!BCrypt.checkpw(oldPassword, currentPassword)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "原密码错误");
+        }
+        User update = new User();
+        update.setId(loginUser.getId());
+        update.setUserPassword(BCrypt.hashpw(newPassword));
+        update.setEditTime(LocalDateTime.now());
+        userMapper.updateById(update);
+        String newToken = jwtUtil.createToken(loginUser.getId(), loginUser.getUserRole());
+        String userTokenKey = jwtProperties.getRedisPrefix() + "user:" + loginUser.getId();
+        if (StrUtil.isNotBlank(token)) {
+            stringRedisTemplate.delete(jwtProperties.getRedisPrefix() + token);
+        }
+        stringRedisTemplate.delete(userTokenKey);
+        stringRedisTemplate.opsForValue().set(userTokenKey, newToken, jwtProperties.getExpireHours(), TimeUnit.HOURS);
+        stringRedisTemplate.opsForValue().set(
+                jwtProperties.getRedisPrefix() + newToken,
+                String.valueOf(loginUser.getId()),
+                jwtProperties.getExpireHours(),
+                TimeUnit.HOURS);
+        log.info("修改密码成功: userId={}", loginUser.getId());
+        return new LoginResponse(newToken, UserVO.from(loginUser));
     }
 
     @Override

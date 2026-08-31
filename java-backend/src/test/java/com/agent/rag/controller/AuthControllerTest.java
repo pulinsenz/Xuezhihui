@@ -28,6 +28,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -349,5 +350,34 @@ class AuthControllerTest {
             JsonNode node = objectMapper.readTree(resp);
             assertEquals(40000, node.get("code").asInt(), filename + " 应被头像白名单拒绝");
         }
+    }
+
+    @Test
+    void changePassword_invalidatesOldToken_andAllowsLoginWithNewPassword() throws Exception {
+        String token = registerAndGetToken();
+
+        Map<String, String> body = Map.of(
+                "oldPassword", testPassword,
+                "newPassword", "newpass456",
+                "checkPassword", "newpass456"
+        );
+        JsonNode changeNode = objectMapper.readTree(mockMvc.perform(put("/auth/password")
+                        .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(body)))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertEquals(0, changeNode.get("code").asInt(), "修改密码应成功");
+        String newToken = changeNode.get("data").get("token").asText();
+        createdTokens.add(newToken);
+
+        JsonNode oldTokenMe = objectMapper.readTree(mockMvc.perform(get("/auth/me")
+                        .header("Authorization", "Bearer " + token))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertEquals(40100, oldTokenMe.get("code").asInt(), "旧 token 应失效");
+
+        JsonNode newTokenMe = objectMapper.readTree(mockMvc.perform(get("/auth/me")
+                        .header("Authorization", "Bearer " + newToken))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertEquals(testAccount, newTokenMe.get("data").get("userAccount").asText(), "新 token 应立即可用");
     }
 }

@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
+import java.util.UUID;
 
 /**
  * JWT 工具类（hutool-jwt，HS256）
@@ -30,6 +31,7 @@ public class JwtUtil {
         return JWT.create()
                 .setPayload("userId", userId)
                 .setPayload("userRole", userRole)
+                .setPayload("jti", UUID.randomUUID().toString())
                 .setExpiresAt(expire)
                 .setKey(jwtProperties.getSecret().getBytes())
                 .sign();
