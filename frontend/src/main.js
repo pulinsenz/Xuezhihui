@@ -7,10 +7,12 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
 import router from './router'
+import { useAuthStore } from './stores/auth'
 import './style.css'
 
+const pinia = createPinia()
 const app = createApp(App)
-app.use(createPinia())
+app.use(pinia)
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 // 注册全部图标组件，模板中可直接 <el-icon><Folder /></el-icon>
@@ -20,4 +22,9 @@ for (const [name, component] of Object.entries(ElementPlusIconsVue)) {
 app.mount('#app')
 
 // 全局登录失效事件：由 axios 响应拦截器触发，回到默认聊天页
-window.addEventListener('auth:expired', () => router.push('/chat'))
+// 必须同时清空 auth store：request.js 只删了 localStorage，Pinia 内存态仍持有旧 token，
+// isLogin 依旧为 true，聊天会继续用旧 token 发请求，最终被静默成「（无回答）」。
+window.addEventListener('auth:expired', () => {
+  useAuthStore(pinia).clear()
+  router.push('/chat')
+})

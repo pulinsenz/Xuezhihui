@@ -121,6 +121,7 @@ import { getSettings } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import { useChatStore } from '../stores/chat'
+import { parseStreamError } from '../utils/streamError'
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
@@ -248,6 +249,18 @@ const handleSend = async () => {
       headers: { Authorization: `Bearer ${authStore.token}` },
     })
     if (!resp.ok || !resp.body) throw new Error(`对话请求失败: ${resp.status}`)
+
+    // 非 SSE 响应：Java 业务异常（未登录/登录失效/无权会话/限流等）返回 HTTP 200 + application/json。
+    // SSE 解析器找不到 data: 事件会静默落成「（无回答）」，这里显式解析并抛真实错误。
+    if ((resp.headers.get('content-type') || '').includes('application/json')) {
+      const { message: msg, code } = parseStreamError(await resp.text())
+      // 登录失效：raw fetch 绕过了 axios 拦截器，需手动清登录态并派发 auth:expired
+      if (code === 40100) {
+        authStore.clear()
+        window.dispatchEvent(new Event('auth:expired'))
+      }
+      throw new Error(msg)
+    }
 
     const reader = resp.body.getReader()
     const decoder = new TextDecoder()
