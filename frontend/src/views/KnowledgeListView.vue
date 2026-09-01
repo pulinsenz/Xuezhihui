@@ -1,101 +1,132 @@
-<template>
-  <div>
+﻿<template>
+  <div class="kb-list-page">
     <div class="page-header">
       <div>
         <h2>我的知识库</h2>
-        <p class="sub">上传课程资料、校园文档，搭建你的专属知识库；收藏和协作中的知识库也会出现在这里</p>
+        <p class="sub">搭建你的专属文档与课程知识库；自建、协作中与收藏的知识库均在此集中管理。</p>
       </div>
-      <el-button type="primary" :icon="Plus" @click="openCreateDialog">新建知识库</el-button>
+      <el-button type="primary" :icon="Plus" class="create-btn" @click="openCreateDialog">
+        新建知识库
+      </el-button>
     </div>
 
-    <el-empty v-if="!loading && list.length === 0" description="还没有知识库，点击右上角创建第一个" />
+    <el-empty
+      v-if="!loading && list.length === 0"
+      description="还没有知识库，点击右上角开启你的第一个知识库吧"
+    >
+      <el-button type="primary" :icon="Plus" @click="openCreateDialog">立即创建</el-button>
+    </el-empty>
 
-    <el-row v-loading="loading" :gutter="16" class="kb-row">
+    <el-row v-loading="loading" :gutter="20" class="kb-row">
       <el-col v-for="kb in list" :key="kb.id" :xs="24" :sm="12" :md="8" :lg="6" :xl="6">
-        <el-card shadow="hover" class="kb-card" @click="goDetail(kb.id)">
-          <!-- 自己的库右上角“我的”；协作中的库显示“协作中”；收藏的库显示“已收藏” -->
-          <el-tag v-if="kb.isOwner" type="success" effect="dark" size="small" class="mine-badge">我的</el-tag>
-          <el-tag v-else-if="kb.isMember" type="primary" effect="dark" size="small" class="mine-badge">协作中</el-tag>
-          <el-tag v-else type="warning" effect="plain" size="small" class="mine-badge">已收藏</el-tag>
-
-          <img v-if="kb.cover" :src="kb.cover" class="kb-cover-img" alt="封面" />
-          <div v-else class="kb-cover">{{ kb.name.charAt(0) }}</div>
-
-          <h3 class="kb-name">{{ kb.name }}</h3>
-          <div class="kb-author">
-            <el-avatar :size="18" class="author-avatar">{{ (kb.authorName || '?').charAt(0) }}</el-avatar>
-            <span class="author-name">{{ kb.authorName || '未知用户' }}</span>
-            <el-tag v-if="kb.isPublic === 1" size="small" type="success" effect="plain">公开</el-tag>
-          </div>
-          <p class="kb-desc">{{ kb.description || '暂无简介' }}</p>
-
-          <div class="kb-stats">
-            <span class="stat"><el-icon><View /></el-icon>{{ kb.viewCount || 0 }}</span>
-            <span class="stat"><el-icon><Star /></el-icon>{{ kb.favoriteCount || 0 }}</span>
-            <el-tag size="small" type="info">{{ kb.docCount }} 个文档</el-tag>
+        <div class="kb-card" @click="goDetail(kb.id)">
+          <!-- 身份角标 -->
+          <div class="kb-badge-wrapper">
+            <el-tag v-if="kb.isOwner" type="success" effect="dark" size="small" class="mine-badge">我的</el-tag>
+            <el-tag v-else-if="kb.isMember" type="primary" effect="dark" size="small" class="mine-badge">协作中</el-tag>
+            <el-tag v-else type="warning" effect="dark" size="small" class="mine-badge">已收藏</el-tag>
           </div>
 
-          <div class="kb-footer" @click.stop>
-            <template v-if="kb.isOwner">
-              <el-button size="small" type="primary" plain :icon="Edit" @click="openEditDialog(kb)">编辑</el-button>
-              <el-button size="small" type="danger" link :icon="Delete" @click="handleDelete(kb)">删除</el-button>
-            </template>
-            <el-button v-else-if="kb.isMember" size="small" type="primary" link @click="goDetail(kb.id)">进入</el-button>
-            <el-button v-else size="small" type="warning" link @click="handleUnfavorite(kb)">取消收藏</el-button>
+          <!-- 封面图/渐变首字 -->
+          <div class="cover-box">
+            <img v-if="kb.cover" :src="kb.cover" class="kb-cover-img" alt="封面" />
+            <div v-else class="kb-cover">{{ kb.name.charAt(0) }}</div>
           </div>
-        </el-card>
+
+          <div class="kb-body">
+            <div class="kb-head-row">
+              <h3 class="kb-name" :title="kb.name">{{ kb.name }}</h3>
+              <el-tag v-if="kb.isPublic === 1" size="small" type="success" effect="plain">公开</el-tag>
+              <el-tag v-else size="small" type="info" effect="plain">私有</el-tag>
+            </div>
+
+            <div class="kb-author">
+              <el-avatar :size="20" class="author-avatar">{{ (kb.authorName || '?').charAt(0) }}</el-avatar>
+              <span class="author-name">{{ kb.authorName || '未知作者' }}</span>
+            </div>
+
+            <p class="kb-desc" :title="kb.description">{{ kb.description || '暂无知识库简介描述' }}</p>
+
+            <div class="kb-meta-row">
+              <div class="kb-stats">
+                <span class="stat"><el-icon><View /></el-icon>{{ kb.viewCount || 0 }}</span>
+                <span class="stat"><el-icon><Star /></el-icon>{{ kb.favoriteCount || 0 }}</span>
+              </div>
+              <span class="doc-badge">{{ kb.docCount || 0 }} 篇文档</span>
+            </div>
+
+            <div class="kb-footer" @click.stop>
+              <template v-if="kb.isOwner">
+                <el-button size="small" plain :icon="Edit" @click="openEditDialog(kb)">编辑</el-button>
+                <el-button size="small" type="danger" link :icon="Delete" @click="handleDelete(kb)">删除</el-button>
+              </template>
+              <el-button v-else-if="kb.isMember" size="small" type="primary" link @click="goDetail(kb.id)">进入管理</el-button>
+              <el-button v-else size="small" type="warning" link @click="handleUnfavorite(kb)">取消收藏</el-button>
+            </div>
+          </div>
+        </div>
       </el-col>
     </el-row>
 
     <!-- 新建知识库弹窗 -->
-    <el-dialog v-model="createDialogVisible" title="新建知识库" width="440px">
-      <el-form :model="createForm" label-width="70px">
-        <el-form-item label="名称" required>
-          <el-input v-model="createForm.name" placeholder="如：数据结构课程资料" maxlength="128" />
+    <el-dialog v-model="createDialogVisible" title="新建知识库" width="460px" class="custom-dialog">
+      <el-form :model="createForm" label-position="top">
+        <el-form-item label="知识库名称" required>
+          <el-input v-model="createForm.name" placeholder="如：计算机体系结构课程资料" maxlength="128" />
         </el-form-item>
-        <el-form-item label="封面">
+        <el-form-item label="封面图片">
           <el-upload :show-file-list="false" :http-request="handleCreateCoverUpload" accept="image/*">
             <img v-if="createForm.cover" :src="createForm.cover" class="cover-preview" alt="封面预览" />
-            <div v-else class="cover-placeholder"><el-icon><Plus /></el-icon>上传封面</div>
+            <div v-else class="cover-placeholder">
+              <el-icon><Plus /></el-icon>
+              <span>上传知识库封面</span>
+            </div>
           </el-upload>
         </el-form-item>
-        <el-form-item label="简介">
-          <el-input v-model="createForm.description" type="textarea" :rows="3" placeholder="可选" maxlength="512" />
+        <el-form-item label="知识库简介">
+          <el-input v-model="createForm.description" type="textarea" :rows="3" placeholder="简要介绍该知识库包含哪些内容..." maxlength="512" />
         </el-form-item>
-        <el-form-item label="公开">
-          <el-switch v-model="createForm.isPublic" :active-value="1" :inactive-value="0" />
-          <span class="switch-tip">公开后他人可浏览、收藏、复制</span>
+        <el-form-item label="公开权限">
+          <div class="switch-row">
+            <el-switch v-model="createForm.isPublic" :active-value="1" :inactive-value="0" />
+            <span class="switch-tip">公开后所有人可在公开知识库中检索与浏览</span>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreate">创建</el-button>
+        <el-button type="primary" :loading="creating" @click="handleCreate">创建知识库</el-button>
       </template>
     </el-dialog>
 
     <!-- 编辑知识库弹窗（仅作者） -->
-    <el-dialog v-model="editDialogVisible" title="编辑知识库" width="440px">
-      <el-form :model="editForm" label-width="70px">
-        <el-form-item label="名称" required>
-          <el-input v-model="editForm.name" placeholder="如：数据结构课程资料" maxlength="128" />
+    <el-dialog v-model="editDialogVisible" title="编辑知识库" width="460px" class="custom-dialog">
+      <el-form :model="editForm" label-position="top">
+        <el-form-item label="知识库名称" required>
+          <el-input v-model="editForm.name" placeholder="如：计算机体系结构课程资料" maxlength="128" />
         </el-form-item>
-        <el-form-item label="封面">
+        <el-form-item label="封面图片">
           <el-upload :show-file-list="false" :http-request="handleEditCoverUpload" accept="image/*">
             <img v-if="editForm.cover" :src="editForm.cover" class="cover-preview" alt="封面预览" />
-            <div v-else class="cover-placeholder"><el-icon><Plus /></el-icon>上传封面</div>
+            <div v-else class="cover-placeholder">
+              <el-icon><Plus /></el-icon>
+              <span>上传知识库封面</span>
+            </div>
           </el-upload>
         </el-form-item>
-        <el-form-item label="简介">
-          <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="可选" maxlength="512" />
+        <el-form-item label="知识库简介">
+          <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="简要介绍该知识库包含哪些内容..." maxlength="512" />
         </el-form-item>
-        <el-form-item label="公开">
-          <el-switch v-model="editForm.isPublic" :active-value="1" :inactive-value="0" />
-          <span class="switch-tip">公开后他人可浏览、收藏、复制</span>
+        <el-form-item label="公开权限">
+          <div class="switch-row">
+            <el-switch v-model="editForm.isPublic" :active-value="1" :inactive-value="0" />
+            <span class="switch-tip">公开后所有人可在公开知识库中检索与浏览</span>
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editing" @click="handleEdit">保存</el-button>
+        <el-button type="primary" :loading="editing" @click="handleEdit">保存变更</el-button>
       </template>
     </el-dialog>
   </div>
@@ -196,7 +227,6 @@ const handleEdit = async () => {
   }
 }
 
-// 封面上传：返回 /api/files/... 的可访问 URL
 const handleCreateCoverUpload = async (options) => {
   const url = await uploadCover(options.file)
   createForm.cover = url
@@ -229,130 +259,238 @@ onMounted(loadList)
 </script>
 
 <style scoped>
+.kb-list-page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
 .page-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.page-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.sub {
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.create-btn {
+  border-radius: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.2);
+}
+
+.kb-row {
+  margin: 0 -10px;
+}
+
+/* 知识库卡片 */
+.kb-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 20px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  cursor: pointer;
+  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.03);
+  backdrop-filter: blur(16px);
+  transition: all 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.kb-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(20, 184, 166, 0.4);
+  box-shadow: 0 16px 36px rgba(20, 184, 166, 0.1);
+}
+
+.kb-badge-wrapper {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+}
+
+.cover-box {
+  height: 140px;
+  width: 100%;
+  overflow: hidden;
+  background: #f1f5f9;
+}
+
+.kb-cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.kb-card:hover .kb-cover-img {
+  transform: scale(1.04);
+}
+
+.kb-cover {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 40px;
+  font-weight: 700;
+  color: #ffffff;
+  background: linear-gradient(135deg, #0f766e, #14b8a6, #38bdf8);
+}
+
+.kb-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.kb-head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 20px;
+  gap: 8px;
 }
-.page-header h2 {
-  font-size: 20px;
-}
-.sub {
-  margin-top: 4px;
-  color: #909399;
-  font-size: 13px;
-}
-.kb-row {
-  margin: 0 -8px;
-}
-.kb-card {
-  margin-bottom: 16px;
-  cursor: pointer;
-  position: relative;
-}
-.mine-badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
-}
-.kb-cover {
-  height: 180px;
-  line-height: 180px;
-  text-align: center;
-  font-size: 48px;
-  font-weight: 700;
-  color: #fff;
-  background: linear-gradient(135deg, #409eff, #66b1ff);
-  border-radius: 6px;
-  margin-bottom: 12px;
-}
-.kb-cover-img {
-  width: 100%;
-  height: 180px;
-  object-fit: cover;
-  border-radius: 6px;
-  margin-bottom: 12px;
-  display: block;
-}
+
 .kb-name {
-  font-size: 16px;
-  color: #303133;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
 }
+
 .kb-author {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
+
 .author-avatar {
-  background: #909399;
+  background: #64748b;
   color: #fff;
   font-size: 11px;
   flex-shrink: 0;
 }
+
 .author-name {
   font-size: 12px;
-  color: #606266;
+  color: #64748b;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .kb-desc {
-  margin-top: 6px;
-  min-height: 20px;
-  font-size: 13px;
-  color: #909399;
+  margin-top: 8px;
+  min-height: 36px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
-.kb-stats {
-  margin-top: 10px;
+
+.kb-meta-row {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(241, 245, 249, 0.9);
   display: flex;
   align-items: center;
-  gap: 14px;
-  color: #909399;
+  justify-content: space-between;
+}
+
+.kb-stats {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #94a3b8;
   font-size: 12px;
 }
+
 .kb-stats .stat {
   display: inline-flex;
   align-items: center;
   gap: 3px;
 }
+
+.doc-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.1);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
 .kb-footer {
-  margin-top: 10px;
+  margin-top: 12px;
   display: flex;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
 }
+
 .cover-preview {
-  width: 180px;
-  height: 90px;
+  width: 100%;
+  height: 110px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: 12px;
   display: block;
 }
+
 .cover-placeholder {
-  width: 180px;
+  width: 100%;
   height: 90px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 6px;
-  color: #909399;
-  font-size: 13px;
-  cursor: pointer;
-}
-.switch-tip {
-  margin-left: 8px;
+  gap: 6px;
+  border: 1px dashed rgba(203, 213, 225, 0.8);
+  border-radius: 12px;
+  color: #64748b;
   font-size: 12px;
-  color: #909399;
+  cursor: pointer;
+  background: #f8fafc;
+  transition: all 0.2s ease;
+}
+
+.cover-placeholder:hover {
+  border-color: #14b8a6;
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.04);
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.switch-tip {
+  font-size: 12px;
+  color: #64748b;
 }
 </style>

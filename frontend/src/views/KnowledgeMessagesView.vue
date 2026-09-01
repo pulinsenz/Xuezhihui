@@ -1,59 +1,65 @@
-<template>
+﻿<template>
   <div class="messages-page">
     <div class="page-head">
       <div>
-        <h1>消息</h1>
-        <p>知识库邀请会在这里以聊天流的形式出现，接受后即可获得共同编辑权限。</p>
+        <p class="page-kicker">协同互动</p>
+        <h2>消息与知识协作</h2>
+        <p class="page-subtitle">知识库邀请会在这里以会话形式呈现，接受后即可共同编辑与管理文档</p>
       </div>
       <el-button :icon="Refresh" :loading="messageStore.loading" @click="reload">刷新</el-button>
     </div>
 
     <div v-if="!authStore.isLogin" class="empty-panel">
-      <el-empty description="登录后查看邀请消息">
-        <el-button type="primary" @click="uiStore.openLogin()">登录</el-button>
+      <el-empty description="登录后查看邀请消息与协作提醒">
+        <el-button type="primary" @click="uiStore.openLogin()">立即登录</el-button>
       </el-empty>
     </div>
 
     <div v-else class="message-shell">
       <aside class="thread-list">
         <div class="thread-list-head">
-          <span>对话</span>
-          <el-tag size="small" effect="plain">{{ threads.length }}</el-tag>
+          <div class="thread-head-title">
+            <span>协作邀请</span>
+            <el-tag size="small" effect="plain" type="primary">{{ threads.length }}</el-tag>
+          </div>
+          <span v-if="messageStore.unreadCount > 0" class="unread-pill">{{ messageStore.unreadCount }} 未读</span>
         </div>
 
-        <button
-          v-for="item in threads"
-          :key="item.id"
-          type="button"
-          class="thread-item"
-          :class="{ active: isActive(item), unread: isUnread(item) }"
-          @click="openThread(item)"
-        >
-          <el-avatar :size="40" class="thread-avatar" :src="item.knowledgeCover || undefined">
-            {{ avatarText(item.knowledgeName) }}
-          </el-avatar>
-          <div class="thread-body">
-            <div class="thread-title">
-              <span class="thread-name">{{ item.knowledgeName || '未命名知识库' }}</span>
-              <el-tag size="small" :type="statusTagType(item.status)" effect="plain">
-                {{ statusLabel(item.status) }}
-              </el-tag>
+        <div class="thread-items-wrap">
+          <button
+            v-for="item in threads"
+            :key="item.id"
+            type="button"
+            class="thread-item"
+            :class="{ active: isActive(item), unread: isUnread(item) }"
+            @click="openThread(item)"
+          >
+            <el-avatar :size="42" class="thread-avatar" :src="item.knowledgeCover || undefined">
+              {{ avatarText(item.knowledgeName) }}
+            </el-avatar>
+            <div class="thread-body">
+              <div class="thread-title">
+                <span class="thread-name">{{ item.knowledgeName || '未命名知识库' }}</span>
+                <el-tag size="small" :type="statusTagType(item.status)" effect="plain">
+                  {{ statusLabel(item.status) }}
+                </el-tag>
+              </div>
+              <div class="thread-meta">
+                <span class="thread-peer">{{ peerName(item) }}</span>
+                <span class="thread-time">{{ formatTime(item.createTime) }}</span>
+              </div>
+              <div class="thread-snippet">{{ item.message }}</div>
             </div>
-            <div class="thread-meta">
-              <span class="thread-peer">{{ peerName(item) }}</span>
-              <span class="thread-time">{{ formatTime(item.createTime) }}</span>
-            </div>
-            <div class="thread-snippet">{{ item.message }}</div>
-          </div>
-        </button>
+          </button>
+        </div>
 
-        <el-empty v-if="!threads.length" description="暂无邀请消息" />
+        <el-empty v-if="!threads.length" description="暂无邀请消息" class="thread-empty" />
       </aside>
 
       <section class="conversation">
         <template v-if="activeInvitation">
           <div class="conversation-head">
-            <el-avatar :size="44" class="conversation-avatar" :src="activeInvitation.knowledgeCover || undefined">
+            <el-avatar :size="46" class="conversation-avatar" :src="activeInvitation.knowledgeCover || undefined">
               {{ avatarText(activeInvitation.knowledgeName) }}
             </el-avatar>
             <div class="conversation-info">
@@ -65,12 +71,15 @@
               </div>
               <div class="conversation-subtitle">
                 <span>{{ peerName(activeInvitation) }}</span>
-                <span v-if="activeInvitation.readTime">已读</span>
-                <span v-else>未读</span>
+                <span class="status-dot-text" :class="{ 'is-unread': !activeInvitation.readTime }">
+                  {{ activeInvitation.readTime ? '已读' : '未读' }}
+                </span>
               </div>
             </div>
             <el-button
               v-if="activeInvitation.status === 'ACCEPTED'"
+              type="primary"
+              plain
               :icon="Document"
               @click="goKnowledge(activeInvitation.knowledgeId)"
             >
@@ -81,7 +90,7 @@
           <div class="chat-stream">
             <div class="bubble-row" :class="activeInvitation.direction">
               <el-avatar
-                :size="36"
+                :size="40"
                 class="bubble-avatar"
                 :src="speakerAvatar(activeInvitation) || undefined"
               >
@@ -98,7 +107,7 @@
                 </div>
                 <div v-if="activeInvitation.direction === 'incoming' && activeInvitation.status === 'PENDING'" class="bubble-actions">
                   <el-button type="primary" :icon="Check" :loading="actioning" @click="acceptActive">
-                    接受
+                    接受邀请
                   </el-button>
                   <el-button :icon="Close" :loading="actioning" @click="rejectActive">
                     拒绝
@@ -108,12 +117,12 @@
             </div>
 
             <div class="system-note">
-              {{ systemNote(activeInvitation) }}
+              <span>{{ systemNote(activeInvitation) }}</span>
             </div>
           </div>
         </template>
 
-        <el-empty v-else description="选择一条邀请查看详情" />
+        <el-empty v-else description="选择一条邀请查看详情" class="conversation-empty" />
       </section>
     </div>
   </div>
@@ -156,7 +165,7 @@ const reload = async () => {
       await messageStore.markRead(current.id)
     }
   } catch (err) {
-    // 请求错误已由全局拦截器提示，这里保持页面可继续使用
+    // 请求错误已由全局拦截器提示
   }
 }
 
@@ -235,14 +244,14 @@ const speakerInitial = (item) => {
 const bubbleTitle = (item) => {
   if (!item) return ''
   if (item.direction === 'incoming') {
-    return `${peerName(item)} 发来邀请`
+    return `${peerName(item)} 发来协作邀请`
   }
-  return '我发出的邀请'
+  return '我发出的协作邀请'
 }
 
 const systemNote = (item) => {
   if (!item) return ''
-  if (item.status === 'PENDING') return '等待对方处理'
+  if (item.status === 'PENDING') return '等待对方处理中'
   if (item.status === 'ACCEPTED') return '对方已接受邀请，协作权限已生效'
   if (item.status === 'REJECTED') return '对方已拒绝邀请'
   return ''
@@ -303,89 +312,142 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  min-height: calc(100vh - 40px);
+  min-height: calc(100vh - 120px);
 }
+
 .page-head {
   display: flex;
-  align-items: end;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 16px;
+  padding: 4px 2px;
 }
-.page-head h1 {
-  margin: 0;
+
+.page-kicker {
+  font-size: 13px;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.page-head h2 {
+  margin: 4px 0 0;
   font-size: 24px;
-  line-height: 1.2;
-  color: #1f2937;
+  font-weight: 700;
+  color: #0f172a;
 }
-.page-head p {
-  margin: 8px 0 0;
-  color: #6b7280;
-  font-size: 14px;
+
+.page-subtitle {
+  margin-top: 6px;
+  color: #64748b;
+  font-size: 13px;
 }
+
 .empty-panel {
-  min-height: 420px;
+  min-height: 460px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #fff;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(16px);
 }
+
 .message-shell {
   flex: 1;
-  min-height: 0;
+  min-height: 520px;
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr);
-  gap: 16px;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 18px;
 }
+
 .thread-list,
 .conversation {
   min-height: 0;
-  background: #fff;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(16px);
 }
+
 .thread-list {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
+
 .thread-list-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  font-weight: 600;
-  color: #111827;
+  padding: 18px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
+
+.thread-head-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.unread-pill {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.thread-items-wrap {
+  flex: 1;
+  overflow-y: auto;
+}
+
 .thread-item {
   display: flex;
   width: 100%;
-  padding: 14px 16px;
-  gap: 12px;
+  padding: 16px 18px;
+  gap: 14px;
   border: 0;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-  background: #fff;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  background: transparent;
   text-align: left;
   cursor: pointer;
+  transition: all 0.18s ease;
 }
+
 .thread-item:hover {
-  background: #f8fafc;
+  background: rgba(241, 245, 249, 0.65);
 }
+
 .thread-item.active {
-  background: #eef5ff;
+  background: rgba(20, 184, 166, 0.08);
+  border-left: 3px solid #0f766e;
 }
+
 .thread-item.unread .thread-name {
-  color: #2563eb;
+  color: #0f766e;
+  font-weight: 700;
 }
+
 .thread-avatar {
   flex: 0 0 auto;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: #fff;
+  font-weight: 700;
 }
+
 .thread-body {
   min-width: 0;
   flex: 1;
 }
+
 .thread-title,
 .thread-meta {
   display: flex;
@@ -393,127 +455,212 @@ onUnmounted(() => {
   justify-content: space-between;
   gap: 8px;
 }
+
 .thread-name {
+  font-size: 14px;
   font-weight: 600;
-  color: #111827;
+  color: #0f172a;
   min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.thread-peer,
-.thread-time,
-.thread-snippet {
+
+.thread-peer {
   font-size: 12px;
-  color: #6b7280;
+  color: #64748b;
+  font-weight: 500;
 }
+
+.thread-time {
+  font-size: 11.5px;
+  color: #94a3b8;
+}
+
 .thread-snippet {
   margin-top: 6px;
+  font-size: 12.5px;
+  color: #64748b;
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
 .conversation {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
+
 .conversation-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 18px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
+  gap: 14px;
+  padding: 18px 22px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
 }
+
+.conversation-avatar {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: #fff;
+  font-weight: 700;
+}
+
 .conversation-info {
   flex: 1;
   min-width: 0;
 }
+
 .conversation-title,
 .conversation-subtitle {
   display: flex;
   align-items: center;
   gap: 10px;
 }
+
 .conversation-title {
-  font-weight: 600;
-  color: #111827;
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
 }
+
 .conversation-subtitle {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #6b7280;
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: #64748b;
 }
+
+.status-dot-text {
+  position: relative;
+  padding-left: 12px;
+}
+
+.status-dot-text::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #10b981;
+}
+
+.status-dot-text.is-unread::before {
+  background: #ef4444;
+}
+
 .chat-stream {
   flex: 1;
   min-height: 0;
-  padding: 20px 18px 24px;
-  overflow: auto;
-  background: linear-gradient(180deg, #f8fafc 0%, #fff 100%);
+  padding: 24px 22px;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.6) 0%, rgba(255, 255, 255, 0.9) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
 }
+
 .bubble-row {
   display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  margin-bottom: 16px;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 20px;
 }
+
 .bubble-row.outgoing {
   flex-direction: row-reverse;
 }
+
+.bubble-avatar {
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: #fff;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .bubble-stack {
-  max-width: min(72%, 620px);
+  max-width: min(78%, 620px);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
+
 .bubble {
-  padding: 14px 16px;
+  padding: 16px 20px;
   background: #fff;
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 20px;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
 }
+
 .bubble-row.incoming .bubble {
-  border-top-left-radius: 2px;
+  border-top-left-radius: 6px;
 }
+
 .bubble-row.outgoing .bubble {
-  border-top-right-radius: 2px;
-  background: #eff6ff;
+  border-top-right-radius: 6px;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(13, 148, 136, 0.06));
+  border-color: rgba(20, 184, 166, 0.25);
 }
+
 .bubble-title {
   margin-bottom: 8px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
-  color: #2563eb;
+  color: #0f766e;
 }
+
 .bubble-text {
   white-space: pre-wrap;
   word-break: break-word;
-  color: #1f2937;
+  color: #1e293b;
+  font-size: 14px;
   line-height: 1.7;
 }
+
 .bubble-footer,
 .bubble-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
+
 .bubble-footer {
   font-size: 12px;
-  color: #6b7280;
+  color: #94a3b8;
+  padding: 0 4px;
 }
+
 .bubble-actions {
-  justify-content: flex-end;
+  margin-top: 4px;
 }
+
 .system-note {
-  padding: 6px 8px;
-  font-size: 12px;
-  color: #9ca3af;
+  padding: 12px;
   text-align: center;
 }
-.conversation .el-empty {
-  flex: 1;
+
+.system-note span {
+  display: inline-block;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  background: rgba(241, 245, 249, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  font-size: 12px;
+  color: #64748b;
 }
+
+.thread-empty,
+.conversation-empty {
+  margin: auto;
+  padding: 40px 0;
+}
+
 @media (max-width: 1024px) {
   .message-shell {
     grid-template-columns: 1fr;

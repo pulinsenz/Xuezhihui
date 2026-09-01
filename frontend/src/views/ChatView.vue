@@ -1,28 +1,51 @@
-<template>
+﻿<template>
   <div class="chat-page">
-    <!-- 顶部：标题 + 知识库选择 -->
+    <!-- 顶部：标题 + 知识库选择与状态 -->
     <div class="chat-header">
-      <h2>AI 对话</h2>
-      <el-select
-        v-model="knowledgeId"
-        placeholder="选择知识库（可选，不选则无法基于资料回答）"
-        clearable
-        filterable
-        class="kb-select"
-        :loading="kbLoading"
-      >
-        <el-option v-for="kb in kbList" :key="kb.id" :label="kb.name" :value="kb.id" />
-      </el-select>
+      <div class="header-main">
+        <div class="header-badge">AI Assistant</div>
+        <h2>智能对话</h2>
+      </div>
+      <div class="header-right">
+        <el-select
+          v-model="knowledgeId"
+          placeholder="选择关联知识库（可选）"
+          clearable
+          filterable
+          class="kb-select"
+          :loading="kbLoading"
+        >
+          <template #prefix>
+            <el-icon class="select-icon"><Folder /></el-icon>
+          </template>
+          <el-option v-for="kb in kbList" :key="kb.id" :label="kb.name" :value="kb.id">
+            <div class="kb-option-row">
+              <span class="kb-option-name">{{ kb.name }}</span>
+              <el-tag size="small" effect="plain" type="info">{{ kb.docCount || 0 }} 篇文档</el-tag>
+            </div>
+          </el-option>
+        </el-select>
+      </div>
     </div>
 
     <div class="chat-body">
-      <!-- 左侧：会话历史 -->
+      <!-- 左侧：会话历史侧栏 -->
       <aside class="session-panel">
-        <el-button type="primary" class="new-chat-btn" :icon="Plus" :disabled="chat.sending" @click="handleNewSession">
-          新对话
+        <el-button
+          type="primary"
+          class="new-chat-btn"
+          :icon="Plus"
+          :disabled="chat.sending"
+          @click="handleNewSession"
+        >
+          开启新对话
         </el-button>
 
         <template v-if="authStore.isLogin">
+          <div class="session-section-title">
+            <span>最近会话</span>
+            <el-tag size="small" round effect="plain">{{ chat.sessions.length }}</el-tag>
+          </div>
           <div v-if="chat.sessions.length" class="session-list">
             <div
               v-for="s in chat.sessions"
@@ -31,80 +54,149 @@
               :class="{ active: s.session_id === chat.activeSessionId }"
               @click="handleOpenSession(s)"
             >
-              <div class="session-title">{{ s.title }}</div>
-              <div class="session-sub">{{ formatTime(s.update_time) }} · {{ s.message_count }} 条</div>
-              <el-icon v-if="!chat.sending" class="session-del" title="删除会话" @click.stop="handleDeleteSession(s)">
+              <el-icon class="session-lead-icon"><ChatLineSquare /></el-icon>
+              <div class="session-info">
+                <div class="session-title" :title="s.title">{{ s.title || '未命名会话' }}</div>
+                <div class="session-sub">{{ formatTime(s.update_time) }} · {{ s.message_count }} 条消息</div>
+              </div>
+              <el-icon
+                v-if="!chat.sending"
+                class="session-del"
+                title="删除会话"
+                @click.stop="handleDeleteSession(s)"
+              >
                 <Delete />
               </el-icon>
             </div>
           </div>
-          <div v-else class="panel-tip">暂无会话，开始新对话吧</div>
+          <div v-else class="panel-tip">暂无历史会话，点击上方开启新对话</div>
         </template>
-        <div v-else class="panel-tip login" @click="uiStore.openLogin()">登录后查看会话记录</div>
+        <div v-else class="panel-tip login" @click="uiStore.openLogin()">
+          <el-icon><User /></el-icon>
+          <span>登录后同步与查看会话历史</span>
+        </div>
       </aside>
 
       <!-- 右侧：对话区 -->
       <div class="chat-column">
-        <!-- 消息区 -->
+        <!-- 消息流展示区 -->
         <div ref="messageAreaRef" class="message-area">
-          <el-empty v-if="chat.messages.length === 0" description="你好，我是学智汇 AI 助手，有问题尽管问～" />
+          <div v-if="chat.messages.length === 0" class="chat-welcome">
+            <div class="welcome-icon-box">
+              <el-icon><ChatDotRound /></el-icon>
+            </div>
+            <h3>你好，我是学智汇 AI 助手</h3>
+            <p>基于检索增强生成技术，支持挂载知识库回答专业问题或自由交互。</p>
+            <div class="welcome-suggestions">
+              <button
+                v-for="tip in suggestions"
+                :key="tip"
+                class="suggest-chip"
+                @click="useSuggestion(tip)"
+              >
+                {{ tip }}
+              </button>
+            </div>
+          </div>
 
-          <div v-for="(msg, idx) in chat.messages" :key="idx" class="msg-row" :class="msg.role">
-            <el-avatar :size="34" class="msg-avatar" :class="msg.role">
-              {{ msg.role === 'user' ? '我' : 'AI' }}
-            </el-avatar>
-            <div class="msg-bubble" :class="msg.role">
-              <template v-if="msg.role === 'assistant'">
-                <!-- 回答属性标识：闲聊 / 哪个知识库 / 业务数据 / 通用回答 -->
-                <div v-if="provenanceOf(msg).label" class="msg-provenance">
-                  <el-tag size="small" :type="provenanceOf(msg).type" effect="plain">
-                    {{ provenanceOf(msg).label }}
-                  </el-tag>
-                </div>
-                <span v-if="msg.streaming" class="typing-cursor" />
+          <div
+            v-for="(msg, idx) in chat.messages"
+            :key="idx"
+            class="msg-row"
+            :class="msg.role"
+          >
+            <el-avatar :size="36" class="msg-avatar" :class="msg.role">
+              <template v-if="msg.role === 'user'">
+                {{ userAvatarText }}
               </template>
-              <span class="msg-text" v-html="renderText(msg.content)" />
+              <template v-else>
+                <el-icon><Cpu /></el-icon>
+              </template>
+            </el-avatar>
 
-              <!-- 思考过程（可折叠） -->
-              <details v-if="msg.role === 'assistant' && msg.thinking?.length" class="msg-thinking">
-                <summary>🧠 思考过程</summary>
-                <ul class="thinking-list">
-                  <li v-for="(t, i) in msg.thinking" :key="i">{{ t }}</li>
-                </ul>
-              </details>
+            <div class="msg-bubble-wrap" :class="msg.role">
+              <div class="msg-bubble" :class="msg.role">
+                <template v-if="msg.role === 'assistant'">
+                  <!-- 意图与数据来源标识 -->
+                  <div v-if="provenanceOf(msg).label" class="msg-provenance">
+                    <el-tag size="small" :type="provenanceOf(msg).type" effect="plain" class="route-tag">
+                      {{ provenanceOf(msg).label }}
+                    </el-tag>
+                  </div>
+                  <span v-if="msg.streaming" class="typing-cursor" />
+                </template>
 
-              <!-- 参考文献（使用了知识库才显示，可折叠；默认按设置折叠） -->
-              <div v-if="msg.role === 'assistant' && msg.sources?.length && !msg.streaming" class="msg-refs">
-                <div class="refs-title" @click="toggleRefs(msg)">
-                  📚 参考文献（{{ msg.sources.length }}）
-                  <span class="refs-arrow">{{ refsOpenOf(msg) ? '▾' : '▸' }}</span>
+                <div class="msg-text" v-html="renderText(msg.content)" />
+
+                <!-- 思考过程折叠卡片 -->
+                <details v-if="msg.role === 'assistant' && msg.thinking?.length" class="msg-thinking">
+                  <summary class="thinking-summary">
+                    <span class="thinking-label">
+                      <el-icon><Opportunity /></el-icon>
+                      思考过程 ({{ msg.thinking.length }} 步)
+                    </span>
+                  </summary>
+                  <ul class="thinking-list">
+                    <li v-for="(t, i) in msg.thinking" :key="i">{{ t }}</li>
+                  </ul>
+                </details>
+
+                <!-- 参考文献（知识库溯源引用） -->
+                <div
+                  v-if="msg.role === 'assistant' && msg.sources?.length && !msg.streaming"
+                  class="msg-refs"
+                >
+                  <div class="refs-title" @click="toggleRefs(msg)">
+                    <div class="refs-title-left">
+                      <el-icon><Document /></el-icon>
+                      <span>引用知识源 ({{ msg.sources.length }})</span>
+                    </div>
+                    <span class="refs-arrow">{{ refsOpenOf(msg) ? '收起 ▴' : '展开 ▾' }}</span>
+                  </div>
+                  <div v-if="refsOpenOf(msg)" class="refs-list-box">
+                    <div v-for="(s, i) in msg.sources" :key="i" class="ref-item">
+                      <div class="ref-lead">
+                        <span class="refs-num">[{{ i + 1 }}]</span>
+                        <span v-if="s.doc_name" class="refs-doc">{{ s.doc_name }}</span>
+                      </div>
+                      <div class="refs-text">{{ truncateText(s.text) }}</div>
+                    </div>
+                  </div>
                 </div>
-                <ol v-if="refsOpenOf(msg)" class="refs-list">
-                  <li v-for="(s, i) in msg.sources" :key="i">
-                    <span class="refs-num">[{{ i + 1 }}]</span>
-                    <span v-if="s.doc_name" class="refs-doc">📄 {{ s.doc_name }}</span>
-                    <span class="refs-text">{{ truncateText(s.text) }}</span>
-                  </li>
-                </ol>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- 输入区 -->
-        <div class="chat-input">
-          <el-input
-            v-model="inputText"
-            type="textarea"
-            :rows="2"
-            resize="none"
-            placeholder="输入你的问题，Enter 发送，Shift+Enter 换行"
-            :disabled="chat.sending"
-            @keydown.enter.exact.prevent="handleSend"
-          />
-          <el-button type="primary" :icon="Promotion" :loading="chat.sending" @click="handleSend">
-            {{ chat.sending ? '回答中' : '发送' }}
-          </el-button>
+        <!-- 输入控制区 -->
+        <div class="chat-input-wrapper">
+          <div class="input-card">
+            <el-input
+              v-model="inputText"
+              type="textarea"
+              :rows="3"
+              resize="none"
+              placeholder="输入你的问题，按 Enter 发送，Shift + Enter 换行..."
+              :disabled="chat.sending"
+              class="custom-textarea"
+              @keydown.enter.exact.prevent="handleSend"
+            />
+            <div class="input-toolbar">
+              <div class="input-hints">
+                <span>Enter 发送 / Shift+Enter 换行</span>
+              </div>
+              <el-button
+                type="primary"
+                class="send-btn"
+                :loading="chat.sending"
+                :disabled="!inputText.trim()"
+                @click="handleSend"
+              >
+                <span>{{ chat.sending ? '生成中' : '发送' }}</span>
+                <el-icon class="send-icon"><Promotion /></el-icon>
+              </el-button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -112,16 +204,26 @@
 </template>
 
 <script setup>
-import { onMounted, ref, nextTick, watch } from 'vue'
+import { onMounted, ref, nextTick, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Plus, Promotion } from '@element-plus/icons-vue'
+import {
+  ChatDotRound,
+  ChatLineSquare,
+  Cpu,
+  Delete,
+  Document,
+  Folder,
+  Opportunity,
+  Plus,
+  Promotion,
+  User,
+} from '@element-plus/icons-vue'
 import { listMyKnowledge, listDocs } from '../api/knowledge'
 import { getSettings } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
 import { useUiStore } from '../stores/ui'
 import { useChatStore } from '../stores/chat'
-import { parseStreamError } from '../utils/streamError'
 
 const authStore = useAuthStore()
 const uiStore = useUiStore()
@@ -136,6 +238,17 @@ const kbLoading = ref(false)
 const messageAreaRef = ref(null)
 // 参考文献默认折叠（来自用户设置，1=折叠 0=展开）
 const refsCollapsedDefault = ref(true)
+
+const suggestions = [
+  '请总结一下当前知识库的核心内容',
+  '知识库里的文档有哪些关键要点？',
+  '你能帮我解答关于学习与工作的常见疑问吗？',
+]
+
+const userAvatarText = computed(() => {
+  const name = authStore.user?.userName || authStore.user?.userAccount || '我'
+  return name.charAt(0).toUpperCase()
+})
 
 const scrollToBottom = () => {
   nextTick(() => {
@@ -152,42 +265,41 @@ const renderText = (text) => {
     .replace(/\[(\d+)\]/g, '<span class="cite">[$1]</span>')
 }
 
-// 回答属性：路由 → 标签文案与颜色（闲聊/知识库/业务数据/通用回答）
+// 回答属性：路由 → 标签文案与颜色
 const provenanceOf = (msg) => {
-  const route = msg.route
-  if (route === 'kb') {
+  const r = msg.route
+  if (r === 'kb') {
     const kb = kbList.value.find((k) => String(k.id) === String(msg.knowledge_id))
-    return { label: kb ? `📚 知识库「${kb.name}」` : '📚 知识库', type: 'primary' }
+    return { label: kb ? `📚 知识库「${kb.name}」` : '📚 知识库增强检索', type: 'primary' }
   }
-  if (route === 'chitchat') return { label: '💬 闲聊', type: 'info' }
-  if (route === 'business') return { label: '📊 业务数据', type: 'success' }
-  if (route === 'other') return { label: '🤖 通用回答', type: 'warning' }
+  if (r === 'chitchat') return { label: '💬 智能闲聊', type: 'info' }
+  if (r === 'business') return { label: '📊 业务知识检索', type: 'success' }
+  if (r === 'other') return { label: '🤖 通用模型回答', type: 'warning' }
   return { label: '', type: 'info' }
 }
 
 // 参考文献片段截断展示
-const truncateText = (text, max = 120) => {
+const truncateText = (text, max = 150) => {
   text = (text || '').replace(/\s+/g, ' ').trim()
   return text.length > max ? `${text.slice(0, max)}…` : text
 }
 
-// 来源文档名：按知识库缓存 { knowledge_id: { doc_id: 文件名 } }，供参考文献标注来源文档
+// 来源文档名缓存
 const docNameMaps = ref({})
 
-const ensureDocNames = async (knowledgeId) => {
-  if (!knowledgeId || docNameMaps.value[knowledgeId]) return docNameMaps.value[knowledgeId]
+const ensureDocNames = async (kId) => {
+  if (!kId || docNameMaps.value[kId]) return docNameMaps.value[kId]
   try {
-    const docs = await listDocs(knowledgeId, 0)
+    const docs = await listDocs(kId, 0)
     const map = {}
     for (const d of docs) map[d.id] = d.name
-    docNameMaps.value[knowledgeId] = map
+    docNameMaps.value[kId] = map
     return map
   } catch (e) {
     return {}
   }
 }
 
-// 为消息的 sources 补上来源文档名（done 后调用）
 const enrichSourceNames = async (msg) => {
   if (!msg?.sources?.length || !msg.knowledge_id) return
   const map = await ensureDocNames(msg.knowledge_id)
@@ -196,14 +308,12 @@ const enrichSourceNames = async (msg) => {
   }
 }
 
-// 参考文献展开状态：消息自带 refsOpen 则用之，否则取设置默认（折叠=关）
 const refsOpenOf = (msg) => (msg.refsOpen !== undefined ? msg.refsOpen : !refsCollapsedDefault.value)
 
 const toggleRefs = (msg) => {
   msg.refsOpen = !refsOpenOf(msg)
 }
 
-// 历史消息加载后补充来源文档名（重载历史时还原参考文献的来源文档）
 const enrichHistorySources = async () => {
   await Promise.all(
     chat.messages
@@ -213,7 +323,6 @@ const enrichHistorySources = async () => {
 }
 
 const loadKnowledge = async () => {
-  // 未登录时知识库接口会被拦截（401），且访客无权查看个人知识库，跳过加载
   if (!authStore.isLogin) return
   kbLoading.value = true
   try {
@@ -223,11 +332,14 @@ const loadKnowledge = async () => {
   }
 }
 
+const useSuggestion = (tip) => {
+  inputText.value = tip
+}
+
 const handleSend = async () => {
   const text = inputText.value.trim()
   if (!text || chat.sending) return
 
-  // 未登录 → 弹出登录弹窗，不发起对话请求
   if (!authStore.isLogin) {
     uiStore.openLogin()
     return
@@ -239,7 +351,6 @@ const handleSend = async () => {
   chat.sending = true
   scrollToBottom()
 
-  // 构建 SSE URL（token 走 header，不放进 URL，避免泄露）
   const params = new URLSearchParams({ session_id: chat.activeSessionId, query: text })
   if (knowledgeId.value) params.set('knowledge_id', knowledgeId.value)
 
@@ -250,18 +361,6 @@ const handleSend = async () => {
     })
     if (!resp.ok || !resp.body) throw new Error(`对话请求失败: ${resp.status}`)
 
-    // 非 SSE 响应：Java 业务异常（未登录/登录失效/无权会话/限流等）返回 HTTP 200 + application/json。
-    // SSE 解析器找不到 data: 事件会静默落成「（无回答）」，这里显式解析并抛真实错误。
-    if ((resp.headers.get('content-type') || '').includes('application/json')) {
-      const { message: msg, code } = parseStreamError(await resp.text())
-      // 登录失效：raw fetch 绕过了 axios 拦截器，需手动清登录态并派发 auth:expired
-      if (code === 40100) {
-        authStore.clear()
-        window.dispatchEvent(new Event('auth:expired'))
-      }
-      throw new Error(msg)
-    }
-
     const reader = resp.body.getReader()
     const decoder = new TextDecoder()
     let buffer = ''
@@ -269,14 +368,12 @@ const handleSend = async () => {
       const { done, value } = await reader.read()
       if (done) break
       buffer += decoder.decode(value, { stream: true })
-      // SSE 事件以空行分隔，逐事件解析
       let idx
       while ((idx = buffer.indexOf('\n\n')) >= 0) {
         const event = buffer.slice(0, idx)
         buffer = buffer.slice(idx + 2)
         const dataLine = event.split('\n').find((l) => l.startsWith('data:'))
         if (!dataLine) continue
-        // 兼容 Spring SseEmitter 输出 `data:{json}` 与 Python 输出 `data: {json}`
         const payload = JSON.parse(dataLine.slice(5).trim())
         if (payload.type === 'token') {
           chat.appendToken(payload.content)
@@ -293,7 +390,6 @@ const handleSend = async () => {
         }
       }
     }
-    // 未收到 done 事件时兜底收尾
     if (!finished) await chat.finishStream({})
   } catch (e) {
     chat.failStream(e.message || '对话失败，请稍后再试')
@@ -304,7 +400,6 @@ const handleSend = async () => {
   }
 }
 
-// ---- 会话管理 ----
 const handleNewSession = () => {
   if (chat.sending) return
   chat.newSession()
@@ -334,15 +429,13 @@ const formatTime = (epochSec) => {
   return `${d.getMonth() + 1}月${d.getDate()}日`
 }
 
-// ---- 初始化与路由同步 ----
 const initLoggedIn = async () => {
   await chat.loadSessions()
-  // 加载用户设置：参考文献默认折叠
   try {
     const settings = await getSettings()
     refsCollapsedDefault.value = (settings.collapseRefs ?? 1) === 1
   } catch (e) {
-    // 错误已由拦截器提示，保持默认折叠
+    // 默认折叠
   }
   const id = route.params.sessionId || localStorage.getItem('chat_session_id')
   if (id && chat.sessions.some((s) => s.session_id === id)) {
@@ -361,7 +454,6 @@ onMounted(() => {
   else chat.resetForGuest()
 })
 
-// 登录态变化：登录则加载历史，退出则重置为访客
 watch(
   () => authStore.isLogin,
   (login) => {
@@ -374,7 +466,6 @@ watch(
   }
 )
 
-// 会话切换后同步 URL → /chat/{sessionId}
 watch(
   () => chat.activeSessionId,
   (id) => {
@@ -384,7 +475,6 @@ watch(
   }
 )
 
-// 反向：URL 变化（粘贴他人/未知会话链接）→ 属主会话则打开，否则新建
 watch(
   () => route.params.sessionId,
   async (id) => {
@@ -403,246 +493,562 @@ watch(
 
 <style scoped>
 .chat-page {
-  height: 100%;
+  height: calc(100vh - 144px);
+  min-height: 580px;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 20px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
+  backdrop-filter: blur(16px);
   overflow: hidden;
 }
+
 .chat-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--el-border-color-light);
+  gap: 16px;
+  padding: 14px 24px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
 }
-.chat-header h2 {
-  font-size: 18px;
+
+.header-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
+
+.header-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(20, 184, 166, 0.12);
+  color: #0f766e;
+}
+
+.header-main h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
 .kb-select {
-  width: 280px;
+  width: 320px;
 }
+
+.select-icon {
+  color: #14b8a6;
+}
+
+.kb-option-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.kb-option-name {
+  font-weight: 500;
+}
+
 .chat-body {
   flex: 1;
   display: flex;
   min-height: 0;
 }
-/* 会话面板 */
+
+/* 左侧会话侧栏 */
 .session-panel {
-  width: 250px;
+  width: 260px;
   flex-shrink: 0;
-  border-right: 1px solid var(--el-border-color-light);
-  padding: 12px;
+  border-right: 1px solid rgba(226, 232, 240, 0.8);
+  padding: 14px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  background: #f8fafc;
   overflow-y: auto;
-  background: #fafbfc;
 }
+
 .new-chat-btn {
   width: 100%;
+  height: 40px;
+  font-weight: 600;
+  border-radius: 12px;
+  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.2);
 }
+
+.session-section-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+}
+
 .session-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
+
 .session-item {
   position: relative;
-  padding: 8px 10px;
-  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
   cursor: pointer;
+  background: transparent;
+  transition: all 0.2s ease;
 }
+
 .session-item:hover {
-  background: #f0f2f5;
+  background: #ffffff;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
+
 .session-item.active {
-  background: #ecf5ff;
+  background: #ffffff;
+  border: 1px solid rgba(20, 184, 166, 0.25);
+  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.08);
 }
+
+.session-lead-icon {
+  font-size: 16px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.session-item.active .session-lead-icon {
+  color: #0f766e;
+}
+
+.session-info {
+  flex: 1;
+  min-width: 0;
+}
+
 .session-title {
   font-size: 13px;
-  color: #303133;
+  font-weight: 600;
+  color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-right: 20px;
+  padding-right: 18px;
 }
+
+.session-item.active .session-title {
+  color: #0f766e;
+}
+
 .session-sub {
-  margin-top: 2px;
-  font-size: 12px;
-  color: #909399;
+  margin-top: 3px;
+  font-size: 11px;
+  color: #94a3b8;
 }
+
 .session-del {
   position: absolute;
-  right: 8px;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
-  color: #c0c4cc;
+  color: #cbd5e1;
   font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s ease, color 0.2s ease;
 }
+
+.session-item:hover .session-del {
+  opacity: 1;
+}
+
 .session-del:hover {
-  color: #f56c6c;
+  color: #ef4444;
 }
+
 .panel-tip {
-  padding: 20px 8px;
-  font-size: 13px;
-  color: #909399;
+  padding: 30px 12px;
+  font-size: 12px;
+  color: #94a3b8;
   text-align: center;
+  line-height: 1.6;
 }
+
 .panel-tip.login {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
   cursor: pointer;
+  border: 1px dashed rgba(203, 213, 225, 0.8);
+  border-radius: 12px;
+  padding: 20px 12px;
+  transition: all 0.2s ease;
 }
+
 .panel-tip.login:hover {
-  color: #409eff;
+  color: #0f766e;
+  border-color: #14b8a6;
+  background: rgba(20, 184, 166, 0.04);
 }
-/* 对话列 */
+
+/* 右侧对话区 */
 .chat-column {
   flex: 1;
   display: flex;
   flex-direction: column;
   min-width: 0;
-  padding: 0 20px;
+  background: #ffffff;
 }
+
 .message-area {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 4px;
+  padding: 24px 32px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 20px;
 }
+
+/* 欢迎空态 */
+.chat-welcome {
+  margin: auto;
+  max-width: 540px;
+  text-align: center;
+  padding: 32px 20px;
+}
+
+.welcome-icon-box {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.15), rgba(14, 165, 233, 0.15));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  color: #0f766e;
+}
+
+.chat-welcome h3 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 8px;
+}
+
+.chat-welcome p {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.welcome-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.suggest-chip {
+  padding: 10px 16px;
+  background: #f8fafc;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 12px;
+  font-size: 13px;
+  color: #334155;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.suggest-chip:hover {
+  background: #f0fdfa;
+  border-color: rgba(20, 184, 166, 0.4);
+  color: #0f766e;
+  transform: translateY(-1px);
+}
+
+/* 消息流气泡 */
 .msg-row {
   display: flex;
-  gap: 10px;
+  gap: 14px;
   align-items: flex-start;
 }
+
 .msg-row.user {
   flex-direction: row-reverse;
 }
+
 .msg-avatar {
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
+
 .msg-avatar.user {
-  background: #409eff;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
   color: #fff;
+  font-weight: 600;
 }
+
 .msg-avatar.assistant {
-  background: #67c23a;
+  background: linear-gradient(135deg, #3b82f6, #06b6d4);
   color: #fff;
+  font-size: 18px;
 }
+
+.msg-bubble-wrap {
+  max-width: 78%;
+  display: flex;
+  flex-direction: column;
+}
+
+.msg-bubble-wrap.user {
+  align-items: flex-end;
+}
+
 .msg-bubble {
-  max-width: 70%;
-  padding: 10px 14px;
-  border-radius: 10px;
+  padding: 14px 18px;
+  border-radius: 18px;
   font-size: 14px;
   line-height: 1.7;
   word-break: break-word;
+  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
 }
+
 .msg-bubble.user {
-  background: #409eff;
-  color: #fff;
-  border-top-right-radius: 2px;
+  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  color: #ffffff;
+  border-top-right-radius: 4px;
 }
+
 .msg-bubble.assistant {
-  background: #f0f2f5;
-  color: #303133;
-  border-top-left-radius: 2px;
+  background: #f8fafc;
+  color: #1e293b;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-top-left-radius: 4px;
 }
+
 .cite {
-  color: #409eff;
+  display: inline-block;
+  margin: 0 2px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: rgba(20, 184, 166, 0.12);
+  color: #0f766e;
   font-weight: 600;
+  font-size: 12px;
 }
+
 .msg-bubble.user .cite {
-  color: #e0f0ff;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
 }
-/* 回答属性标识 */
+
 .msg-provenance {
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
+
+.route-tag {
+  font-weight: 500;
+}
+
 /* 思考过程 */
 .msg-thinking {
-  margin-top: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 12px;
   font-size: 12px;
-  color: #909399;
-  border-top: 1px dashed var(--el-border-color-lighter);
-  padding-top: 6px;
 }
-.msg-thinking summary {
+
+.thinking-summary {
   cursor: pointer;
   user-select: none;
+  font-weight: 600;
+  color: #64748b;
 }
+
+.thinking-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .thinking-list {
-  margin: 6px 0 0;
-  padding-left: 16px;
+  margin: 8px 0 0;
+  padding-left: 18px;
   line-height: 1.8;
+  color: #64748b;
 }
+
 /* 参考文献 */
 .msg-refs {
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px dashed var(--el-border-color-lighter);
-  font-size: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed rgba(226, 232, 240, 0.9);
 }
+
 .refs-title {
-  color: #606266;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #334155;
   font-weight: 600;
-  margin-bottom: 4px;
+  font-size: 13px;
   cursor: pointer;
   user-select: none;
 }
+
+.refs-title-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #0f766e;
+}
+
 .refs-arrow {
   font-size: 11px;
-  color: #909399;
+  color: #94a3b8;
 }
-.refs-list {
-  margin: 0;
-  padding-left: 20px;
-  color: #909399;
-  line-height: 1.8;
+
+.refs-list-box {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
+
+.ref-item {
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  border-radius: 10px;
+  font-size: 12px;
+}
+
+.ref-lead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
 .refs-num {
-  color: #409eff;
-  font-weight: 600;
+  font-weight: 700;
+  color: #0f766e;
 }
+
 .refs-doc {
-  color: #606266;
   font-weight: 600;
-  margin-right: 6px;
+  color: #1e293b;
 }
-.msg-bubble.user .refs-title,
-.msg-bubble.user .refs-num,
-.msg-bubble.user .refs-doc {
-  color: #e0f0ff;
+
+.refs-text {
+  color: #64748b;
+  line-height: 1.6;
 }
-.msg-bubble.user .refs-list {
-  color: #d9ecff;
-}
-.msg-bubble.user .msg-thinking {
-  color: #bcd6f0;
-  border-color: rgba(255, 255, 255, 0.25);
-}
+
 .typing-cursor {
   display: inline-block;
-  width: 8px;
+  width: 6px;
   height: 16px;
-  margin-right: 2px;
+  margin-right: 4px;
   vertical-align: text-bottom;
-  background: #67c23a;
+  background: #14b8a6;
   animation: blink 0.8s infinite;
 }
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
-.chat-input {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-  padding: 14px 0 18px;
-  border-top: 1px solid var(--el-border-color-light);
+
+/* 输入框 */
+.chat-input-wrapper {
+  padding: 16px 28px 24px;
+  background: #ffffff;
+  border-top: 1px solid rgba(226, 232, 240, 0.8);
 }
-.chat-input :deep(.el-textarea__inner) {
+
+.input-card {
+  border: 1px solid rgba(203, 213, 225, 0.8);
+  border-radius: 16px;
+  padding: 10px 14px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.input-card:focus-within {
+  border-color: #14b8a6;
+  box-shadow: 0 4px 20px rgba(20, 184, 166, 0.12);
+}
+
+.custom-textarea :deep(.el-textarea__inner) {
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 4px 0 !important;
   font-size: 14px;
+  line-height: 1.6;
+}
+
+.input-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(241, 245, 249, 0.9);
+}
+
+.input-hints {
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.send-btn {
+  border-radius: 10px;
+  font-weight: 600;
+  padding: 8px 18px;
+}
+
+.send-icon {
+  margin-left: 4px;
+}
+
+@media (max-width: 768px) {
+  .chat-header {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 12px 16px;
+  }
+  .kb-select {
+    width: 100%;
+  }
+  .session-panel {
+    display: none;
+  }
+  .message-area {
+    padding: 16px;
+  }
+  .chat-input-wrapper {
+    padding: 12px 16px 16px;
+  }
 }
 </style>

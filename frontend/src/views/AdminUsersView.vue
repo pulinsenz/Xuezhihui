@@ -1,16 +1,25 @@
-<template>
-  <div>
+﻿<template>
+  <div class="admin-page">
     <div class="page-header">
       <div>
+        <p class="page-kicker">系统管控</p>
         <h2>用户管理</h2>
-        <p class="sub">查看全部用户、调整角色、删除违规账号</p>
+        <p class="page-subtitle">查看全量注册用户、分配管理员权限与维护账户生命周期</p>
       </div>
     </div>
 
-    <el-card shadow="never">
+    <section class="admin-panel">
       <div class="toolbar">
-        <el-input v-model="keyword" placeholder="搜索账号 / 昵称" clearable style="width: 260px" :prefix-icon="Search" @keyup.enter="loadUsers(1)" @clear="loadUsers(1)" />
-        <el-select v-model="deletedFilter" placeholder="用户状态" style="width: 140px" @change="loadUsers(1)">
+        <el-input
+          v-model="keyword"
+          placeholder="搜索账号 / 昵称"
+          clearable
+          style="width: 280px"
+          :prefix-icon="Search"
+          @keyup.enter="loadUsers(1)"
+          @clear="loadUsers(1)"
+        />
+        <el-select v-model="deletedFilter" placeholder="用户状态" style="width: 150px" @change="loadUsers(1)">
           <el-option label="全部用户" :value="null" />
           <el-option label="正常用户" :value="0" />
           <el-option label="已删除" :value="1" />
@@ -18,48 +27,52 @@
         <el-button type="primary" :icon="Search" @click="loadUsers(1)">查询</el-button>
       </div>
 
-      <el-table :data="users" stripe v-loading="loading">
-        <el-table-column prop="userAccount" label="账号" min-width="140" />
-        <el-table-column prop="userName" label="昵称" min-width="140" />
-        <el-table-column label="角色" width="110">
-          <template #default="{ row }">
-            <el-tag :type="row.userRole === 'admin' ? 'warning' : 'info'" size="small">
-              {{ row.userRole === 'admin' ? '管理员' : '普通用户' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag :type="row.isDelete === 1 ? 'danger' : 'success'" size="small" effect="plain">
-              {{ row.isDelete === 1 ? '已删除' : '正常' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" label="注册时间" width="180">
-          <template #default="{ row }">{{ row.createTime?.replace('T', ' ').slice(0, 19) }}</template>
-        </el-table-column>
-        <el-table-column label="操作" width="200">
-          <template #default="{ row }">
-            <!-- 已删除用户：仅提供恢复 -->
-            <template v-if="row.isDelete === 1">
-              <el-button v-if="row.id !== authStore.user?.id" size="small" type="success" :icon="RefreshLeft" @click="handleRestore(row)">
-                恢复
-              </el-button>
-              <el-tag v-else size="small" type="info">当前账号</el-tag>
+      <div class="table-card">
+        <el-table :data="users" stripe v-loading="loading">
+          <el-table-column prop="userAccount" label="账号" min-width="150">
+            <template #default="{ row }">
+              <span class="user-account-text">{{ row.userAccount }}</span>
             </template>
-            <!-- 正常用户：改角色 / 删除 -->
-            <template v-else>
-              <el-button v-if="row.id !== authStore.user?.id" size="small" :icon="Edit" @click="openRoleDialog(row)">
-                {{ row.userRole === 'admin' ? '设为普通用户' : '设为管理员' }}
-              </el-button>
-              <el-button v-if="row.id !== authStore.user?.id" size="small" type="danger" :icon="Delete" @click="handleDelete(row)">
-                删除
-              </el-button>
-              <el-tag v-else size="small" type="info">当前账号</el-tag>
+          </el-table-column>
+          <el-table-column prop="userName" label="昵称" min-width="150" />
+          <el-table-column label="角色" width="120">
+            <template #default="{ row }">
+              <el-tag :type="row.userRole === 'admin' ? 'warning' : 'info'" size="small" effect="plain">
+                {{ row.userRole === 'admin' ? '管理员' : '普通用户' }}
+              </el-tag>
             </template>
-          </template>
-        </el-table-column>
-      </el-table>
+          </el-table-column>
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.isDelete === 1 ? 'danger' : 'success'" size="small" effect="plain">
+                {{ row.isDelete === 1 ? '已删除' : '正常' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createTime" label="注册时间" width="190">
+            <template #default="{ row }">{{ row.createTime?.replace('T', ' ').slice(0, 19) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="220" fixed="right">
+            <template #default="{ row }">
+              <template v-if="row.isDelete === 1">
+                <el-button v-if="row.id !== authStore.user?.id" size="small" type="success" plain :icon="RefreshLeft" @click="handleRestore(row)">
+                  恢复
+                </el-button>
+                <el-tag v-else size="small" type="info">当前账号</el-tag>
+              </template>
+              <template v-else>
+                <el-button v-if="row.id !== authStore.user?.id" size="small" :icon="Edit" @click="openRoleDialog(row)">
+                  {{ row.userRole === 'admin' ? '设为用户' : '设为管理员' }}
+                </el-button>
+                <el-button v-if="row.id !== authStore.user?.id" size="small" type="danger" plain :icon="Delete" @click="handleDelete(row)">
+                  删除
+                </el-button>
+                <el-tag v-else size="small" type="info">当前账号</el-tag>
+              </template>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
 
       <el-pagination
         v-model:current-page="pageNum"
@@ -71,14 +84,16 @@
         @current-change="loadUsers()"
         @size-change="loadUsers(1)"
       />
-    </el-card>
+    </section>
 
-    <!-- 改角色确认 -->
-    <el-dialog v-model="roleDialogVisible" :title="roleDialogTitle" width="380px">
-      <p>确定将用户「{{ roleTarget?.userAccount }}」设为{{ roleTarget?.userRole === 'admin' ? '普通用户' : '管理员' }}吗？</p>
+    <el-dialog v-model="roleDialogVisible" :title="roleDialogTitle" width="420px" class="custom-dialog">
+      <p style="color: #475569; line-height: 1.6; margin: 12px 0;">
+        确定将用户「<strong style="color: #0f172a;">{{ roleTarget?.userAccount }}</strong>」设为
+        <strong style="color: #0f766e;">{{ roleTarget?.userRole === 'admin' ? '普通用户' : '管理员' }}</strong>吗？
+      </p>
       <template #footer>
         <el-button @click="roleDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="roleLoading" @click="confirmRole">确定</el-button>
+        <el-button type="primary" :loading="roleLoading" @click="confirmRole">确定修改</el-button>
       </template>
     </el-dialog>
   </div>
@@ -94,7 +109,7 @@ import { useAuthStore } from '../stores/auth'
 const authStore = useAuthStore()
 
 const keyword = ref('')
-const deletedFilter = ref(0) // 默认只看正常用户；null=全部, 0=正常, 1=已删除
+const deletedFilter = ref(0)
 const users = ref([])
 const total = ref(0)
 const pageNum = ref(1)
@@ -125,7 +140,7 @@ const loadUsers = async (page) => {
 
 const openRoleDialog = (row) => {
   roleTarget.value = row
-  roleDialogTitle.value = `修改角色 - ${row.userAccount}`
+  roleDialogTitle.value = `调整用户角色 - ${row.userAccount}`
   roleDialogVisible.value = true
 }
 
@@ -164,24 +179,64 @@ onMounted(loadUsers)
 </script>
 
 <style scoped>
+.admin-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .page-header {
-  margin-bottom: 16px;
+  padding: 4px 2px;
 }
+
+.page-kicker {
+  font-size: 13px;
+  color: #0f766e;
+  font-weight: 600;
+}
+
 .page-header h2 {
-  font-size: 20px;
+  margin: 4px 0 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
 }
-.sub {
-  margin-top: 4px;
-  color: #909399;
+
+.page-subtitle {
+  margin-top: 6px;
+  color: #64748b;
   font-size: 13px;
 }
+
+.admin-panel {
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(16px);
+  padding: 24px;
+}
+
 .toolbar {
   display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
 }
+
+.table-card {
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.user-account-text {
+  font-weight: 600;
+  color: #0f172a;
+}
+
 .pagination {
-  margin-top: 16px;
+  margin-top: 20px;
   justify-content: flex-end;
 }
 </style>
