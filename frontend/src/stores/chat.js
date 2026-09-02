@@ -2,6 +2,29 @@ import { defineStore, acceptHMRUpdate } from 'pinia'
 import { listSessions, getSessionHistory, deleteSession } from '../api/chat'
 
 /**
+ * 生成会话 ID（UUID v4）。
+ * 优先用 crypto.randomUUID；HTTP 生产环境（非安全上下文）下该方法不可用，
+ * 降级到同样可在 HTTP 下使用的 crypto.getRandomValues，最后兜底 Math.random。
+ */
+function generateSessionId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(16))
+    bytes[6] = (bytes[6] & 0x0f) | 0x40 // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80 // variant 10
+    const hex = [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0
+    const v = c === 'x' ? r : (r & 0x3) | 0x8
+    return v.toString(16)
+  })
+}
+
+/**
  * 对话状态：会话列表 + 当前会话消息 + 流式发送状态。
  * 历史持久化在 MySQL（Java 侧），本 store 只做展示与交互编排。
  */
@@ -30,7 +53,7 @@ export const useChatStore = defineStore('chat', {
     },
 
     newSession() {
-      const id = crypto.randomUUID()
+      const id = generateSessionId()
       this.activeSessionId = id
       this.messages = []
       localStorage.setItem('chat_session_id', id)
@@ -53,7 +76,7 @@ export const useChatStore = defineStore('chat', {
       this.messages = []
       this.sending = false
       // 访客会话独立，避免复用他人/上次登录的会话 id
-      localStorage.setItem('chat_session_id', crypto.randomUUID())
+      localStorage.setItem('chat_session_id', generateSessionId())
     },
 
     // ---- 流式辅助（由 ChatView 的 SSE 循环调用）----

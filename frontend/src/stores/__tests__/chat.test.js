@@ -59,6 +59,21 @@ describe('chat store', () => {
     expect(localStorage.getItem('chat_session_id')).toBe(store.activeSessionId)
   })
 
+  it('newSession 在无 crypto.randomUUID（HTTP 非安全上下文）时仍能生成 id', () => {
+    const original = crypto.randomUUID
+    Object.defineProperty(crypto, 'randomUUID', { value: undefined, configurable: true })
+    try {
+      const store = useChatStore()
+      store.newSession()
+      expect(store.activeSessionId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+      expect(localStorage.getItem('chat_session_id')).toBe(store.activeSessionId)
+      store.resetForGuest()
+      expect(localStorage.getItem('chat_session_id')).toBeTruthy()
+    } finally {
+      Object.defineProperty(crypto, 'randomUUID', { value: original, configurable: true })
+    }
+  })
+
   it('deleteSession 删除当前会话后跳到最近剩余会话', async () => {
     chatApi.getSessionHistory.mockResolvedValue([])
     const store = useChatStore()
