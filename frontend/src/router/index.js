@@ -44,7 +44,7 @@ const routes = [
         path: 'public-knowledge',
         name: 'PublicKnowledge',
         component: () => import('../views/PublicKnowledgeView.vue'),
-        meta: { public: true, title: '公开知识库' },
+        meta: { loginRequired: true, title: '公开知识库' },
       },
       {
         path: 'messages',

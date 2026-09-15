@@ -248,7 +248,7 @@ const statusLabel = computed(() => {
 const quickActions = computed(() => [
   { label: '对话', icon: ChatDotRound, run: () => openRoute('/chat') },
   { label: '知识库', icon: Folder, run: () => openRoute('/knowledge', true) },
-  { label: '公开知识库', icon: Collection, run: () => openRoute('/public-knowledge') },
+  { label: '公开知识库', icon: Collection, run: () => openRoute('/public-knowledge', true) },
   { label: '消息', icon: Bell, run: () => openRoute('/messages', true) },
   { label: '设置', icon: Setting, run: () => openRoute('/settings', true) },
   { label: '个人资料', icon: User, run: () => openRoute('/profile', true) },

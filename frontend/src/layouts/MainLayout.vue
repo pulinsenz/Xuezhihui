@@ -190,7 +190,7 @@ const avatarText = computed(() => {
   return name.charAt(0).toUpperCase()
 })
 
-const publicEntries = new Set(['/dashboard', '/chat', '/public-knowledge'])
+const publicEntries = new Set(['/dashboard', '/chat'])
 
 const toggleSidebar = () => {
   collapsed.value = !collapsed.value
