@@ -65,9 +65,8 @@ services:
     volumes:
       # ACME HTTP-01 校验目录（宿主与容器共享，acme.sh --webroot 写此目录签发证书，nginx 负责应答）
       - /var/www/acme-challenge:/var/www/acme-challenge
-      # ==== 证书挂载（HTTPS：证书就位后由 scripts/enable-https.sh 自动取消注释）====
-      # - /etc/letsencrypt/live/xuezhihui.site/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
-      # - /etc/letsencrypt/live/xuezhihui.site/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
-    # ==== 443 端口（HTTPS：证书就位后由 scripts/enable-https.sh 自动取消注释）====
-    # ports:
-    #   - "443:443"
+      # 证书挂载（scripts/enable-https.sh 签发后安装到 /etc/letsencrypt/live/xuezhihui.site/）
+      - /etc/letsencrypt/live/xuezhihui.site/fullchain.pem:/etc/nginx/ssl/fullchain.pem:ro
+      - /etc/letsencrypt/live/xuezhihui.site/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
+    ports:
+      - "443:443"

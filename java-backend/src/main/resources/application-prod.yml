@@ -3,6 +3,7 @@ app:
   cors:
     allowed-origin-patterns:
       - https://xuezhihui.site
+      - https://www.xuezhihui.site
       - http://xuezhihui.site
 knife4j:
   enable: false

@@ -31,7 +31,8 @@ mkdir -p "$ACME_WEBROOT"
 if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
   curl -fsSL https://get.acme.sh | sh
 fi
-"$HOME/.acme.sh/acme.sh" --issue -d "$DOMAIN" -w "$ACME_WEBROOT" --webroot || {
+# SAN 证书同时覆盖 apex 与 www（www 的 ACME 应答由 80 段唯一 server 块按 Host 兜住）
+"$HOME/.acme.sh/acme.sh" --issue -d "$DOMAIN" -d "www.$DOMAIN" -w "$ACME_WEBROOT" --webroot || {
   echo "!! 签发失败。排查："
   echo "   1) curl -I http://$DOMAIN/.well-known/acme-challenge/probe 应返回 404 而非拒绝连接"
   echo "   2) 80 端口是否被安全组/云防火墙放行"
