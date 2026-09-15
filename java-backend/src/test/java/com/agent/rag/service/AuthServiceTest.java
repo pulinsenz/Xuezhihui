@@ -176,6 +176,38 @@ class AuthServiceTest {
     }
 
     @Test
+    void register_accountWithLeadingTrailingBlanks_trimmedAndSaved() {
+        // 回归：开头/结尾带空格的账号必须先 trim 再校验入库，
+        // 否则原样入库后用户按所见账号登录（精确匹配）必然失败
+        when(userMapper.selectCount(any())).thenReturn(0L);
+        when(userMapper.insert(any(User.class))).thenAnswer(invocation -> {
+            User user = invocation.getArgument(0);
+            user.setId(100L);
+            return 1;
+        });
+
+        RegisterRequest req = validRegister();
+        req.setUserAccount("  abcd1234  ");
+        req.setUserName("  昵称  ");
+        authService.register(req, "127.0.0.1");
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userMapper).insert(captor.capture());
+        assertEquals("abcd1234", captor.getValue().getUserAccount(), "账号应去除首尾空白后入库");
+        assertEquals("昵称", captor.getValue().getUserName(), "昵称应去除首尾空白后入库");
+    }
+
+    @Test
+    void register_accountTooShortAfterTrim_throwsParamsError() {
+        // trim 后不足 4 位必须拒绝：防止用空格凑长度绕过长度校验
+        RegisterRequest req = validRegister();
+        req.setUserAccount(" a1 ");
+        BusinessException e = assertThrows(BusinessException.class, () -> authService.register(req, "127.0.0.1"));
+        assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
+        verify(userMapper, never()).insert(any(User.class));
+    }
+
+    @Test
     void register_captchaVerifyFails_throwsParamsError() {
         // 覆盖 allowAntiBot() 默认放行：验证码不通过时必须拒绝注册（防批量机器人）
         when(captchaService.verify(any(), any())).thenReturn(false);

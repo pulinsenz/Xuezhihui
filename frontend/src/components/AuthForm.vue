@@ -146,6 +146,10 @@ const handleLogin = async () => {
 
 const handleRegister = async () => {
   if (loading.value) return
+  // 去首尾空白后回显（v-model 同步输入框）：与后端 trim 规则一致，长度校验按修正后的值算，
+  // 避免"开头带空格的账号"注册后无法登录；密码不 trim（允许合法含空格）
+  registerForm.userAccount = registerForm.userAccount.trim()
+  registerForm.userName = registerForm.userName.trim()
   const valid = await registerFormRef.value?.validate().catch(() => false)
   if (!valid) return
   if (!captchaId.value || !registerForm.captchaAnswer.trim()) {

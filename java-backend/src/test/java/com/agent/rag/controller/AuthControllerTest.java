@@ -242,6 +242,33 @@ class AuthControllerTest {
     }
 
     @Test
+    void register_accountWithLeadingTrailingBlanks_trimmedThenLoginSucceeds() throws Exception {
+        // 回归（bug：账号开头带空格原样入库，用户按所见账号登录失败）：
+        // 带首尾空格注册 → 库中应为 trim 后的账号，且用 trim 后账号能正常登录
+        RegisterRequest register = validRegisterWithCaptcha();
+        register.setUserAccount("  " + testAccount + "  ");
+        JsonNode regNode = objectMapper.readTree(postJson("/auth/register", register));
+        assertEquals(0, regNode.get("code").asInt(), "带首尾空格的账号应 trim 后注册成功");
+
+        // 库里不应存在带空格的原始账号
+        Long raw = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                .eq(User::getUserAccount, "  " + testAccount + "  "));
+        assertEquals(0, raw, "库中不应存在首尾带空格的账号");
+        Long trimmed = userMapper.selectCount(new LambdaQueryWrapper<User>()
+                .eq(User::getUserAccount, testAccount));
+        assertEquals(1, trimmed, "库中应存在 trim 后的账号");
+
+        // 用户按所见账号（trim 后）登录应成功
+        LoginRequest login = new LoginRequest();
+        login.setUserAccount(testAccount);
+        login.setUserPassword(testPassword);
+        JsonNode loginNode = objectMapper.readTree(postJson("/auth/login", login));
+        assertEquals(0, loginNode.get("code").asInt(), "trim 后的账号应能登录");
+        createdTokens.add(loginNode.get("data").get("token").asText());
+        assertEquals(testAccount, loginNode.get("data").get("user").get("userAccount").asText());
+    }
+
+    @Test
     void login_wrongPassword_returnsError() throws Exception {
         // 先注册
         postJson("/auth/register", validRegisterWithCaptcha());

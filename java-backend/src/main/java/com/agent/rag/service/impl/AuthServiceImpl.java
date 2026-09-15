@@ -75,13 +75,16 @@ public class AuthServiceImpl implements AuthService {
             log.warn("注册限流: ip={}", clientIp);
             throw new BusinessException(ErrorCode.REGISTER_TOO_FREQUENT);
         }
-        String userAccount = request.getUserAccount();
+        // 账号/昵称先去首尾空白再校验入库：isBlank 只拦"纯空格"，拦不住" abcd"这类首尾带空格的
+        // 账号——原样入库后用户按所见账号登录是精确匹配，必然失败（bug：账号开头不能为空）
+        String userAccount = StrUtil.trim(request.getUserAccount());
         String userPassword = request.getUserPassword();
         String checkPassword = request.getCheckPassword();
         // 参数校验（在验证码之前：参数错误不浪费一次性验证码）
         if (StrUtil.isBlank(userAccount) || StrUtil.isBlank(userPassword) || StrUtil.isBlank(checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号、密码不能为空");
         }
+        // 密码不 trim：密码允许合法包含空格，长度校验与比对必须用原值
         if (userAccount.length() < 4 || userAccount.length() > 32) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号长度应在 4-32 位");
         }
@@ -106,7 +109,8 @@ public class AuthServiceImpl implements AuthService {
         User user = new User();
         user.setUserAccount(userAccount);
         user.setUserPassword(BCrypt.hashpw(userPassword));
-        user.setUserName(StrUtil.isBlank(request.getUserName()) ? userAccount : request.getUserName());
+        String userName = StrUtil.trim(request.getUserName());
+        user.setUserName(StrUtil.isBlank(userName) ? userAccount : userName);
         user.setUserRole("user");
         user.setEditTime(LocalDateTime.now());
         userMapper.insert(user);
