@@ -32,7 +32,9 @@ if [ ! -f "$HOME/.acme.sh/acme.sh" ]; then
   curl -fsSL https://get.acme.sh | sh
 fi
 # SAN 证书同时覆盖 apex 与 www（www 的 ACME 应答由 80 段唯一 server 块按 Host 兜住）
-"$HOME/.acme.sh/acme.sh" --issue -d "$DOMAIN" -d "www.$DOMAIN" -w "$ACME_WEBROOT" --webroot || {
+# --server letsencrypt：acme.sh v3 默认 CA 是 ZeroSSL（需先 --register-account 注册邮箱），
+# 显式指定 Let's Encrypt 免注册直接签；国内服务器对 LE 的 ACME API 可达性也更好
+"$HOME/.acme.sh/acme.sh" --issue --server letsencrypt -d "$DOMAIN" -d "www.$DOMAIN" -w "$ACME_WEBROOT" --webroot || {
   echo "!! 签发失败。排查："
   echo "   1) curl -I http://$DOMAIN/.well-known/acme-challenge/probe 应返回 404 而非拒绝连接"
   echo "   2) 80 端口是否被安全组/云防火墙放行"
