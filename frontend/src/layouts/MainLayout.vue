@@ -109,10 +109,6 @@
               </template>
             </el-dropdown>
           </template>
-
-          <template v-else>
-            <el-button type="primary" :icon="User" @click="uiStore.openLogin()">登录</el-button>
-          </template>
         </div>
       </el-header>
 
@@ -120,8 +116,6 @@
         <router-view />
       </el-main>
     </el-container>
-
-    <LoginDialog v-model="uiStore.loginDialogVisible" />
   </el-container>
 </template>
 
@@ -145,13 +139,10 @@ import {
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { useMessageStore } from '../stores/messages'
-import { useUiStore } from '../stores/ui'
-import LoginDialog from '../components/LoginDialog.vue'
 import logo from '../assets/logo.png'
 
 const authStore = useAuthStore()
 const messageStore = useMessageStore()
-const uiStore = useUiStore()
 const route = useRoute()
 const router = useRouter()
 
@@ -190,18 +181,12 @@ const avatarText = computed(() => {
   return name.charAt(0).toUpperCase()
 })
 
-const publicEntries = new Set(['/dashboard', '/chat'])
-
 const toggleSidebar = () => {
   collapsed.value = !collapsed.value
   localStorage.setItem('sidebar_collapsed', JSON.stringify(collapsed.value))
 }
 
 const handleMenuSelect = (index) => {
-  if (!authStore.isLogin && !publicEntries.has(index)) {
-    uiStore.openLogin()
-    return
-  }
   router.push(index)
 }
 
@@ -218,7 +203,7 @@ const handleCommand = async (command) => {
     await ElMessageBox.confirm('确认退出登录吗？', '提示', { type: 'warning' })
     await authStore.logout()
     messageStore.clear()
-    router.push('/dashboard')
+    router.push('/login')
   }
 }
 

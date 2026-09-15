@@ -21,10 +21,12 @@ for (const [name, component] of Object.entries(ElementPlusIconsVue)) {
 }
 app.mount('#app')
 
-// 全局登录失效事件：由 axios 响应拦截器触发，回到默认聊天页
+// 全局登录失效事件：由 axios 响应拦截器触发，跳转登录页并带上当前页用于登录后回跳
 // 必须同时清空 auth store：request.js 只删了 localStorage，Pinia 内存态仍持有旧 token，
 // isLogin 依旧为 true，聊天会继续用旧 token 发请求，最终被静默成「（无回答）」。
 window.addEventListener('auth:expired', () => {
   useAuthStore(pinia).clear()
-  router.push('/chat')
+  if (router.currentRoute.value.path !== '/login') {
+    router.push({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
+  }
 })

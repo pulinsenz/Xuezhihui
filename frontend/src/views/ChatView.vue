@@ -79,10 +79,6 @@
           </div>
           <div v-else class="panel-tip">暂无历史会话，点击上方开启新对话</div>
         </template>
-        <div v-else class="panel-tip login" @click="uiStore.openLogin()">
-          <el-icon><User /></el-icon>
-          <span>登录后同步与查看会话历史</span>
-        </div>
       </aside>
 
       <!-- 右侧：对话区 -->
@@ -226,16 +222,13 @@ import {
   Opportunity,
   Plus,
   Promotion,
-  User,
 } from '@element-plus/icons-vue'
 import { listMyKnowledge, listDocs } from '../api/knowledge'
 import { getSettings } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
-import { useUiStore } from '../stores/ui'
 import { useChatStore } from '../stores/chat'
 
 const authStore = useAuthStore()
-const uiStore = useUiStore()
 const chat = useChatStore()
 const route = useRoute()
 const router = useRouter()
@@ -349,10 +342,6 @@ const handleSend = async () => {
   const text = inputText.value.trim()
   if (!text || chat.sending) return
 
-  if (!authStore.isLogin) {
-    uiStore.openLogin()
-    return
-  }
   inputText.value = ''
 
   chat.pushUserMessage(text)
@@ -734,24 +723,6 @@ watch(
   color: #94a3b8;
   text-align: center;
   line-height: 1.6;
-}
-
-.panel-tip.login {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  border: 1px dashed rgba(203, 213, 225, 0.8);
-  border-radius: 12px;
-  padding: 20px 12px;
-  transition: all 0.2s ease;
-}
-
-.panel-tip.login:hover {
-  color: #0f766e;
-  border-color: #14b8a6;
-  background: rgba(20, 184, 166, 0.04);
 }
 
 /* 右侧对话区 */

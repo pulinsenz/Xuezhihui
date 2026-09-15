@@ -1,252 +1,236 @@
 <template>
   <div class="profile-page" v-loading="loading">
-    <template v-if="!authStore.isLogin">
-      <section class="hero-bar">
-        <div>
-          <p class="hero-kicker">个人资料</p>
-          <p class="hero-subtitle">登录后可以编辑头像、昵称和简介。</p>
-        </div>
-        <el-button type="primary" :icon="User" @click="uiStore.openLogin()">登录</el-button>
-      </section>
+    <section class="hero-bar">
+      <div class="hero-title-block">
+        <p class="hero-kicker">个人中心</p>
+        <h2>{{ profileName }}</h2>
+        <p class="hero-subtitle">{{ authStore.user?.userAccount }} · {{ roleLabel }}</p>
+      </div>
+      <div class="hero-actions">
+        <el-tag effect="plain" type="success">{{ authStore.user?.userRole === 'admin' ? '管理员' : '成员' }}</el-tag>
+        <el-tag effect="plain">创建于 {{ createdText }}</el-tag>
+      </div>
+    </section>
 
-      <el-empty description="请先登录后查看个人资料" />
-    </template>
-
-    <template v-else>
-      <section class="hero-bar">
-        <div class="hero-title-block">
-          <p class="hero-kicker">个人中心</p>
-          <h2>{{ profileName }}</h2>
-          <p class="hero-subtitle">{{ authStore.user?.userAccount }} · {{ roleLabel }}</p>
-        </div>
-        <div class="hero-actions">
-          <el-tag effect="plain" type="success">{{ authStore.user?.userRole === 'admin' ? '管理员' : '成员' }}</el-tag>
-          <el-tag effect="plain">创建于 {{ createdText }}</el-tag>
-        </div>
-      </section>
-
-      <section class="summary-grid">
-        <article class="summary-card profile-summary">
-          <div class="avatar-block">
-            <el-upload
-              :show-file-list="false"
-              :http-request="handleAvatarUpload"
-              accept="image/*"
-            >
-              <div class="avatar-wrap">
-                <el-avatar :size="92" class="avatar" :src="form.userAvatar || undefined">
-                  {{ avatarText }}
-                </el-avatar>
-                <div class="avatar-mask">
-                  <el-icon><Camera /></el-icon>
-                  <span>更换头像</span>
-                </div>
+    <section class="summary-grid">
+      <article class="summary-card profile-summary">
+        <div class="avatar-block">
+          <el-upload
+            :show-file-list="false"
+            :http-request="handleAvatarUpload"
+            accept="image/*"
+          >
+            <div class="avatar-wrap">
+              <el-avatar :size="92" class="avatar" :src="form.userAvatar || undefined">
+                {{ avatarText }}
+              </el-avatar>
+              <div class="avatar-mask">
+                <el-icon><Camera /></el-icon>
+                <span>更换头像</span>
               </div>
-            </el-upload>
-
-            <div class="avatar-meta">
-              <strong>{{ profileName }}</strong>
-              <span>{{ authStore.user?.userAccount }}</span>
-              <p>{{ form.userProfile || '还没有填写个人简介。' }}</p>
             </div>
-          </div>
-        </article>
+          </el-upload>
 
-        <article class="summary-card status-card">
-          <div class="panel-head">
-            <h3>账号概览</h3>
-            <span>当前状态</span>
+          <div class="avatar-meta">
+            <strong>{{ profileName }}</strong>
+            <span>{{ authStore.user?.userAccount }}</span>
+            <p>{{ form.userProfile || '还没有填写个人简介。' }}</p>
           </div>
-          <div class="status-grid">
-            <div class="status-pill">
-              <span>账号</span>
-              <strong>{{ authStore.user?.userAccount }}</strong>
+        </div>
+      </article>
+
+      <article class="summary-card status-card">
+        <div class="panel-head">
+          <h3>账号概览</h3>
+          <span>当前状态</span>
+        </div>
+        <div class="status-grid">
+          <div class="status-pill">
+            <span>账号</span>
+            <strong>{{ authStore.user?.userAccount }}</strong>
+          </div>
+          <div class="status-pill">
+            <span>身份</span>
+            <strong>{{ roleLabel }}</strong>
+          </div>
+          <div class="status-pill">
+            <span>昵称</span>
+            <strong>{{ profileName }}</strong>
+          </div>
+          <div class="status-pill">
+            <span>头像</span>
+            <strong>{{ authStore.user?.userAvatar ? '已设置' : '未设置' }}</strong>
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel-grid">
+      <article class="panel">
+        <div class="panel-head">
+          <h3>基本资料</h3>
+          <span>可直接编辑</span>
+        </div>
+
+        <el-form :model="form" label-position="top" class="profile-form">
+          <el-form-item label="账号">
+            <el-input :model-value="authStore.user?.userAccount" disabled />
+          </el-form-item>
+          <el-form-item label="昵称">
+            <el-input
+              v-model="form.userName"
+              maxlength="30"
+              show-word-limit
+              placeholder="请输入昵称"
+            />
+          </el-form-item>
+          <el-form-item label="个人简介">
+            <el-input
+              v-model="form.userProfile"
+              type="textarea"
+              :rows="5"
+              maxlength="200"
+              show-word-limit
+              placeholder="写点介绍自己的话"
+            />
+          </el-form-item>
+        </el-form>
+
+        <div class="panel-actions">
+          <el-button :icon="RefreshLeft" @click="resetForm">重置</el-button>
+          <el-button type="primary" :icon="Check" :loading="saving" @click="handleSave">
+            保存资料
+          </el-button>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h3>资料补充</h3>
+          <span>本地偏好</span>
+        </div>
+
+        <div class="setting-list">
+          <div class="setting-row">
+            <div class="setting-copy">
+              <strong>默认入库</strong>
+              <p>上传文档后自动进入向量化流程。</p>
             </div>
-            <div class="status-pill">
-              <span>身份</span>
-              <strong>{{ roleLabel }}</strong>
+            <el-tag effect="plain" :type="settings.defaultVectorize ? 'success' : 'info'">
+              {{ settings.defaultVectorize ? '开启' : '关闭' }}
+            </el-tag>
+          </div>
+
+          <div class="setting-row">
+            <div class="setting-copy">
+              <strong>引用折叠</strong>
+              <p>控制对话引用是否默认收起。</p>
             </div>
-            <div class="status-pill">
-              <span>昵称</span>
-              <strong>{{ profileName }}</strong>
-            </div>
-            <div class="status-pill">
-              <span>头像</span>
-              <strong>{{ authStore.user?.userAvatar ? '已设置' : '未设置' }}</strong>
-            </div>
+            <el-tag effect="plain" :type="settings.collapseRefs ? 'warning' : 'success'">
+              {{ settings.collapseRefs ? '收起' : '展开' }}
+            </el-tag>
           </div>
-        </article>
-      </section>
+        </div>
 
-      <section class="panel-grid">
-        <article class="panel">
-          <div class="panel-head">
-            <h3>基本资料</h3>
-            <span>可直接编辑</span>
+        <el-divider />
+
+        <div class="notice-card">
+          <strong>支持信息</strong>
+          <p>如遇到资料上传或头像更新异常，请先检查图片格式和网络连接。</p>
+        </div>
+      </article>
+    </section>
+
+    <section class="panel-grid bottom-grid">
+      <article class="panel">
+        <div class="panel-head">
+          <h3>头像管理</h3>
+          <span>上传与清空</span>
+        </div>
+
+        <div class="avatar-tools">
+          <el-upload
+            :show-file-list="false"
+            :http-request="handleAvatarUpload"
+            accept="image/*"
+          >
+            <el-button type="primary" :icon="Upload">上传头像</el-button>
+          </el-upload>
+          <el-button :icon="Delete" :disabled="!form.userAvatar" @click="clearAvatar">清空头像</el-button>
+        </div>
+
+        <div class="avatar-preview">
+          <el-avatar :size="64" class="avatar-large" :src="form.userAvatar || undefined">
+            {{ avatarText }}
+          </el-avatar>
+          <div class="avatar-preview-copy">
+            <strong>预览</strong>
+            <span>{{ form.userAvatar || '未设置头像' }}</span>
           </div>
+        </div>
+      </article>
 
-          <el-form :model="form" label-position="top" class="profile-form">
-            <el-form-item label="账号">
-              <el-input :model-value="authStore.user?.userAccount" disabled />
-            </el-form-item>
-            <el-form-item label="昵称">
-              <el-input
-                v-model="form.userName"
-                maxlength="30"
-                show-word-limit
-                placeholder="请输入昵称"
-              />
-            </el-form-item>
-            <el-form-item label="个人简介">
-              <el-input
-                v-model="form.userProfile"
-                type="textarea"
-                :rows="5"
-                maxlength="200"
-                show-word-limit
-                placeholder="写点介绍自己的话"
-              />
-            </el-form-item>
-          </el-form>
+      <article class="panel">
+        <div class="panel-head">
+          <h3>修改密码</h3>
+          <span>安全验证</span>
+        </div>
 
-          <div class="panel-actions">
-            <el-button :icon="RefreshLeft" @click="resetForm">重置</el-button>
-            <el-button type="primary" :icon="Check" :loading="saving" @click="handleSave">
-              保存资料
-            </el-button>
-          </div>
-        </article>
+        <el-form :model="passwordForm" label-position="top" class="profile-form">
+          <el-form-item label="原密码">
+            <el-input
+              v-model="passwordForm.oldPassword"
+              type="password"
+              show-password
+              :prefix-icon="Lock"
+              placeholder="请输入当前密码"
+            />
+          </el-form-item>
+          <el-form-item label="新密码">
+            <el-input
+              v-model="passwordForm.newPassword"
+              type="password"
+              show-password
+              :prefix-icon="Lock"
+              placeholder="8-32 位新密码"
+            />
+          </el-form-item>
+          <el-form-item label="确认新密码">
+            <el-input
+              v-model="passwordForm.checkPassword"
+              type="password"
+              show-password
+              :prefix-icon="Lock"
+              placeholder="再次输入新密码"
+            />
+          </el-form-item>
+        </el-form>
 
-        <article class="panel">
-          <div class="panel-head">
-            <h3>资料补充</h3>
-            <span>本地偏好</span>
-          </div>
+        <div class="panel-actions">
+          <el-button :icon="RefreshLeft" @click="resetPasswordForm">重置</el-button>
+          <el-button type="primary" :icon="Lock" :loading="passwordSaving" @click="handleChangePassword">
+            修改密码
+          </el-button>
+        </div>
 
-          <div class="setting-list">
-            <div class="setting-row">
-              <div class="setting-copy">
-                <strong>默认入库</strong>
-                <p>上传文档后自动进入向量化流程。</p>
-              </div>
-              <el-tag effect="plain" :type="settings.defaultVectorize ? 'success' : 'info'">
-                {{ settings.defaultVectorize ? '开启' : '关闭' }}
-              </el-tag>
-            </div>
-
-            <div class="setting-row">
-              <div class="setting-copy">
-                <strong>引用折叠</strong>
-                <p>控制对话引用是否默认收起。</p>
-              </div>
-              <el-tag effect="plain" :type="settings.collapseRefs ? 'warning' : 'success'">
-                {{ settings.collapseRefs ? '收起' : '展开' }}
-              </el-tag>
-            </div>
-          </div>
-
-          <el-divider />
-
-          <div class="notice-card">
-            <strong>支持信息</strong>
-            <p>如遇到资料上传或头像更新异常，请先检查图片格式和网络连接。</p>
-          </div>
-        </article>
-      </section>
-
-      <section class="panel-grid bottom-grid">
-        <article class="panel">
-          <div class="panel-head">
-            <h3>头像管理</h3>
-            <span>上传与清空</span>
-          </div>
-
-          <div class="avatar-tools">
-            <el-upload
-              :show-file-list="false"
-              :http-request="handleAvatarUpload"
-              accept="image/*"
-            >
-              <el-button type="primary" :icon="Upload">上传头像</el-button>
-            </el-upload>
-            <el-button :icon="Delete" :disabled="!form.userAvatar" @click="clearAvatar">清空头像</el-button>
-          </div>
-
-          <div class="avatar-preview">
-            <el-avatar :size="64" class="avatar-large" :src="form.userAvatar || undefined">
-              {{ avatarText }}
-            </el-avatar>
-            <div class="avatar-preview-copy">
-              <strong>预览</strong>
-              <span>{{ form.userAvatar || '未设置头像' }}</span>
-            </div>
-          </div>
-        </article>
-
-        <article class="panel">
-          <div class="panel-head">
-            <h3>修改密码</h3>
-            <span>安全验证</span>
-          </div>
-
-          <el-form :model="passwordForm" label-position="top" class="profile-form">
-            <el-form-item label="原密码">
-              <el-input
-                v-model="passwordForm.oldPassword"
-                type="password"
-                show-password
-                :prefix-icon="Lock"
-                placeholder="请输入当前密码"
-              />
-            </el-form-item>
-            <el-form-item label="新密码">
-              <el-input
-                v-model="passwordForm.newPassword"
-                type="password"
-                show-password
-                :prefix-icon="Lock"
-                placeholder="8-32 位新密码"
-              />
-            </el-form-item>
-            <el-form-item label="确认新密码">
-              <el-input
-                v-model="passwordForm.checkPassword"
-                type="password"
-                show-password
-                :prefix-icon="Lock"
-                placeholder="再次输入新密码"
-              />
-            </el-form-item>
-          </el-form>
-
-          <div class="panel-actions">
-            <el-button :icon="RefreshLeft" @click="resetPasswordForm">重置</el-button>
-            <el-button type="primary" :icon="Lock" :loading="passwordSaving" @click="handleChangePassword">
-              修改密码
-            </el-button>
-          </div>
-
-          <div class="notice-card">
-            <strong>说明</strong>
-            <p>修改成功后会立即切换到新会话。</p>
-          </div>
-        </article>
-      </section>
-    </template>
+        <div class="notice-card">
+          <strong>说明</strong>
+          <p>修改成功后会立即切换到新会话。</p>
+        </div>
+      </article>
+    </section>
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Camera, Check, Delete, Lock, RefreshLeft, Upload, User } from '@element-plus/icons-vue'
+import { Camera, Check, Delete, Lock, RefreshLeft, Upload } from '@element-plus/icons-vue'
 import { changePassword, uploadAvatar } from '../api/auth'
 import { useAuthStore } from '../stores/auth'
-import { useUiStore } from '../stores/ui'
 import { getSettings } from '../api/settings'
 
 const authStore = useAuthStore()
-const uiStore = useUiStore()
 
 const loading = ref(false)
 const saving = ref(false)

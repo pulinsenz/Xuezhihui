@@ -9,7 +9,7 @@
       </div>
       <div class="hero-actions">
         <el-button type="primary" :icon="ChatDotRound" @click="openRoute('/chat')">开始对话</el-button>
-        <el-button :icon="Folder" @click="openRoute('/knowledge', true)">我的知识库</el-button>
+        <el-button :icon="Folder" @click="openRoute('/knowledge')">我的知识库</el-button>
       </div>
     </section>
 
@@ -136,13 +136,11 @@ import { listMyKnowledge } from '../api/knowledge'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useMessageStore } from '../stores/messages'
-import { useUiStore } from '../stores/ui'
 
 const router = useRouter()
 const authStore = useAuthStore()
 const chat = useChatStore()
 const messageStore = useMessageStore()
-const uiStore = useUiStore()
 
 const loading = ref(false)
 const knowledgeList = ref([])
@@ -247,26 +245,18 @@ const statusLabel = computed(() => {
 
 const quickActions = computed(() => [
   { label: '对话', icon: ChatDotRound, run: () => openRoute('/chat') },
-  { label: '知识库', icon: Folder, run: () => openRoute('/knowledge', true) },
-  { label: '公开知识库', icon: Collection, run: () => openRoute('/public-knowledge', true) },
-  { label: '消息', icon: Bell, run: () => openRoute('/messages', true) },
-  { label: '设置', icon: Setting, run: () => openRoute('/settings', true) },
-  { label: '个人资料', icon: User, run: () => openRoute('/profile', true) },
+  { label: '知识库', icon: Folder, run: () => openRoute('/knowledge') },
+  { label: '公开知识库', icon: Collection, run: () => openRoute('/public-knowledge') },
+  { label: '消息', icon: Bell, run: () => openRoute('/messages') },
+  { label: '设置', icon: Setting, run: () => openRoute('/settings') },
+  { label: '个人资料', icon: User, run: () => openRoute('/profile') },
 ])
 
-const openRoute = (path, needsLogin = false) => {
-  if (needsLogin && !authStore.isLogin) {
-    uiStore.openLogin()
-    return
-  }
+const openRoute = (path) => {
   router.push(path)
 }
 
 const openSession = async (sessionId) => {
-  if (!authStore.isLogin) {
-    uiStore.openLogin()
-    return
-  }
   await chat.openSession(sessionId)
   router.push(`/chat/${sessionId}`)
 }

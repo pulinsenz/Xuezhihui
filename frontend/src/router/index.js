@@ -1,7 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '../stores/auth'
-import { useUiStore } from '../stores/ui'
 import MainLayout from '../layouts/MainLayout.vue'
 
 const routes = [
@@ -19,7 +18,7 @@ const routes = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../views/DashboardView.vue'),
-        meta: { public: true, title: '仪表盘' },
+        meta: { title: '仪表盘' },
       },
       { path: '', redirect: '/dashboard' },
       {
@@ -32,7 +31,7 @@ const routes = [
         path: 'knowledge',
         name: 'KnowledgeList',
         component: () => import('../views/KnowledgeListView.vue'),
-        meta: { loginRequired: true, title: '我的知识库' },
+        meta: { title: '我的知识库' },
       },
       {
         path: 'knowledge/:id',
@@ -44,43 +43,43 @@ const routes = [
         path: 'public-knowledge',
         name: 'PublicKnowledge',
         component: () => import('../views/PublicKnowledgeView.vue'),
-        meta: { loginRequired: true, title: '公开知识库' },
+        meta: { title: '公开知识库' },
       },
       {
         path: 'messages',
         name: 'Messages',
         component: () => import('../views/KnowledgeMessagesView.vue'),
-        meta: { loginRequired: true, title: '消息中心' },
+        meta: { title: '消息中心' },
       },
       {
         path: 'profile',
         name: 'Profile',
         component: () => import('../views/ProfileView.vue'),
-        meta: { loginRequired: true, title: '个人资料' },
+        meta: { title: '个人资料' },
       },
       {
         path: 'settings',
         name: 'Settings',
         component: () => import('../views/SettingsView.vue'),
-        meta: { loginRequired: true, title: '设置' },
+        meta: { title: '设置' },
       },
       {
         path: 'admin/users',
         name: 'AdminUsers',
         component: () => import('../views/AdminUsersView.vue'),
-        meta: { admin: true, loginRequired: true, title: '用户管理' },
+        meta: { admin: true, title: '用户管理' },
       },
       {
         path: 'admin/knowledge',
         name: 'AdminKnowledge',
         component: () => import('../views/AdminKnowledgeView.vue'),
-        meta: { admin: true, loginRequired: true, title: '全局知识库' },
+        meta: { admin: true, title: '全局知识库' },
       },
       {
         path: 'admin/knowledge/:id',
         name: 'AdminKnowledgeDetail',
         component: () => import('../views/AdminKnowledgeDetailView.vue'),
-        meta: { admin: true, loginRequired: true, title: '全局知识库详情' },
+        meta: { admin: true, title: '全局知识库详情' },
       },
       {
         path: ':pathMatch(.*)*',
@@ -97,37 +96,25 @@ const router = createRouter({
   routes,
 })
 
-router.beforeEach((to, from, next) => {
+router.beforeEach((to) => {
   const authStore = useAuthStore()
-  const uiStore = useUiStore()
 
   if (to.meta.public) {
-    next()
-    return
+    if (to.path === '/login' && authStore.isLogin) return '/dashboard'
+    return true
   }
 
-  if (to.meta.loginRequired && !authStore.isLogin) {
-    uiStore.openLogin()
+  if (!authStore.isLogin) {
     ElMessage.warning('请先登录')
-    next('/dashboard')
-    return
+    return { path: '/login', query: { redirect: to.fullPath } }
   }
 
-  if (to.meta.admin) {
-    if (!authStore.isLogin) {
-      uiStore.openLogin()
-      ElMessage.warning('请先登录')
-      next('/dashboard')
-      return
-    }
-    if (!authStore.isAdmin) {
-      ElMessage.error('无权限访问该页面')
-      next('/dashboard')
-      return
-    }
+  if (to.meta.admin && !authStore.isAdmin) {
+    ElMessage.error('无权限访问该页面')
+    return '/dashboard'
   }
 
-  next()
+  return true
 })
 
 export default router

@@ -9,13 +9,7 @@
       <el-button :icon="Refresh" :loading="messageStore.loading" @click="reload">刷新</el-button>
     </div>
 
-    <div v-if="!authStore.isLogin" class="empty-panel">
-      <el-empty description="登录后查看邀请消息与协作提醒">
-        <el-button type="primary" @click="uiStore.openLogin()">立即登录</el-button>
-      </el-empty>
-    </div>
-
-    <div v-else class="message-shell">
+    <div class="message-shell">
       <aside class="thread-list">
         <div class="thread-list-head">
           <div class="thread-head-title">
@@ -135,11 +129,9 @@ import { ElMessage } from 'element-plus'
 import { Check, Close, Document, Refresh } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
 import { useMessageStore } from '../stores/messages'
-import { useUiStore } from '../stores/ui'
 
 const authStore = useAuthStore()
 const messageStore = useMessageStore()
-const uiStore = useUiStore()
 const router = useRouter()
 
 const activeInvitationId = ref(null)
@@ -287,10 +279,7 @@ const isActive = (item) => String(item.id) === String(activeInvitationId.value)
 const isUnread = (item) => item.direction === 'incoming' && !item.readTime
 
 onMounted(async () => {
-  if (!authStore.isLogin) {
-    uiStore.openLogin()
-    return
-  }
+  if (!authStore.isLogin) return
   await reload()
   refreshTimer = window.setInterval(() => {
     if (authStore.isLogin) {
@@ -340,18 +329,6 @@ onUnmounted(() => {
   margin-top: 6px;
   color: #64748b;
   font-size: 13px;
-}
-
-.empty-panel {
-  min-height: 460px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.85);
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 24px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(16px);
 }
 
 .message-shell {
