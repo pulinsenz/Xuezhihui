@@ -2,6 +2,7 @@ package com.agent.rag.controller;
 
 import com.agent.rag.common.Result;
 import com.agent.rag.dto.req.ChatRequest;
+import com.agent.rag.dto.req.RenameSessionRequest;
 import com.agent.rag.dto.resp.ChatResponse;
 import com.agent.rag.dto.resp.HistoryMessageVO;
 import com.agent.rag.dto.resp.SessionVO;
@@ -12,6 +13,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -80,6 +82,16 @@ public class ChatController {
     @DeleteMapping("/sessions/{sessionId}")
     public Result<Boolean> deleteSession(@PathVariable String sessionId) {
         chatService.deleteSession(sessionId);
+        return Result.success(true);
+    }
+
+    /**
+     * 重命名会话（仅本人）：只改标题，不改变最近活跃排序
+     */
+    @PutMapping("/sessions/{sessionId}/title")
+    public Result<Boolean> renameSession(@PathVariable String sessionId,
+                                         @RequestBody RenameSessionRequest request) {
+        chatService.renameSession(sessionId, request == null ? null : request.getTitle());
         return Result.success(true);
     }
 }

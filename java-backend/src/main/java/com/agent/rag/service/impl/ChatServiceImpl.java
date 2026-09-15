@@ -157,6 +157,11 @@ public class ChatServiceImpl implements ChatService {
         chatHistoryService.deleteSession(sessionId, requireUserId());
     }
 
+    @Override
+    public void renameSession(String sessionId, String title) {
+        chatHistoryService.renameSession(sessionId, requireUserId(), title);
+    }
+
     private void validate(ChatRequest request) {
         if (request == null || StrUtil.isBlank(request.getQuery())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "问题内容不能为空");

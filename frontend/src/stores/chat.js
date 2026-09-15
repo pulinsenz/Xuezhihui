@@ -1,5 +1,5 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
-import { listSessions, getSessionHistory, deleteSession } from '../api/chat'
+import { listSessions, getSessionHistory, deleteSession, renameSession as renameSessionApi } from '../api/chat'
 
 /**
  * 生成会话 ID（UUID v4）。
@@ -68,6 +68,13 @@ export const useChatStore = defineStore('chat', {
         if (next) await this.openSession(next.session_id)
         else this.newSession()
       }
+    },
+
+    async renameSession(id, title) {
+      await renameSessionApi(id, title)
+      // 仅本地改标题：重命名不改活跃时间，列表顺序与 message_count 均不变
+      const s = this.sessions.find((item) => item.session_id === id)
+      if (s) s.title = title
     },
 
     resetForGuest() {

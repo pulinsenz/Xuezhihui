@@ -8,3 +8,4 @@ export const getSessionHistory = (sessionId) => request.get(`/chat/sessions/${se
 
 /** 删除会话及其消息（仅本人） */
 export const deleteSession = (sessionId) => request.delete(`/chat/sessions/${sessionId}`)
+export const renameSession = (sessionId, title) => request.put(`/chat/sessions/${sessionId}/title`, { title })

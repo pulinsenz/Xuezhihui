@@ -38,6 +38,11 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
     private static final int TITLE_MAX = 20;
     private static final String DEFAULT_TITLE = "新对话";
 
+    /**
+     * 手动重命名的标题上限，与 chat_session.title 列宽（varchar(64)）一致
+     */
+    private static final int TITLE_RENAME_MAX = 64;
+
     @Resource
     private ChatSessionMapper chatSessionMapper;
 
@@ -123,6 +128,28 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
     }
 
     @Override
+    public void renameSession(String sessionId, Long userId, String title) {
+        if (StrUtil.isBlank(sessionId) || userId == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "会话参数错误");
+        }
+        String name = title == null ? "" : title.trim();
+        if (StrUtil.isBlank(name)) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "会话名称不能为空");
+        }
+        if (name.length() > TITLE_RENAME_MAX) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "会话名称不能超过 64 个字符");
+        }
+        ChatSession session = requireOwned(sessionId, userId);
+        ChatSession update = new ChatSession();
+        update.setSessionId(sessionId);
+        update.setTitle(name);
+        // 显式回写原 updateTime，抵消列的 ON UPDATE CURRENT_TIMESTAMP：重命名不应改变最近活跃排序
+        update.setUpdateTime(session.getUpdateTime());
+        chatSessionMapper.updateById(update);
+        log.info("重命名会话: sessionId={}, userId={}, title={}", sessionId, userId, name);
+    }
+
+    @Override
     public void checkAccess(String sessionId, Long userId) {
         if (userId == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN, "未登录");
@@ -138,9 +165,9 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
     }
 
     /**
-     * 会话必须存在且属主为该用户，否则 NOT_FOUND（对外不暴露存在性）
+     * 会话必须存在且属主为该用户，否则 NOT_FOUND（对外不暴露存在性）；校验通过返回该会话
      */
-    private void requireOwned(String sessionId, Long userId) {
+    private ChatSession requireOwned(String sessionId, Long userId) {
         if (StrUtil.isBlank(sessionId) || userId == null) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "会话参数错误");
         }
@@ -148,6 +175,7 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
         if (session == null || !session.getUserId().equals(userId)) {
             throw new BusinessException(ErrorCode.NOT_FOUND, "会话不存在");
         }
+        return session;
     }
 
     private void insertMessage(String sessionId, Long userId, String role, String content, LocalDateTime now,

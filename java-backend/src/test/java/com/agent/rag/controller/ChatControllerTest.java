@@ -21,6 +21,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -33,6 +34,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 
 /**
  * 对话接口集成测试（ChatService 普通对话 mock PythonAgentClient）
@@ -263,6 +265,81 @@ class ChatControllerTest {
         String body = mockMvc.perform(delete("/chat/sessions/whatever"))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(40100, objectMapper.readTree(body).get("code").asInt());
+    }
+
+    // ---------- 重命名会话 ----------
+
+    @Test
+    void renameSession_success_updatesTitleKeepingOrder() throws Exception {
+        LoginResult login = registerAndLoginWithId();
+        String sid = "ren_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO chat_session (sessionId, userId, title, createTime, updateTime) VALUES (?, ?, '旧标题', NOW(), NOW())",
+                sid, login.userId);
+        try {
+            Timestamp before = jdbcTemplate.queryForObject(
+                    "SELECT updateTime FROM chat_session WHERE sessionId = ?", Timestamp.class, sid);
+            String body = mockMvc.perform(put("/chat/sessions/" + sid + "/title")
+                            .header("Authorization", "Bearer " + login.token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"新标题\"}"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(0, objectMapper.readTree(body).get("code").asInt());
+            assertEquals("新标题", jdbcTemplate.queryForObject(
+                    "SELECT title FROM chat_session WHERE sessionId = ?", String.class, sid));
+            // 重命名显式保留原 updateTime：不应因列的 ON UPDATE 触发而跳到侧栏顶部
+            assertEquals(before, jdbcTemplate.queryForObject(
+                    "SELECT updateTime FROM chat_session WHERE sessionId = ?", Timestamp.class, sid));
+        } finally {
+            jdbcTemplate.update("DELETE FROM chat_session WHERE sessionId = ?", sid);
+        }
+    }
+
+    @Test
+    void renameSession_requiresLogin() throws Exception {
+        String body = mockMvc.perform(put("/chat/sessions/whatever/title")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"title\":\"改名\"}"))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        assertEquals(40100, objectMapper.readTree(body).get("code").asInt());
+    }
+
+    @Test
+    void renameSession_foreignSession_returnsNotFound() throws Exception {
+        LoginResult owner = registerAndLoginWithId();
+        LoginResult intruder = registerAndLoginWithId();
+        String sid = "foreign_ren_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO chat_session (sessionId, userId, title, createTime, updateTime) VALUES (?, ?, '别人的', NOW(), NOW())",
+                sid, owner.userId);
+        try {
+            String body = mockMvc.perform(put("/chat/sessions/" + sid + "/title")
+                            .header("Authorization", "Bearer " + intruder.token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"改名\"}"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(40400, objectMapper.readTree(body).get("code").asInt());
+        } finally {
+            jdbcTemplate.update("DELETE FROM chat_session WHERE sessionId = ?", sid);
+        }
+    }
+
+    @Test
+    void renameSession_blankTitle_returnsParamsError() throws Exception {
+        LoginResult login = registerAndLoginWithId();
+        String sid = "ren_blank_" + System.nanoTime();
+        jdbcTemplate.update("INSERT INTO chat_session (sessionId, userId, title, createTime, updateTime) VALUES (?, ?, '原标题', NOW(), NOW())",
+                sid, login.userId);
+        try {
+            String body = mockMvc.perform(put("/chat/sessions/" + sid + "/title")
+                            .header("Authorization", "Bearer " + login.token)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"title\":\"   \"}"))
+                    .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+            assertEquals(40000, objectMapper.readTree(body).get("code").asInt());
+            assertEquals("原标题", jdbcTemplate.queryForObject(
+                    "SELECT title FROM chat_session WHERE sessionId = ?", String.class, sid));
+        } finally {
+            jdbcTemplate.update("DELETE FROM chat_session WHERE sessionId = ?", sid);
+        }
     }
 
     @Test

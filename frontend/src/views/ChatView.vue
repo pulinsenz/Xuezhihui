@@ -61,6 +61,14 @@
               </div>
               <el-icon
                 v-if="!chat.sending"
+                class="session-edit"
+                title="重命名会话"
+                @click.stop="handleRenameSession(s)"
+              >
+                <EditPen />
+              </el-icon>
+              <el-icon
+                v-if="!chat.sending"
                 class="session-del"
                 title="删除会话"
                 @click.stop="handleDeleteSession(s)"
@@ -213,6 +221,7 @@ import {
   Cpu,
   Delete,
   Document,
+  EditPen,
   Folder,
   Opportunity,
   Plus,
@@ -418,6 +427,27 @@ const handleDeleteSession = async (s) => {
   await chat.deleteSession(s.session_id)
   enrichHistorySources()
   scrollToBottom()
+}
+
+const handleRenameSession = async (s) => {
+  if (chat.sending) return
+  try {
+    const { value } = await ElMessageBox.prompt('为会话设置一个新的名称', '重命名会话', {
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+      inputValue: s.title || '',
+      inputPlaceholder: '请输入会话名称',
+      inputValidator: (v) => {
+        const t = (v || '').trim()
+        if (!t) return '会话名称不能为空'
+        if (t.length > 64) return '不能超过 64 个字符'
+        return true
+      },
+    })
+    await chat.renameSession(s.session_id, value.trim())
+  } catch (e) {
+    // 取消输入静默处理；接口失败已由 axios 拦截器统一提示
+  }
 }
 
 const formatTime = (epochSec) => {
@@ -647,7 +677,7 @@ watch(
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-right: 18px;
+  padding-right: 36px;
 }
 
 .session-item.active .session-title {
@@ -658,6 +688,25 @@ watch(
   margin-top: 3px;
   font-size: 11px;
   color: #94a3b8;
+}
+
+.session-edit {
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #cbd5e1;
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.2s ease, color 0.2s ease;
+}
+
+.session-item:hover .session-edit {
+  opacity: 1;
+}
+
+.session-edit:hover {
+  color: #0f766e;
 }
 
 .session-del {

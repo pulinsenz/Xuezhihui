@@ -7,6 +7,7 @@ vi.mock('../../api/chat', () => ({
   listSessions: vi.fn(),
   getSessionHistory: vi.fn(),
   deleteSession: vi.fn(),
+  renameSession: vi.fn(),
 }))
 
 describe('chat store', () => {
@@ -95,6 +96,18 @@ describe('chat store', () => {
     await store.deleteSession('s1')
     expect(store.sessions).toEqual([])
     expect(store.activeSessionId).toBeTruthy()
+  })
+
+  it('renameSession 调接口并更新本地标题', async () => {
+    const store = useChatStore()
+    store.sessions = [
+      { session_id: 's1', title: '旧标题' },
+      { session_id: 's2', title: '其他' },
+    ]
+    await store.renameSession('s1', '新标题')
+    expect(chatApi.renameSession).toHaveBeenCalledWith('s1', '新标题')
+    expect(store.sessions[0].title).toBe('新标题')
+    expect(store.sessions[1].title).toBe('其他')
   })
 
   it('resetForGuest 清空并重置本地会话 id', () => {

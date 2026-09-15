@@ -36,6 +36,11 @@ public interface ChatHistoryService {
     void deleteSession(String sessionId, Long userId);
 
     /**
+     * 重命名会话（仅本人）：只改标题，不刷新 updateTime（重命名不应改变最近活跃排序）
+     */
+    void renameSession(String sessionId, Long userId, String title);
+
+    /**
      * 写侧越权防护：会话已存在但属主不是该用户 → 抛 NO_AUTH；会话不存在（新会话）放行
      */
     void checkAccess(String sessionId, Long userId);
