@@ -34,6 +34,14 @@ mybatis-plus:
       logic-delete-value: 1 # 逻辑删除字段值
       logic-not-delete-value: 0 # 逻辑未删除字段值
       logic-delete-field: isDeleted # 逻辑删除字段名
+# Actuator：仅暴露 health（默认即如此，显式声明防误开）。聚合 MySQL/Redis 存活，
+# 供 compose 健康检查与外部探测：GET /api/actuator/health → {"status":"UP"}
+# show-details 保持默认 never：对外只回状态不泄露组件明细
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
 # CORS 配置（生产环境请在 application-prod.yml 中配置前端域名）
 app:
   cors:

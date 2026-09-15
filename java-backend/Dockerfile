@@ -19,7 +19,7 @@ COPY --from=build /build/target/*.jar app.jar
 # 非 root 运行（安全基线）
 RUN apt-get update \
     # Java2D 生成算术验证码图片需要字体（temurin JRE 精简镜像无字体，缺失则 drawString 画不出文字）
-    && apt-get install -y --no-install-recommends fonts-dejavu-core \
+    && apt-get install -y --no-install-recommends fonts-dejavu-core curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1001 appuser \
     && mkdir -p /app/data/files \

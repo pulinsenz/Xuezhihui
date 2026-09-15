@@ -34,6 +34,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!--健康检查：/actuator/health 聚合 MySQL/Redis 状态，供 compose 健康检查与外部探测使用 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
         <!--切面编程-->
         <dependency>
             <groupId>org.springframework.boot</groupId>

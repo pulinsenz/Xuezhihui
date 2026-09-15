@@ -118,9 +118,10 @@ services:
       redis:
         condition: service_started
     healthcheck:
-      # temurin:17-jre 自带 bash（无 curl/wget、pom 无 actuator），用 bash /dev/tcp 探测 8123；
-      # Tomcat 监听 = JVM 已起且启动期连 MySQL 成功（Hikari 启动即初始化，连不上会启动失败）
-      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/8123'"]
+      # 探测 actuator 聚合健康（MySQL/Redis 连通性），比端口探活更真实：Tomcat 活着但
+      # DB/Redis 挂掉时 health 会转 DOWN(503)。运行时镜像已装 curl（见 java-backend/Dockerfile）。
+      # URL 含 context-path /api；-f 使非 2xx（DOWN→503）直接失败
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8123/api/actuator/health | grep -q UP"]
       interval: 15s
       timeout: 5s
       retries: 10
