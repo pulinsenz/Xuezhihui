@@ -36,6 +36,7 @@ import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.UserContext;
 import com.agent.rag.util.UploadFileTypeValidator;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -46,11 +47,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 知识库服务实现
@@ -157,8 +160,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         all.sort(Comparator.comparing(Knowledge::getCreateTime,
                 Comparator.nullsLast(Comparator.naturalOrder())).reversed());
         // isOwner 必须按作者判断：列表含「我收藏的他人公开库」，硬编码 true 会让收藏的库也显示"我的"
-        return all.stream().map(k -> enrichVO(k, userId, k.getUserId().equals(userId),
-                favIds.contains(k.getId()))).toList();
+        return enrichVOs(all, userId, favIds);
     }
 
     @Override
@@ -172,10 +174,7 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         }
         List<Knowledge> list = knowledgeMapper.selectList(wrapper);
         Set<Long> favIds = myFavoriteIds(userId);
-        return list.stream().map(k -> {
-            boolean isOwner = k.getUserId().equals(userId);
-            return enrichVO(k, userId, isOwner, favIds.contains(k.getId()));
-        }).toList();
+        return enrichVOs(list, userId, favIds);
     }
 
     @Override
@@ -261,12 +260,13 @@ public class KnowledgeServiceImpl implements KnowledgeService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void deleteKnowledge(Long knowledgeId) {
         getOwnedKnowledge(knowledgeId);
         knowledgeMapper.deleteById(knowledgeId);
         knowledgeDocMapper.delete(new LambdaQueryWrapper<KnowledgeDoc>()
                 .eq(KnowledgeDoc::getKnowledgeId, knowledgeId));
-        // 级联清理收藏与协作者关系，避免残留
+        // 级联清理收藏与协作者关系，避免残留；四表同事务，中途失败整体回滚不留孤儿
         knowledgeFavoriteMapper.delete(new LambdaQueryWrapper<KnowledgeFavorite>()
                 .eq(KnowledgeFavorite::getKnowledgeId, knowledgeId));
         knowledgeMemberMapper.delete(new LambdaQueryWrapper<KnowledgeMember>()
@@ -451,10 +451,13 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         if (docIds == null || docIds.isEmpty()) {
             return List.of();
         }
+        // 一次批量取（旧实现循环逐条 selectById，N 文档 N 次查询）
+        Map<Long, KnowledgeDoc> docs = knowledgeDocMapper.selectBatchIds(docIds).stream()
+                .collect(Collectors.toMap(KnowledgeDoc::getId, d -> d));
         List<String> taskIds = new ArrayList<>();
         for (Long docId : docIds) {
-            // selectById 过滤已删除文档；已入库的跳过，其余（未入库/失败/重复等）提交向量化任务
-            KnowledgeDoc doc = knowledgeDocMapper.selectById(docId);
+            KnowledgeDoc doc = docs.get(docId);
+            // selectBatchIds 过滤已删除文档；已入库的跳过，其余（未入库/失败/重复等）提交向量化任务
             if (doc == null || !doc.getKnowledgeId().equals(knowledgeId)) {
                 continue;
             }
@@ -899,6 +902,50 @@ public class KnowledgeServiceImpl implements KnowledgeService {
         return vo;
     }
 
+    /**
+     * 列表页批量装配：协作身份 / 文档数 / 作者各一条聚合或批量查询，
+     * 替代逐行 enrichVO 的每行 3 条 SQL（列表页 N×3 → 恒定 3 条）。
+     */
+    private List<KnowledgeVO> enrichVOs(List<Knowledge> list, Long currentUserId, Set<Long> favIds) {
+        if (list.isEmpty()) {
+            return List.of();
+        }
+        List<Long> ids = list.stream().map(Knowledge::getId).toList();
+        // 协作身份：一条 in 查询（isMember 单条版等价：同 knowledgeId+userId 存在性）
+        Set<Long> memberIds = knowledgeMemberMapper.selectList(new LambdaQueryWrapper<KnowledgeMember>()
+                        .in(KnowledgeMember::getKnowledgeId, ids)
+                        .eq(KnowledgeMember::getUserId, currentUserId))
+                .stream().map(KnowledgeMember::getKnowledgeId).collect(Collectors.toSet());
+        // 文档数：一条 GROUP BY
+        Map<Long, Long> docCounts = new HashMap<>();
+        for (Map<String, Object> row : knowledgeDocMapper.selectMaps(new QueryWrapper<KnowledgeDoc>()
+                .select("knowledgeId", "COUNT(*) AS cnt")
+                .in("knowledgeId", ids)
+                .groupBy("knowledgeId"))) {
+            docCounts.put(((Number) row.get("knowledgeId")).longValue(),
+                    ((Number) row.get("cnt")).longValue());
+        }
+        // 作者信息：一次批量
+        List<Long> authorIds = list.stream().map(Knowledge::getUserId).distinct().toList();
+        Map<Long, User> authors = userMapper.selectBatchIds(authorIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+        return list.stream().map(k -> {
+            KnowledgeVO vo = KnowledgeVO.from(k);
+            vo.setIsOwner(k.getUserId().equals(currentUserId));
+            vo.setIsFavorite(favIds.contains(k.getId()));
+            vo.setIsMember(memberIds.contains(k.getId()));
+            vo.setDocCount(docCounts.getOrDefault(k.getId(), 0L));
+            User author = authors.get(k.getUserId());
+            if (author != null) {
+                vo.setAuthorName(StrUtil.blankToDefault(author.getUserName(), author.getUserAccount()));
+                vo.setAuthorAvatar(author.getUserAvatar());
+            } else {
+                vo.setAuthorName("未知用户");
+            }
+            return vo;
+        }).toList();
+    }
+
     @Override
     public UserStatsVO getUserStats(Long userId) {
         if (userId == null) {
@@ -919,18 +966,21 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             vo.setVectorFailed(0L);
             return vo;
         }
-        LambdaQueryWrapper<KnowledgeDoc> inDocs = new LambdaQueryWrapper<KnowledgeDoc>()
-                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds);
-        vo.setDocCount(knowledgeDocMapper.selectCount(inDocs));
-        vo.setVectorSuccess(knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
-                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds)
-                .eq(KnowledgeDoc::getVectorStatus, VectorStatus.SUCCESS.name())));
-        vo.setVectorPending(knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
-                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds)
-                .eq(KnowledgeDoc::getVectorStatus, VectorStatus.PENDING.name())));
-        vo.setVectorFailed(knowledgeDocMapper.selectCount(new LambdaQueryWrapper<KnowledgeDoc>()
-                .in(KnowledgeDoc::getKnowledgeId, knowledgeIds)
-                .eq(KnowledgeDoc::getVectorStatus, VectorStatus.FAILED.name())));
+        // 一条 GROUP BY 拿到总数与各向量化状态分布（旧实现 4 条独立 COUNT）
+        Map<Long, Long> docCounts = new HashMap<>();
+        Map<String, Long> statusCounts = new HashMap<>();
+        for (Map<String, Object> row : knowledgeDocMapper.selectMaps(new QueryWrapper<KnowledgeDoc>()
+                .select("knowledgeId", "vectorStatus", "COUNT(*) AS cnt")
+                .in("knowledgeId", knowledgeIds)
+                .groupBy("knowledgeId", "vectorStatus"))) {
+            long cnt = ((Number) row.get("cnt")).longValue();
+            docCounts.merge(((Number) row.get("knowledgeId")).longValue(), cnt, Long::sum);
+            statusCounts.merge(String.valueOf(row.get("vectorStatus")), cnt, Long::sum);
+        }
+        vo.setDocCount(docCounts.values().stream().mapToLong(Long::longValue).sum());
+        vo.setVectorSuccess(statusCounts.getOrDefault(VectorStatus.SUCCESS.name(), 0L));
+        vo.setVectorPending(statusCounts.getOrDefault(VectorStatus.PENDING.name(), 0L));
+        vo.setVectorFailed(statusCounts.getOrDefault(VectorStatus.FAILED.name(), 0L));
         // 最近上传时间：取该用户最近一条文档的创建时间
         KnowledgeDoc latest = knowledgeDocMapper.selectOne(new LambdaQueryWrapper<KnowledgeDoc>()
                 .in(KnowledgeDoc::getKnowledgeId, knowledgeIds)

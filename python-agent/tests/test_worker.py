@@ -94,6 +94,18 @@ def test_worker_loop_continues_on_error(monkeypatch):
 
 # ---- 回调 Java（信任边界：Python 不直连 MySQL，回写走 internal 接口） ----
 
+class FakeHttpClient:
+    """替代共享 httpx.Client：捕获 post 参数（生产代码已复用 java_client 连接池）"""
+    trust_env = False
+
+    def __init__(self, capture):
+        self._capture = capture
+
+    def post(self, url, json=None, headers=None, timeout=None):
+        self._capture.update({"url": url, "json": json, "headers": headers})
+        return FakeResp()
+
+
 def test_callback_java_sends_token(monkeypatch):
     monkeypatch.setattr(settings, "java_token", "t")
     monkeypatch.setattr(settings, "java_base_url", "http://java:8123/api")
@@ -102,17 +114,15 @@ def test_callback_java_sends_token(monkeypatch):
     class FakeResp:
         status_code = 200
 
-    def fake_post(url, json=None, headers=None, timeout=None, trust_env=None):
-        captured.update({"url": url, "json": json, "headers": headers, "trust_env": trust_env})
-        return FakeResp()
-
-    monkeypatch.setattr("worker.vectorize_worker.httpx.post", fake_post)
+    monkeypatch.setattr("worker.vectorize_worker.get_shared_client",
+                        lambda: FakeHttpClient(captured))
     VectorizeWorker(FakeTaskStore())._callback_java("d1", "SUCCESS", None)
 
     assert captured["url"] == "http://java:8123/api/internal/agent/vector-callback"
     assert captured["json"] == {"doc_id": "d1", "status": "SUCCESS"}
     assert captured["headers"]["X-Agent-Token"] == "t"
-    assert captured["trust_env"] is False, "内部回调应直连，避开系统代理"
+    import utils.java_client as jc
+    assert jc.get_shared_client().trust_env is False, "内部回调应直连，避开系统代理"
 
 
 def test_callback_java_with_error_msg(monkeypatch):
@@ -123,16 +133,17 @@ def test_callback_java_with_error_msg(monkeypatch):
     class FakeResp:
         status_code = 200
 
-    def fake_post(url, json=None, headers=None, timeout=None, trust_env=None):
-        captured["json"] = json
-        return FakeResp()
-
-    monkeypatch.setattr("worker.vectorize_worker.httpx.post", fake_post)
+    monkeypatch.setattr("worker.vectorize_worker.get_shared_client",
+                        lambda: FakeHttpClient(captured))
     VectorizeWorker(FakeTaskStore())._callback_java("d1", "FAILED", "解析失败")
     assert captured["json"] == {"doc_id": "d1", "status": "FAILED", "error_msg": "解析失败"}
 
 
 def test_callback_java_no_token_skipped(monkeypatch):
     monkeypatch.setattr(settings, "java_token", "")
-    monkeypatch.setattr("worker.vectorize_worker.httpx.post", lambda *a, **k: (_ for _ in ()).throw(AssertionError("不应发起请求")))
+
+    def _no_request():
+        raise AssertionError("不应发起请求")
+
+    monkeypatch.setattr("worker.vectorize_worker.get_shared_client", _no_request)
     VectorizeWorker(FakeTaskStore())._callback_java("d1", "SUCCESS", None)

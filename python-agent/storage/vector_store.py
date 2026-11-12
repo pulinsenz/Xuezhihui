@@ -34,6 +34,10 @@ class VectorStore(ABC):
     def get_chunks(self, knowledge_id: str, doc_id: str) -> List[str]:
         """查询文档切片文本列表（按入库顺序），无则返回空列表"""
 
+    @abstractmethod
+    def get_all_chunks(self, knowledge_id: str) -> List[str]:
+        """查询知识库全部分块文本（BM25 回灌数据源），无则返回空列表"""
+
 
 class LocalVectorStore(VectorStore):
     """内存向量库：embedding + 余弦相似度暴力检索，适合开发/小规模演示"""
@@ -93,6 +97,11 @@ class LocalVectorStore(VectorStore):
         with self._lock:
             return [v["text"] for v in self._vectors
                     if v["knowledge_id"] == str(knowledge_id) and v["doc_id"] == str(doc_id)]
+
+    def get_all_chunks(self, knowledge_id):
+        """查询知识库全部分块文本（BM25 回灌数据源）"""
+        with self._lock:
+            return [v["text"] for v in self._vectors if v["knowledge_id"] == str(knowledge_id)]
 
 
 def _cosine(a, b):

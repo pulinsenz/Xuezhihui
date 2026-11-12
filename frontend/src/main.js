@@ -1,22 +1,50 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
-import ElementPlus from 'element-plus'
-import zhCn from 'element-plus/es/locale/lang/zh-cn'
-import 'element-plus/dist/index.css'
-import * as ElementPlusIconsVue from '@element-plus/icons-vue'
+import { ElLoadingDirective } from 'element-plus'
+import {
+  ArrowDown,
+  ArrowRight,
+  Bell,
+  ChatDotRound,
+  Collection,
+  Compass,
+  Delete,
+  Document,
+  Folder,
+  Loading,
+  Opportunity,
+  Plus,
+  Promotion,
+  Setting,
+  Star,
+  User,
+  View,
+} from '@element-plus/icons-vue'
+
+// Element Plus 按需引入（unplugin-vue-components，见 vite.config.js）。
+// 插件只覆盖模板组件；以下三样必须手动补齐：
+import 'element-plus/es/components/message/style/css'        // 函数式 ElMessage
+import 'element-plus/es/components/message-box/style/css'    // 函数式 ElMessageBox
+import 'element-plus/es/components/loading/style/css'        // v-loading 指令样式
+import './style.css'
 
 import App from './App.vue'
 import router from './router'
 import { useAuthStore } from './stores/auth'
-import './style.css'
 
 const pinia = createPinia()
 const app = createApp(App)
 app.use(pinia)
 app.use(router)
-app.use(ElementPlus, { locale: zhCn })
-// 注册全部图标组件，模板中可直接 <el-icon><Folder /></el-icon>
-for (const [name, component] of Object.entries(ElementPlusIconsVue)) {
+// v-loading 指令（全量安装时由 app.use(ElementPlus) 附带）
+app.directive('loading', ElLoadingDirective)
+// 模板中直接使用的图标显式注册（:icon="Xxx" 绑定的图标在各组件内自行 import，可 tree-shake）
+const icons = {
+  ArrowDown, ArrowRight, Bell, ChatDotRound, Collection, Compass, Delete,
+  Document, Folder, Loading, Opportunity, Plus, Promotion, Setting,
+  Star, User, View,
+}
+for (const [name, component] of Object.entries(icons)) {
   app.component(name, component)
 }
 app.mount('#app')

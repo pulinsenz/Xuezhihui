@@ -44,19 +44,13 @@ public class ChatController {
     }
 
     /**
-     * SSE 流式对话：前端用 EventSource 或 fetch 流式接收
+     * SSE 流式对话：POST + JSON body（改自 GET query：用户提问全文不再落两级访问日志）
      * <p>
-     * 参数显式接收 snake_case（与 Python Agent / 前端契约一致）。
+     * body 复用 ChatRequest（@JsonProperty snake_case，与 Python Agent / 前端契约一致）。
      * 事件格式：data: {"type":"token","content":"..."} / {"type":"done","answer":"...","sources":[...]} / {"type":"error",...}
      */
-    @GetMapping("/stream")
-    public SseEmitter stream(@RequestParam("session_id") String sessionId,
-                             @RequestParam("query") String query,
-                             @RequestParam(value = "knowledge_id", required = false) String knowledgeId) {
-        ChatRequest request = new ChatRequest();
-        request.setSessionId(sessionId);
-        request.setQuery(query);
-        request.setKnowledgeId(knowledgeId);
+    @PostMapping("/stream")
+    public SseEmitter stream(@RequestBody ChatRequest request) {
         return chatService.stream(request);
     }
 

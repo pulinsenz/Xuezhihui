@@ -5,11 +5,11 @@
 import threading
 import time
 
-import httpx
 
 from api.knowledge_api import process_vectorize
 from config import settings
 from storage.task_store import TaskStore
+from utils.java_client import get_shared_client
 from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("worker")
@@ -75,10 +75,9 @@ class VectorizeWorker:
         if error_msg:
             body["error_msg"] = error_msg
         try:
-            # trust_env=False：内部回调直连，避开 Windows 系统代理（踩坑见 改错.md）
-            resp = httpx.post(url, json=body,
-                              headers={"X-Agent-Token": settings.java_token},
-                              timeout=5, trust_env=False)
+            # trust_env=False：内部回调直连，避开 Windows 系统代理（踩坑见 改错.md）；复用共享连接池
+            resp = get_shared_client().post(url, json=body,
+                                            headers={"X-Agent-Token": settings.java_token}, timeout=5)
             if resp.status_code != 200:
                 logger.warning("任务结果回写失败: status=%s", resp.status_code)
         except Exception as e:

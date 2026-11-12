@@ -10,6 +10,11 @@ from utils.logger_util import get_logger, agent_event
 logger = get_logger("milvus")
 
 
+def _expr_value(value) -> str:
+    """转义 filter 表达式字符串字面值：反斜杠与双引号（Milvus expr 无参数化占位，只能字面转义）"""
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
 class MilvusStore(VectorStore):
     """基于 pymilvus MilvusClient 的向量库实现"""
 
@@ -44,7 +49,7 @@ class MilvusStore(VectorStore):
         if not chunks:
             return 0
         # 幂等：先删旧向量
-        self.client.delete(self.collection, filter=f'doc_id == "{doc_id}"')
+        self.client.delete(self.collection, filter=f'doc_id == "{_expr_value(doc_id)}"')
         vecs = self.embedding.embed_documents(chunks)
         rows = [
             {"knowledge_id": str(knowledge_id), "doc_id": str(doc_id), "text": c, "vector": v}
@@ -57,16 +62,16 @@ class MilvusStore(VectorStore):
         return len(rows)
 
     def delete_document(self, knowledge_id, doc_id):
-        self.client.delete(self.collection, filter=f'doc_id == "{doc_id}"')
+        self.client.delete(self.collection, filter=f'doc_id == "{_expr_value(doc_id)}"')
         self.client.flush(self.collection)
 
     def delete_knowledge(self, knowledge_id):
-        self.client.delete(self.collection, filter=f'knowledge_id == "{knowledge_id}"')
+        self.client.delete(self.collection, filter=f'knowledge_id == "{_expr_value(knowledge_id)}"')
         self.client.flush(self.collection)
 
     def search(self, query, knowledge_id=None, top_k=5):
         q_vec = self.embedding.embed_query(query)
-        expr = f'knowledge_id == "{knowledge_id}"' if knowledge_id is not None else None
+        expr = f'knowledge_id == "{_expr_value(knowledge_id)}"' if knowledge_id is not None else None
         results = self.client.search(
             self.collection, data=[q_vec], limit=top_k, output_fields=["text", "doc_id"],
             filter=expr, metric_type="COSINE",
@@ -79,9 +84,19 @@ class MilvusStore(VectorStore):
         """查询文档切片文本（按入库顺序：Milvus auto_id 随插入递增）"""
         results = self.client.query(
             self.collection,
-            filter=f'knowledge_id == "{knowledge_id}" and doc_id == "{doc_id}"',
+            filter=f'knowledge_id == "{_expr_value(knowledge_id)}" and doc_id == "{_expr_value(doc_id)}"',
             output_fields=["id", "text"],
             limit=10000,
         )
         results.sort(key=lambda r: r["id"])
+        return [r["text"] for r in results]
+
+    def get_all_chunks(self, knowledge_id):
+        """查询知识库全部分块文本（BM25 回灌数据源；顺序无关）"""
+        results = self.client.query(
+            self.collection,
+            filter=f'knowledge_id == "{_expr_value(knowledge_id)}"',
+            output_fields=["text"],
+            limit=10000,
+        )
         return [r["text"] for r in results]

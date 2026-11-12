@@ -22,6 +22,16 @@ from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("knowledge_api")
 
+class VectorizeError(Exception):
+    """向量化核心逻辑的业务失败（API 端点与 worker 共用 process_vectorize，
+    不能抛 web 层的 HTTPException——worker 拿到的是裸异常，消息才可读）"""
+
+    def __init__(self, status_code: int, detail: str):
+        super().__init__(detail)
+        self.status_code = status_code
+        self.detail = detail
+
+
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
 # 支持的文本文件类型
@@ -53,7 +63,7 @@ def _load_file(file_url: str, name: str) -> str:
     else:
         _check_local_path(file_url)
         if not Path(file_url).exists():
-            raise HTTPException(status_code=404, detail=f"文件不存在: {file_url}")
+            raise VectorizeError(404, f"文件不存在: {file_url}")
     try:
         return _parse(local_path, ext)
     finally:
@@ -66,13 +76,13 @@ def _check_local_path(file_url: str) -> None:
     base = Path(settings.file_base_dir).resolve()
     target = Path(file_url).resolve()
     if not target.is_relative_to(base):
-        raise HTTPException(status_code=403, detail="文件不在允许目录内")
+        raise VectorizeError(403, "文件不在允许目录内")
 
 
 def _download(url: str) -> str:
     """下载远程文件到临时文件：SSRF 防护（拒内网/回环/元数据）+ 下载大小上限"""
     if _is_private_target(url):
-        raise HTTPException(status_code=403, detail="不允许访问内网/回环地址")
+        raise VectorizeError(403, "不允许访问内网/回环地址")
     tmp = tempfile.NamedTemporaryFile(suffix=".download", delete=False)
     tmp.close()
     try:
@@ -86,14 +96,14 @@ def _download(url: str) -> str:
                         break
                     total += len(chunk)
                     if total > MAX_DOWNLOAD_BYTES:
-                        raise HTTPException(status_code=413, detail="文件超过下载大小上限")
+                        raise VectorizeError(413, "文件超过下载大小上限")
                     out.write(chunk)
-    except HTTPException:
+    except VectorizeError:
         Path(tmp.name).unlink(missing_ok=True)
         raise
     except Exception as e:
         Path(tmp.name).unlink(missing_ok=True)
-        raise HTTPException(status_code=502, detail=f"下载文件失败: {e}") from e
+        raise VectorizeError(502, f"下载文件失败: {e}") from e
     return tmp.name
 
 
@@ -130,14 +140,14 @@ def _parse(path: str, ext: str) -> str:
             reader = PdfReader(path)
             return "\n".join(page.extract_text() or "" for page in reader.pages)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"PDF 解析失败: {e}") from e
+            raise VectorizeError(400, f"PDF 解析失败: {e}") from e
     if ext in (".docx",):
         try:
             from docx import Document
             doc = Document(path)
             return "\n".join(p.text for p in doc.paragraphs if p.text)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Word 解析失败: {e}") from e
+            raise VectorizeError(400, f"Word 解析失败: {e}") from e
     # 其他格式：尝试 utf-8 解码
     return Path(path).read_bytes().decode("utf-8", errors="ignore")
 
@@ -147,7 +157,7 @@ def process_vectorize(knowledge_id: str, doc_id: str, file_url: str, name: str) 
     读文件 → 分块 → BM25 + 向量双索引，返回 chunk 数"""
     text = _load_file(file_url, name)
     if not text.strip():
-        raise HTTPException(status_code=400, detail="文件内容为空")
+        raise VectorizeError(400, "文件内容为空")
     chunk_count = runtime.retriever.add_document(knowledge_id, doc_id, text)
     agent_event(logger, "vectorized", knowledge_id=knowledge_id,
                 doc_id=doc_id, chunks=chunk_count)
@@ -159,8 +169,9 @@ def vectorize(req: VectorizeRequest):
     """文档向量化入库：读文件 → 分块 → BM25 + 向量双索引（保留给 Java 同步调用场景）"""
     try:
         chunk_count = process_vectorize(req.knowledge_id, req.doc_id, req.file_url, req.name)
-    except HTTPException:
-        raise
+    except VectorizeError as e:
+        # 核心逻辑与 worker 共用，不抛 web 层异常；此处统一转 HTTP 响应
+        raise HTTPException(status_code=e.status_code, detail=e.detail) from e
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"读取文件失败: {e}") from e
     return {"code": 0, "message": "ok", "data": {"chunks": chunk_count}}

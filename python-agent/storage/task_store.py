@@ -52,6 +52,8 @@ class TaskStore:
         key = PREFIX_TASK + task_id
         for field, value in mapping.items():
             self.client.hset(key, field, value)
+        # 终态也保留可查（前端轮询），24h 后自动清理，防止 Hash 无 TTL 永久堆积
+        self.client.expire(key, 3600 * 24)
 
     def get_task(self, task_id: str) -> Optional[dict]:
         return self.client.hgetall(PREFIX_TASK + task_id) or None

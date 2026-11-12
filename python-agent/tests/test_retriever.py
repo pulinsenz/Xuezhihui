@@ -56,10 +56,10 @@ def test_delete_knowledge_clears_bm25_and_vectors():
     retriever = _make_retriever()
     retriever.delete_knowledge("kb1")
     assert retriever.retrieve("数据结构", "kb1", top_k=3) == []
-    # 内部索引也应清理
+    # 内部索引也应清理（数据源=向量库，回灌后为空）
     assert "kb1" not in retriever._bm25
     assert "kb1" not in retriever._bm25_docs
-    assert "kb1" not in retriever._chunks
+    assert "kb1" not in retriever._dirty
     # 向量库同步清空
     assert "kb1" not in retriever.vector_store.data
 
@@ -77,3 +77,14 @@ def test_get_chunks_unknown_doc_empty():
     retriever = _make_retriever()
     assert retriever.get_chunks("kb1", "no_such_doc") == []
     assert retriever.get_chunks("kb999", "doc1") == []
+
+
+def test_bm25_rehydrates_from_vector_store():
+    """重启回灌：内存索引清空后，下次检索自动从向量库重建（回归：BM25 持久化数据源）"""
+    retriever = _make_retriever()
+    # 模拟进程重启：内存缓存与 dirty 标记全部丢失，向量库数据仍在
+    retriever._bm25.clear()
+    retriever._bm25_docs.clear()
+    retriever._dirty.clear()
+    docs = retriever.retrieve("操作系统", "kb1", top_k=3)
+    assert any("操作系统" in d["text"] for d in docs), "重启后 BM25 应能从向量库自动回灌"

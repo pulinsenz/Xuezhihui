@@ -65,7 +65,8 @@ public class LoginInterceptor implements HandlerInterceptor {
         if (StrUtil.isBlank(userIdStr)) {
             throw new BusinessException(ErrorCode.NOT_LOGIN, "登录已失效，请重新登录");
         }
-        // 3. 加载用户
+        // 3. 加载用户（主键点查，不缓存：缓存会让「改设置/资料后立即读」拿到 60s 旧快照，
+        //    一致性代价高于每请求一次点查的成本——集成测试 settings_update* 已实证）
         User user = userMapper.selectById(userIdStr);
         if (user == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN, "用户不存在");

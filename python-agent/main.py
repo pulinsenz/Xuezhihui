@@ -25,6 +25,10 @@ async def lifespan(app: FastAPI):
     # 生产启动校验：缺 key / 缺 token 直接终止，杜绝静默降级上线
     validate_settings()
     runtime.init_runtime()
+    # 同步 def 路由（对话/向量化长任务）跑在 anyio 工作线程池，默认仅 40 容量，
+    # 并发对话稍高即整体排队/超时；LLM 流式任务单次可达分钟级，扩到 100
+    import anyio.to_thread
+    anyio.to_thread.current_default_thread_limiter().total_tokens = 100
     # 长任务消费者：Redis List 消息队列，Java 提交、本服务消费执行向量化
     worker = VectorizeWorker(TaskStore())
     worker.start()

@@ -11,6 +11,7 @@ import com.agent.rag.mapper.ChatMessageMapper;
 import com.agent.rag.mapper.ChatSessionMapper;
 import com.agent.rag.service.ChatHistoryService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -88,6 +90,19 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
         List<ChatSession> sessions = chatSessionMapper.selectList(new LambdaQueryWrapper<ChatSession>()
                 .eq(ChatSession::getUserId, userId)
                 .orderByDesc(ChatSession::getUpdateTime));
+        if (sessions.isEmpty()) {
+            return List.of();
+        }
+        // 一条 GROUP BY 聚合拿到全部会话的消息数（旧实现每会话一条 COUNT，列表页 N+1）
+        List<String> sessionIds = sessions.stream().map(ChatSession::getSessionId).toList();
+        Map<String, Long> messageCounts = new HashMap<>();
+        for (Map<String, Object> row : chatMessageMapper.selectMaps(new QueryWrapper<ChatMessage>()
+                .select("sessionId", "COUNT(*) AS cnt")
+                .in("sessionId", sessionIds)
+                .groupBy("sessionId"))) {
+            messageCounts.put(String.valueOf(row.get("sessionId")),
+                    ((Number) row.get("cnt")).longValue());
+        }
         return sessions.stream().map(session -> {
             SessionVO vo = new SessionVO();
             vo.setSessionId(session.getSessionId());
@@ -95,8 +110,7 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
             vo.setUpdateTime(session.getUpdateTime() == null
                     ? null
                     : session.getUpdateTime().atZone(ZoneId.systemDefault()).toEpochSecond());
-            vo.setMessageCount(chatMessageMapper.selectCount(new LambdaQueryWrapper<ChatMessage>()
-                    .eq(ChatMessage::getSessionId, session.getSessionId())));
+            vo.setMessageCount(messageCounts.getOrDefault(session.getSessionId(), 0L));
             return vo;
         }).toList();
     }

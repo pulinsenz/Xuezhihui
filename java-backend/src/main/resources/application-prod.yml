@@ -4,7 +4,12 @@ app:
     allowed-origin-patterns:
       - https://xuezhihui.site
       - https://www.xuezhihui.site
-      - http://xuezhihui.site
+      # 不再允许 http://xuezhihui.site 明文源：allowCredentials(true) 下明文源
+      # 会把凭证暴露给非 TLS 连接（站点已 301 强制 HTTPS，明文白名单无存在必要）
+mybatis-plus:
+  configuration:
+    # SQL 日志仅本地开发（application.yml 的 StdOutImpl）开启，生产静默
+    log-impl: org.apache.ibatis.logging.nologging.NoLoggingImpl
 knife4j:
   enable: false
 # 生产彻底关闭 OpenAPI 文档：只关 knife4j 时 springdoc 的 /v3/api-docs 仍会无鉴权暴露全部接口地图

@@ -57,3 +57,6 @@ class FakeVectorStore:
 
     def get_chunks(self, knowledge_id, doc_id):
         return list(self.data.get(str(knowledge_id), {}).get(str(doc_id), []))
+
+    def get_all_chunks(self, knowledge_id):
+        return [c for v in self.data.get(str(knowledge_id), {}).values() for c in v]

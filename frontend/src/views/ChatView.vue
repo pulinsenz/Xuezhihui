@@ -208,7 +208,7 @@
 </template>
 
 <script setup>
-import { onMounted, ref, nextTick, watch, computed } from 'vue'
+import { onMounted, onBeforeUnmount, ref, nextTick, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
@@ -229,6 +229,11 @@ import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 
 const authStore = useAuthStore()
+// 当前流式请求的中止控制器：切路由/卸载时中断 fetch，不再向已卸载组件写消息
+let streamAbort = null
+onBeforeUnmount(() => {
+  if (streamAbort) streamAbort.abort()
+})
 const chat = useChatStore()
 const route = useRoute()
 const router = useRouter()
@@ -349,13 +354,18 @@ const handleSend = async () => {
   chat.sending = true
   scrollToBottom()
 
-  const params = new URLSearchParams({ session_id: chat.activeSessionId, query: text })
-  if (knowledgeId.value) params.set('knowledge_id', knowledgeId.value)
+  const body = { session_id: chat.activeSessionId, query: text }
+  if (knowledgeId.value) body.knowledge_id = knowledgeId.value
 
+  streamAbort = new AbortController()
   let finished = false
   try {
-    const resp = await fetch(`/api/chat/stream?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${authStore.token}` },
+    // POST + JSON body（改自 GET query：提问全文不落 nginx/Java 访问日志）
+    const resp = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${authStore.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: streamAbort.signal,
     })
     if (!resp.ok || !resp.body) throw new Error(`对话请求失败: ${resp.status}`)
 
@@ -390,9 +400,15 @@ const handleSend = async () => {
     }
     if (!finished) await chat.finishStream({})
   } catch (e) {
-    chat.failStream(e.message || '对话失败，请稍后再试')
-    ElMessage.error(e.message || '对话失败，请稍后再试')
+    // 主动离开页面触发的中止不算错误，静默即可
+    if (e.name === 'AbortError') {
+      chat.failStream('已离开对话')
+    } else {
+      chat.failStream(e.message || '对话失败，请稍后再试')
+      ElMessage.error(e.message || '对话失败，请稍后再试')
+    }
   } finally {
+    streamAbort = null
     chat.sending = false
     scrollToBottom()
   }

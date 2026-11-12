@@ -24,54 +24,58 @@ def _tokenize(text: str) -> List[str]:
 
 
 class HybridRetriever:
-    """BM25 + 向量混合检索器"""
+    """BM25 + 向量混合检索器
+
+    BM25 索引以向量库（持久层）为唯一数据源，进程内存只缓存重建产物：
+    - 重启后无需手工重建，首次检索自动从向量库回灌（多副本部署同理）
+    - 入库/删除只标记 dirty，下次检索时重建一次；连续导入 N 个文档
+      从「每次入库全量重建」的 O(N×全库) 降为 N 次标记 + 1 次重建
+    """
 
     def __init__(self, vector_store: VectorStore, chunker: Optional[Chunker] = None):
         self.vector_store = vector_store
         self.chunker = chunker or Chunker()
         self._bm25: dict[str, BM25Okapi] = {}
         self._bm25_docs: dict[str, List[str]] = {}
-        # knowledge_id -> {doc_id -> [chunks]}：按文档记录分块，删除/重入库时精确重建
-        self._chunks: dict[str, dict[str, List[str]]] = {}
+        # 有写入待重建的知识库集合
+        self._dirty: set[str] = set()
 
     def add_document(self, knowledge_id, doc_id, text: str):
-        """分块 + 向量入库 + 重建该知识库 BM25 索引（幂等：同 doc_id 向量会被覆盖）"""
+        """分块 + 向量入库（幂等：同 doc_id 向量被覆盖）；BM25 延迟到下次检索重建"""
         chunks = self.chunker.split(text)
         self.vector_store.add_document(knowledge_id, doc_id, text, chunks)
-        kid = str(knowledge_id)
-        self._chunks.setdefault(kid, {})[str(doc_id)] = chunks
-        self._rebuild_bm25(kid)
+        self._dirty.add(str(knowledge_id))
         return len(chunks)
 
     def delete_document(self, knowledge_id, doc_id):
-        """删除单个文档：删向量 + 从 BM25 索引剔除该文档分块"""
+        """删除单个文档：删向量 + 标记 BM25 待重建"""
         self.vector_store.delete_document(knowledge_id, doc_id)
-        kid = str(knowledge_id)
-        self._chunks.get(kid, {}).pop(str(doc_id), None)
-        self._rebuild_bm25(kid)
+        self._dirty.add(str(knowledge_id))
 
     def delete_knowledge(self, knowledge_id):
-        """删除整个知识库：删向量 + 清空该知识库 BM25 索引"""
+        """删除整个知识库：删向量 + 标记 BM25 待重建"""
         self.vector_store.delete_knowledge(knowledge_id)
-        kid = str(knowledge_id)
-        self._chunks.pop(kid, None)
-        self._rebuild_bm25(kid)
+        self._dirty.add(str(knowledge_id))
 
     def get_chunks(self, knowledge_id, doc_id):
         """查询文档切片文本列表（「向量详情」）"""
         return self.vector_store.get_chunks(knowledge_id, doc_id)
 
-    def _rebuild_bm25(self, knowledge_id: str):
-        """按知识库内全部文档的分块重建 BM25（含多文档，删除/重入库后保持一致）"""
-        all_chunks = [c for doc_chunks in self._chunks.get(knowledge_id, {}).values() for c in doc_chunks]
+    def _ensure_bm25(self, knowledge_id: str):
+        """索引缺失或已 dirty 时，从向量库回灌该知识库全部分块重建"""
+        if knowledge_id not in self._dirty and knowledge_id in self._bm25:
+            return
+        all_chunks = self.vector_store.get_all_chunks(knowledge_id)
         if all_chunks:
             self._bm25[knowledge_id] = BM25Okapi([_tokenize(c) for c in all_chunks])
             self._bm25_docs[knowledge_id] = all_chunks
         else:
             self._bm25.pop(knowledge_id, None)
             self._bm25_docs.pop(knowledge_id, None)
+        self._dirty.discard(knowledge_id)
 
     def retrieve(self, query: str, knowledge_id: str, top_k: int = 5) -> List[dict]:
+        self._ensure_bm25(str(knowledge_id))
         vector_results = self.vector_store.search(query, knowledge_id, top_k=top_k * 2)
         bm25_results = self._bm25_retrieve(query, knowledge_id, top_k=top_k * 2)
         fused = self._fuse(vector_results, bm25_results, top_k)

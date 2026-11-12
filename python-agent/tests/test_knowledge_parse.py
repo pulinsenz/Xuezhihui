@@ -2,7 +2,7 @@
 from pathlib import Path
 
 import pytest
-from fastapi import HTTPException
+from api.knowledge_api import VectorizeError
 
 from api.knowledge_api import _load_file, _parse
 from config import settings
@@ -28,7 +28,7 @@ def test_load_local_file(tmp_path, monkeypatch):
 
 def test_load_file_missing_local(monkeypatch, tmp_path):
     _allow_dir(tmp_path, monkeypatch)
-    with pytest.raises(HTTPException) as e:
+    with pytest.raises(VectorizeError) as e:
         _load_file(str(tmp_path / "nope.txt"), "nope.txt")
     assert e.value.status_code == 404
 
@@ -38,7 +38,7 @@ def test_load_local_file_outside_base_denied(tmp_path, monkeypatch):
     _allow_dir(tmp_path, monkeypatch)
     outside = tmp_path.parent / "secret.txt"
     outside.write_text("secret", encoding="utf-8")
-    with pytest.raises(HTTPException) as e:
+    with pytest.raises(VectorizeError) as e:
         _load_file(str(outside), "secret.txt")
     assert e.value.status_code == 403
 

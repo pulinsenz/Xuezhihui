@@ -68,3 +68,55 @@ def test_pick_llm_fallback_when_no_user_llm(monkeypatch):
     monkeypatch.setattr(chat_api.runtime, "llm", deepseek)
     monkeypatch.setattr(chat_api.runtime, "user_llm", None)
     assert chat_api._pick_llm("user").name == "deepseek"
+
+
+# ---------- SSE 流式接口（POST 契约）----------
+
+class FakeStoreWithHistory(FakeStore):
+    def get_history(self, session_id):
+        return []
+
+
+def _fake_graph():
+    """可控的假 LangGraph：路由 → token → 最终回答，三步流式输出"""
+    class _Msg:
+        content = "答案"
+
+    class FakeGraph:
+        async def astream(self, state, stream_mode=None):
+            yield ("updates", {"router": {"route": "kb"}})
+            yield ("messages", (_Msg(), {"langgraph_node": "answer"}))
+            yield ("updates", {"answer": {"answer": "答案", "sources": []}})
+
+    return FakeGraph()
+
+
+def _stream_client(monkeypatch, token="t"):
+    from fastapi.testclient import TestClient
+    import main as app_main
+
+    monkeypatch.setattr(chat_api.runtime, "redis_store", FakeStoreWithHistory())
+    monkeypatch.setattr(chat_api.runtime, "llm", _FakeLLM("deepseek"))
+    monkeypatch.setattr(chat_api, "persist_chat", lambda *a, **k: None)
+    monkeypatch.setattr(chat_api, "get_graph", lambda: _fake_graph())
+    monkeypatch.setattr(app_main.settings, "agent_token", token)
+    return TestClient(app_main.app)
+
+
+def test_stream_post_returns_sse_done(monkeypatch):
+    """POST body 契约：合法请求返回 SSE，末尾含 done 事件且落一次历史"""
+    client = _stream_client(monkeypatch)
+    resp = client.post("/api/agent/stream",
+                       json={"session_id": "s1", "query": "你好"},
+                       headers={"X-Agent-Token": "t"})
+    assert resp.status_code == 200
+    assert '"type":"done"' in resp.text or '"type": "done"' in resp.text
+    # finally 兜底：历史落库（旧实现仅正常路径保存）
+    assert ("assistant", "答案") in chat_api.runtime.redis_store.calls
+
+
+def test_stream_rejects_without_token(monkeypatch):
+    """缺 X-Agent-Token 一律 401（内部鉴权 fail-closed）"""
+    client = _stream_client(monkeypatch, token="t")
+    resp = client.post("/api/agent/stream", json={"session_id": "s1", "query": "你好"})
+    assert resp.status_code == 401

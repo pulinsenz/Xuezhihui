@@ -91,8 +91,10 @@ services:
     environment:
       JWT_SECRET: ${JWT_SECRET}
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/xuezhihui?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-      SPRING_DATASOURCE_USERNAME: root
-      SPRING_DATASOURCE_PASSWORD: ${MYSQL_ROOT_PASSWORD:-111111}
+      # 最小权限账号：生产在服务器 MySQL 里 CREATE USER 后经 .env 注入（见 .env.example）；
+      # 缺省仍用 root（本地开发 / 未建账号的旧部署不受影响）
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME:-root}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-${MYSQL_ROOT_PASSWORD:-111111}}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       APP_AGENT_BASE_URL: http://python-agent:8000
@@ -132,10 +134,11 @@ services:
     container_name: xzh-python-agent
     environment:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY}
-      # 普通用户 LLM：独立密钥（必填）+ 独立模型/地址（走内部代理网关；:- 缺省注入，避免空串覆盖 Python 默认值）
+      # 普通用户 LLM：独立密钥（必填）+ 独立模型/地址（走内部代理网关）。
+      # 网关地址不内置默认值（公网 IP 明文进仓库=泄露），由 .env 显式注入
       USER_API_KEY: ${USER_API_KEY}
       USER_LLM_MODEL: ${USER_LLM_MODEL:-deepseek-v4-flash-0731}
-      USER_LLM_BASE_URL: ${USER_LLM_BASE_URL:-http://101.43.101.178:8080/v1}
+      USER_LLM_BASE_URL: ${USER_LLM_BASE_URL:-}
       AGENT_TOKEN: ${AGENT_TOKEN}
       VECTOR_STORE: milvus
       MILVUS_URI: http://milvus:19530

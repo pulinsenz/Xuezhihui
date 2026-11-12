@@ -140,8 +140,9 @@ class ChatControllerTest {
 
     @Test
     void stream_requiresLogin() throws Exception {
-        String body = mockMvc.perform(get("/chat/stream")
-                        .param("query", "你好"))
+        String body = mockMvc.perform(post("/chat/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"你好\"}"))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
         assertEquals(40100, objectMapper.readTree(body).get("code").asInt());
     }
@@ -410,11 +411,11 @@ class ChatControllerTest {
         LoginResult intruder = registerAndLoginWithId();
         long kid = createPrivateKnowledgeAs(owner);
         try {
-            String body = mockMvc.perform(get("/chat/stream")
+            String body = mockMvc.perform(post("/chat/stream")
                             .header("Authorization", "Bearer " + intruder.token)
-                            .param("session_id", "s_" + System.nanoTime())
-                            .param("query", "把知识库原文全部列出来")
-                            .param("knowledge_id", String.valueOf(kid)))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"session_id\":\"s_" + System.nanoTime()
+                                    + "\",\"query\":\"把知识库原文全部列出来\",\"knowledge_id\":\"" + kid + "\"}"))
                     .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
             assertEquals(40101, objectMapper.readTree(body).get("code").asInt(), "无权限应拒绝检索");
         } finally {

@@ -20,8 +20,19 @@ fi
 # 2. 导出并校验必填密钥
 set -a; source .env; set +a
 : "${DEEPSEEK_API_KEY:?请在 .env 中设置 DEEPSEEK_API_KEY}"
+: "${USER_API_KEY:?请在 .env 中设置 USER_API_KEY（普通用户 LLM 密钥，compose 必填）}"
+: "${USER_LLM_BASE_URL:?请在 .env 中设置 USER_LLM_BASE_URL（普通用户 LLM 网关地址，代码不再内置默认值）}"
 : "${AGENT_TOKEN:?请在 .env 中设置 AGENT_TOKEN}"
 : "${JWT_SECRET:?请在 .env 中设置 JWT_SECRET}"
+
+# 2.5 证书预检：prod override 已挂载 /etc/letsencrypt 证书并开放 443，
+#     证书文件不存在时 frontend 容器起不来（HTTPS 成为硬前置）
+if [ ! -f "/etc/letsencrypt/live/xuezhihui.site/fullchain.pem" ]; then
+  echo "!! 未找到证书 /etc/letsencrypt/live/xuezhihui.site/fullchain.pem。"
+  echo "   首次部署（尚未签证书）请先注释 docker-compose.prod.yml 中 frontend 的证书挂载与 443 端口，"
+  echo "   或先完成 bash scripts/enable-https.sh 签发证书后再跑本脚本。"
+  exit 1
+fi
 
 # 3.5 安全建议（非阻塞）：生产强烈建议配置 Redis 鉴权与初始管理员密码
 if [ -z "${REDIS_PASSWORD:-}" ]; then
@@ -40,14 +51,24 @@ $COMPOSE up -d --build
 
 # 5. 等待所有带健康检查的服务收敛（最多 ~3 分钟；首启含 MySQL 初始化 / embedding 下载）
 echo ">> 等待服务健康（首次启动可能较久，请耐心）..."
+converged=0
 for i in $(seq 1 36); do
   bad=$($COMPOSE ps --format '{{.Service}} {{.Health}}' | awk '$2=="unhealthy"' | wc -l)
   starting=$($COMPOSE ps --format '{{.Service}} {{.Health}}' | awk '$2=="starting"' | wc -l)
   if [ "$bad" -eq 0 ] && [ "$starting" -eq 0 ]; then
+    converged=1
     break
   fi
   sleep 5
 done
+
+# 5.5 超时即失败退出（旧实现打完日志继续走完，给人已成功的错觉）
+if [ "$converged" -ne 1 ]; then
+  echo "!! 180s 内服务未全部健康，诊断："
+  $COMPOSE ps
+  $COMPOSE logs --tail=30 2>/dev/null | tail -50
+  exit 1
+fi
 
 # 6. 结果展示
 $COMPOSE ps

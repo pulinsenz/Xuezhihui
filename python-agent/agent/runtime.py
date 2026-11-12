@@ -44,5 +44,6 @@ def init_runtime():
     embedding = EmbeddingModel(settings.embedding_model)
     vector_store = create_vector_store(embedding)
     retriever = HybridRetriever(vector_store, chunker=Chunker())
-    redis_store = RedisStore(host=settings.redis_host, port=settings.redis_port)
+    redis_store = RedisStore(host=settings.redis_host, port=settings.redis_port,
+                             password=settings.redis_password or None)
     reranker = Reranker(model_name=settings.reranker_model)

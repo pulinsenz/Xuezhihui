@@ -4,6 +4,8 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.StrUtil;
 import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.agent.rag.dto.req.ChatRequest;
 import com.agent.rag.dto.resp.ChatResponse;
 import com.agent.rag.dto.resp.HistoryMessageVO;
@@ -22,7 +24,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -41,6 +42,14 @@ import java.util.List;
 @Slf4j
 @Service
 public class ChatServiceImpl implements ChatService {
+
+    /** 全进程共享的 HTTP 客户端（线程安全，连接池复用） */
+    private static final HttpClient SHARED_CLIENT = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(5))
+            .build();
+
+    @Resource
+    private ObjectMapper objectMapper;
 
     @Resource
     private PythonAgentClient pythonAgentClient;
@@ -95,23 +104,25 @@ public class ChatServiceImpl implements ChatService {
         // 写侧越权防护：会话已存在则必须属于当前用户
         chatHistoryService.checkAccess(request.getSessionId(), requireUserId());
         SseEmitter emitter = new SseEmitter(300_000L);
-        String url = buildStreamUrl(request);
-        log.info("SSE 透传开始: sessionId={}, pythonUrl={}", request.getSessionId(), url);
+        // 受信身份随 body 透传（替代原 GET query 传参）：工具 Agent 回调业务数据 + Python 选 LLM 需要
+        fillUserId(request);
+        log.info("SSE 透传开始: sessionId={}", request.getSessionId());
 
-        HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(5))
-                .build();
+        // HttpClient 线程安全，全进程共享（连接池复用；旧实现每次请求 new 一个）
         HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
-                .uri(URI.create(url))
+                .uri(URI.create(agentBaseUrl + "/api/agent/stream"))
                 .timeout(Duration.ofSeconds(120))
-                .GET();
+                // POST + JSON body：用户提问不再以 query 形式全文落 Java/Python 两级访问日志
+                // ChatRequest 序列化即 snake_case（@JsonProperty），与 Python 模型契约一致
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(toAgentJson(request), StandardCharsets.UTF_8));
         // 内部鉴权：Python Agent 侧校验
         if (StrUtil.isNotBlank(agentToken)) {
             requestBuilder.header("X-Agent-Token", agentToken);
         }
         HttpRequest httpRequest = requestBuilder.build();
 
-        client.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofLines())
+        SHARED_CLIENT.sendAsync(httpRequest, HttpResponse.BodyHandlers.ofLines())
                 .thenAccept(response -> {
                     try {
                         // forEach 惰性逐行消费 → 实时转发 Python 的 SSE 事件（剥掉 "data: " 前缀）
@@ -131,7 +142,7 @@ public class ChatServiceImpl implements ChatService {
                     }
                 })
                 .exceptionally(e -> {
-                    log.error("调用 Python Agent 流式接口失败: {}", url, e);
+                    log.error("调用 Python Agent 流式接口失败: sessionId={}", request.getSessionId(), e);
                     try {
                         emitter.send("{\"type\":\"error\",\"message\":\"对话服务暂不可用，请稍后再试\"}");
                     } catch (Exception ignored) {
@@ -192,16 +203,6 @@ public class ChatServiceImpl implements ChatService {
         }
     }
 
-    private String currentUserId() {
-        User user = UserContext.getUser();
-        return user == null ? null : String.valueOf(user.getId());
-    }
-
-    private String currentUserRole() {
-        User user = UserContext.getUser();
-        return user == null ? null : user.getUserRole();
-    }
-
     /**
      * 当前登录用户 id（/chat/** 已被拦截器保护，正常必有登录态）
      */
@@ -231,28 +232,15 @@ public class ChatServiceImpl implements ChatService {
         knowledgeService.getViewableKnowledge(id);
     }
 
-    private String buildStreamUrl(ChatRequest request) {
-        StringBuilder url = new StringBuilder(agentBaseUrl)
-                .append("/api/agent/stream?")
-                .append("session_id=").append(urlEncode(request.getSessionId()))
-                .append("&query=").append(urlEncode(request.getQuery()));
-        if (StrUtil.isNotBlank(request.getKnowledgeId())) {
-            url.append("&knowledge_id=").append(urlEncode(request.getKnowledgeId()));
+    /**
+     * ChatRequest → Python Agent JSON（@JsonProperty snake_case 契约；
+     * 调用前须 fillUserId 注入受信身份，序列化即携带 user_id/user_role）
+     */
+    private String toAgentJson(ChatRequest request) {
+        try {
+            return objectMapper.writeValueAsString(request);
+        } catch (JsonProcessingException e) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "对话请求序列化失败");
         }
-        // 受信身份随 SSE 透传：工具 Agent 回调业务数据需要
-        String userId = currentUserId();
-        if (userId != null) {
-            url.append("&user_id=").append(urlEncode(userId));
-        }
-        // 受信角色随 SSE 透传：Python 据此选普通用户/管理员 LLM
-        String userRole = currentUserRole();
-        if (StrUtil.isNotBlank(userRole)) {
-            url.append("&user_role=").append(urlEncode(userRole));
-        }
-        return url.toString();
-    }
-
-    private String urlEncode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
     }
 }

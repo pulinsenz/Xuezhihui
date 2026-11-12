@@ -115,9 +115,23 @@ def chat(req: ChatRequest):
     }
 
 
-@router.get("/stream")
-def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str = None, user_role: str = None):
+class StreamRequest(BaseModel):
+    """SSE 流式对话请求（POST body；改自 GET query，问句全文不再落访问日志）"""
+    session_id: str
+    query: str
+    knowledge_id: Optional[str] = None
+    user_id: Optional[str] = None  # 受信身份：Java 从 JWT 解析后注入
+    user_role: Optional[str] = None  # 受信角色：user/admin，Java 从 JWT 解析后注入，决定用哪个 LLM
+
+
+@router.post("/stream")
+def stream(req: StreamRequest):
     """SSE 流式对话：逐 token 输出 + thinking 思考过程事件，末尾带 done 事件（含回答/来源/路由）"""
+    session_id = req.session_id
+    query = req.query
+    knowledge_id = req.knowledge_id
+    user_id = req.user_id
+    user_role = req.user_role
     if not session_id or not query.strip():
         raise HTTPException(status_code=400, detail="session_id 和 query 不能为空")
     history = runtime.redis_store.get_history(session_id)
@@ -133,6 +147,19 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
         sources = []
         route = ""
         thinking_steps = []
+        saved = False
+
+        def save_once():
+            """所有出口（正常/断连/异常）只落一次历史：客户端断连抛 GeneratorExit
+            （继承 BaseException，except Exception 接不住），旧实现会整体跳过保存，
+            导致用户问过的问题既不进 Redis 会话也不落 MySQL。无任何回答时不落库。"""
+            nonlocal saved
+            if saved:
+                return
+            saved = True
+            answer = final_answer or "".join(tokens)
+            if answer:
+                _save_session(session_id, query, answer, user_id, route, knowledge_id, thinking_steps, sources)
 
         def emit_thinking(content: str):
             thinking_steps.append(content)
@@ -175,11 +202,16 @@ def stream(session_id: str, query: str, knowledge_id: str = None, user_id: str =
             # 会话记忆 + 历史持久化（含回答属性/思考过程/参考文献）
             if not final_answer:
                 final_answer = "".join(tokens)
-            _save_session(session_id, query, final_answer, user_id, route, knowledge_id, thinking_steps, sources)
+            save_once()
             yield sse_event({"type": "done", "answer": final_answer, "sources": sources,
                              "route": route, "knowledge_id": knowledge_id})
         except Exception as e:
             logger.error("流式对话异常: %s", e)
             yield sse_event({"type": "error", "message": str(e)})
+        finally:
+            # 兜底所有出口：正常结束、客户端断连（GeneratorExit 继承 BaseException，
+            # 旧实现因 except Exception 接不住而整体跳过保存——用户问过的问题
+            # 既不进 Redis 会话也不落 MySQL）、以及中途异常
+            save_once()
 
     return StreamingResponse(generate(), media_type="text/event-stream")

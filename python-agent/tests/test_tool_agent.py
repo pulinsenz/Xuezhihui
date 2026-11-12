@@ -80,7 +80,7 @@ def test_fetch_success_parses_data(monkeypatch):
             return {"code": 0, "message": "ok", "data": {"knowledge_count": "2", "doc_count": "5"}}
 
     import utils.java_client as jc
-    monkeypatch.setattr(jc.httpx, "get", lambda *a, **k: FakeResp())
+    monkeypatch.setattr(jc._client, "get", lambda *a, **k: FakeResp())
     data = jc.fetch_user_stats("1")
     assert data == {"knowledge_count": "2", "doc_count": "5"}
 
@@ -96,5 +96,5 @@ def test_fetch_business_error_returns_none(monkeypatch):
             return {"code": 40101, "message": "内部接口未授权", "data": None}
 
     import utils.java_client as jc
-    monkeypatch.setattr(jc.httpx, "get", lambda *a, **k: FakeResp())
+    monkeypatch.setattr(jc._client, "get", lambda *a, **k: FakeResp())
     assert jc.fetch_user_stats("1") is None

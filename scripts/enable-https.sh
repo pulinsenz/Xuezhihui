@@ -50,15 +50,23 @@ mkdir -p "$CERT_DIR"
   --reloadcmd "cd $PWD && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec frontend nginx -s reload"
 
 echo "==> [4/4] 放开 HTTPS 配置并重建 frontend"
-# 取消 nginx.conf 末尾「HTTPS 443 server」注释块（该块在文件末尾）
+# 取消 nginx.conf 末尾「HTTPS 443 server」注释块（该块在文件末尾）；已放开时幂等无匹配
 sed -i '/^# server {$/,$ s/^# //' frontend/nginx.conf
-# 取消 docker-compose.prod.yml frontend 的证书挂载与 443 端口注释（均幂等）
+# 取消 docker-compose.prod.yml frontend 的证书挂载与 443 端口注释（均幂等）。
+# 用通用 letsencrypt 路径匹配而非 $DOMAIN：prod override 中路径固定为 xuezhihui.site，
+# DOMAIN 自定义时旧行为是 sed 静默不生效（挂载缺失 → frontend 起不来）
 sed -i \
-  -e "/^      # - \\/etc\\/letsencrypt\\/live\\/${DOMAIN}\\/fullchain\\.pem:.*$/s/^      # /      /" \
-  -e "/^      # - \\/etc\\/letsencrypt\\/live\\/${DOMAIN}\\/privkey\\.pem:.*$/s/^      # /      /" \
+  -e '/^      # - \/etc\/letsencrypt\/live\/.*fullchain\.pem:.*$/s/^      # /      /' \
+  -e '/^      # - \/etc\/letsencrypt\/live\/.*privkey\.pem:.*$/s/^      # /      /' \
   -e '/^    # ports:$/s/^    # /    /' \
   -e '/^    #   - "443:443"$/s/^    # /    /' \
   docker-compose.prod.yml
+# 兜底校验：自定义域名时证书安装路径与 compose 挂载路径不一致会让 nginx 读不到证书
+if [ "$DOMAIN" != "xuezhihui.site" ]; then
+  echo "!! 注意：DOMAIN=$DOMAIN 与 compose 挂载路径（固定 xuezhihui.site）不一致，"
+  echo "   请手工把 /etc/letsencrypt/live/$DOMAIN/ 证书挂载进 docker-compose.prod.yml 的 frontend 服务，"
+  echo "   并同步修改 nginx.conf 的 server_name，再重建 frontend。"
+fi
 
 echo "==> 重建 frontend（加载 443 + 证书）"
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build frontend

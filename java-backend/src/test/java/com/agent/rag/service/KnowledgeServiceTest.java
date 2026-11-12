@@ -34,6 +34,7 @@ import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.List;
+import java.util.Map;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -175,7 +176,9 @@ class KnowledgeServiceTest {
         when(knowledgeMapper.selectList(any())).thenReturn(List.of(k1));
         when(knowledgeFavoriteMapper.selectList(any())).thenReturn(List.of());
         when(knowledgeMemberMapper.selectList(any())).thenReturn(List.of());
-        when(knowledgeDocMapper.selectCount(any())).thenReturn(3L);
+        // 批量装配：文档数来自一条 GROUP BY selectMaps（旧实现 selectCount）
+        when(knowledgeDocMapper.selectMaps(any())).thenReturn(List.of(
+                Map.of("knowledgeId", 1L, "vectorStatus", "PENDING", "cnt", 3L)));
 
         List<KnowledgeVO> list = knowledgeService.listMyKnowledge();
         assertEquals(1, list.size());
@@ -200,7 +203,6 @@ class KnowledgeServiceTest {
         when(knowledgeMemberMapper.selectList(any())).thenReturn(List.of(member));
         when(knowledgeFavoriteMapper.selectList(any())).thenReturn(List.of());
         when(knowledgeMapper.selectBatchIds(any())).thenReturn(List.of(memberKb));
-        when(knowledgeDocMapper.selectCount(any())).thenReturn(0L);
 
         List<KnowledgeVO> list = knowledgeService.listMyKnowledge();
 
@@ -237,8 +239,7 @@ class KnowledgeServiceTest {
         failed.setVectorStatus(VectorStatus.FAILED.name());
         failed.setFileUrl("/f/1.txt");
         failed.setName("1.txt");
-        when(knowledgeDocMapper.selectById(100L)).thenReturn(success);
-        when(knowledgeDocMapper.selectById(101L)).thenReturn(failed);
+        when(knowledgeDocMapper.selectBatchIds(any())).thenReturn(List.of(success, failed));
         when(taskService.publishVectorize(eq(5L), eq(101L), eq("/f/1.txt"), eq("1.txt"))).thenReturn("t1");
 
         List<String> taskIds = knowledgeService.batchVectorize(5L, List.of(100L, 101L));
