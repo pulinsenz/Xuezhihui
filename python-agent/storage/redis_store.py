@@ -16,12 +16,13 @@ PREFIX = "xzh:session:"
 class RedisStore:
     """基于 Redis String(JSON) 的会话记忆，key: xzh:session:{session_id}"""
 
-    def __init__(self, host: str = None, port: int = None, max_messages: int = 10):
+    def __init__(self, host: str = None, port: int = None, password: str = None, max_messages: int = 10):
         self.max_messages = max_messages
         self.client = redis.Redis(
             host=host or os.getenv("REDIS_HOST", "localhost"),
             port=port or int(os.getenv("REDIS_PORT", "6379")),
-            password=os.getenv("REDIS_PASSWORD", "") or None,
+            # 显式传参优先；缺省回退 env（生产 REDIS_PASSWORD 与 Java/redis 服务同源）
+            password=password or os.getenv("REDIS_PASSWORD", "") or None,
             db=0,
             decode_responses=True,
             # 强制 RESP2：redis-py 8.x 默认 RESP3 会发 HELLO 命令，旧版 Redis 不支持
