@@ -1087,4 +1087,11 @@ watch(
     padding: 12px 16px 16px;
   }
 }
+
+/* 矮视口（小窗口/缩放）：压缩聊天页最小高度，保证输入框与发送按钮完整可见 */
+@media (max-height: 700px) {
+  .chat-page {
+    min-height: 420px;
+  }
+}
 </style>

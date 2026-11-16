@@ -81,7 +81,6 @@
           <el-badge :value="messageStore.unreadCount" :hidden="messageStore.unreadCount === 0">
             <el-button class="icon-button" circle :icon="Bell" @click="goMessages" />
           </el-badge>
-          <el-tag effect="plain" type="info" class="locale-chip">CN ZH</el-tag>
 
           <template v-if="authStore.isLogin">
             <el-dropdown @command="handleCommand">
@@ -245,12 +244,14 @@ onUnmounted(() => {
 
 <style scoped>
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
 }
 
 .sidebar {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  overflow: hidden;
   background: rgba(255, 255, 255, 0.92);
   border-right: 1px solid rgba(226, 232, 240, 0.8);
   backdrop-filter: blur(20px);
@@ -301,6 +302,8 @@ onUnmounted(() => {
 
 .side-menu {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   border-right: 0;
   background: transparent;
   padding: 8px 0;
@@ -345,6 +348,7 @@ onUnmounted(() => {
 }
 
 .sidebar-footer {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -373,6 +377,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+  height: auto;
   min-height: 80px;
   padding: 16px 28px;
   background: rgba(255, 255, 255, 0.85);
@@ -420,14 +425,6 @@ onUnmounted(() => {
   color: #0f766e;
   border-color: #14b8a6;
   background: rgba(20, 184, 166, 0.08);
-}
-
-.locale-chip {
-  border-color: rgba(226, 232, 240, 0.9);
-  color: #475569;
-  font-weight: 600;
-  border-radius: 8px;
-  background: #f8fafc;
 }
 
 .user-chip {
