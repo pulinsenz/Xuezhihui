@@ -34,6 +34,7 @@
 
       <div class="actions">
         <el-button :icon="Refresh" @click="loadDocs">刷新</el-button>
+        <el-button type="warning" plain :icon="MagicStick" @click="goWiki">AI Wiki</el-button>
         <template v-if="!isOwner && !isMember">
           <el-button
             v-if="!knowledge?.isFavorite"
@@ -370,6 +371,7 @@ import {
   Delete,
   Document,
   Edit,
+  MagicStick,
   Plus,
   Refresh,
   RefreshLeft,
@@ -865,6 +867,10 @@ const goBack = () => {
   } else {
     router.push(isOwner.value || isMember.value ? '/knowledge' : '/public-knowledge')
   }
+}
+
+const goWiki = () => {
+  router.push(`/knowledge/${knowledgeId}/wiki`)
 }
 
 onMounted(() => {

@@ -29,6 +29,7 @@ Vue3 + SpringBoot + FastAPI/LangGraph 前后端分离架构。五大角色 Agent
 
 - **我的知识库**：新建 / 编辑 / 删除、封面上传、文档上传与批量向量化入库
 - **公开知识库**：浏览他人分享的知识库，收藏、一键复制为可编辑副本
+- **AI Wiki**：基于知识库文档由 LLM 自动生成结构化 Wiki（大纲规划 → 逐页撰写），页面可浏览/编辑，并回灌向量库提升 RAG 检索质量
 - **历史对话**：会话列表、历史消息持久化到 MySQL（含回答属性、思考过程、参考文献）
 - **管理员后台**：用户禁用 / 恢复 / 角色管理；知识库与文档的彻底删除、恢复、向量删除与重入库（含重复文件哈希封禁）
 
@@ -94,6 +95,10 @@ Vue3 + SpringBoot + FastAPI/LangGraph 前后端分离架构。五大角色 Agent
           向量库   会话/Agent状态    生成
 
   文档入库链路：前端上传 → Java 接收校验（重复文件哈希检测）并落盘 → 调用 Python 向量化接口 → Python 解析文档（pypdf / python-docx）并语义分块 → Milvus 入库 → 回调 Java 更新向量状态
+
+  AI Wiki 生成链路：前端「生成 Wiki」→ Java 校验权限并提交 Redis 队列（xzh:task:wiki）→ Python WikiWorker 解析文档
+  → LLM 大纲规划（JSON）→ 逐页撰写（关键词重叠选取源文档片段作上下文）→ 页面 Markdown 回灌 Milvus（doc_id=wiki-{uuid}）
+  → 回调 Java 整体替换 wiki_page 表 → 前端轮询任务状态后展示
 ```
 
 **五大 Agent 协同流程：**
@@ -296,6 +301,16 @@ npm run dev
 | PUT | `/api/settings/vectorize-default` | 上传文档默认入库开关 |
 | PUT | `/api/settings/collapse-refs` | 参考文献默认折叠开关 |
 
+**AI Wiki（知识库文档 → LLM 结构化知识页）**
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| POST | `/api/knowledge/{id}/wiki/generate` | 生成 / 重新生成 Wiki（异步任务，返回 taskId 轮询） |
+| GET | `/api/knowledge/{id}/wiki` | Wiki 页面列表（不含正文） |
+| GET | `/api/knowledge/{id}/wiki/{pageId}` | 页面详情（含 Markdown 正文） |
+| PUT | `/api/knowledge/{id}/wiki/{pageId}` | 手动编辑页面（标题/正文，作者/协作者） |
+| DELETE | `/api/knowledge/{id}/wiki` | 删除整个 Wiki（含 Milvus 中 wiki 向量清理） |
+
 **管理员（需管理员角色）**
 
 | 方法 | 路径 | 说明 |
@@ -324,6 +339,7 @@ npm run dev
 | GET | `/internal/agent/user-stats` | Agent 获取业务数据 |
 | POST | `/internal/agent/chat-save` | 回写对话（回答 / 思考 / 参考文献） |
 | POST | `/internal/agent/vector-callback` | 向量化结果回调 |
+| POST | `/internal/agent/wiki-callback` | Wiki 生成结果回调（SUCCESS 整体替换 wiki_page，FAILED 旧 Wiki 保留） |
 
 ## 环境依赖
 

@@ -16,6 +16,7 @@ import com.agent.rag.entity.KnowledgeDoc;
 import com.agent.rag.entity.KnowledgeFavorite;
 import com.agent.rag.entity.KnowledgeMember;
 import com.agent.rag.entity.User;
+import com.agent.rag.entity.WikiPage;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.KnowledgeDocMapper;
 import com.agent.rag.mapper.KnowledgeFavoriteMapper;
@@ -23,6 +24,7 @@ import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.mapper.KnowledgeMemberMapper;
 import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.UserMapper;
+import com.agent.rag.mapper.WikiPageMapper;
 import com.agent.rag.service.AdminService;
 import com.agent.rag.service.TaskService;
 import com.agent.rag.util.UserContext;
@@ -79,6 +81,9 @@ public class AdminServiceImpl implements AdminService {
 
     @Resource
     private TaskService taskService;
+
+    @Resource
+    private WikiPageMapper wikiPageMapper;
 
     @Override
     public Page<AdminUserVO> listUsers(UserQueryRequest request) {
@@ -207,6 +212,9 @@ public class AdminServiceImpl implements AdminService {
                 .eq(KnowledgeFavorite::getKnowledgeId, knowledgeId));
         knowledgeMemberMapper.delete(new LambdaQueryWrapper<KnowledgeMember>()
                 .eq(KnowledgeMember::getKnowledgeId, knowledgeId));
+        // 级联清理 AI Wiki 页面（恢复知识库后 Wiki 为空，需重新生成）
+        wikiPageMapper.delete(new LambdaQueryWrapper<WikiPage>()
+                .eq(WikiPage::getKnowledgeId, knowledgeId));
         // 清理向量库（Python Agent），降级：失败不影响元数据删除
         deleteVectorsBestEffort(String.valueOf(knowledgeId), null);
         log.info("管理员删除知识库: knowledgeId={}", knowledgeId);

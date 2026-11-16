@@ -43,12 +43,17 @@ class LLMClient:
         else:
             logger.warning("%s 无 API Key，MockLLM 模式（仅开发调试，生产禁止）", label)
 
-    def chat(self, messages: List[dict], temperature: float = 0.3) -> str:
-        """非流式对话。messages: [{"role": "system|user|assistant", "content": str}]"""
+    def chat(self, messages: List[dict], temperature: float = 0.3, max_tokens: int = None) -> str:
+        """非流式对话。messages: [{"role": "system|user|assistant", "content": str}]
+        max_tokens 可选：单次调用放宽输出上限（Wiki 整页 Markdown 等长文场景），
+        不传用实例默认值。"""
         if self._mock is not None:
             return self._mock.chat(messages)
         try:
-            resp = self._llm.invoke(messages, temperature=temperature)
+            kwargs = {"temperature": temperature}
+            if max_tokens:
+                kwargs["max_tokens"] = max_tokens
+            resp = self._llm.invoke(messages, **kwargs)
             content = resp.content
             return content if isinstance(content, str) else str(content)
         except Exception as e:
@@ -84,6 +89,10 @@ class MockLLM:
             return self._guess_route(messages)
         if "反思校验器" in system:
             return "yes"
+        if "Wiki 大纲规划器" in system:
+            return self._wiki_outline(messages)
+        if "Wiki 页面撰写器" in system:
+            return self._wiki_page(messages)
         return self._echo(messages)
 
     def stream(self, messages: List[dict]):
@@ -110,3 +119,28 @@ class MockLLM:
             if m.get("role") == "user":
                 return m.get("content", "")
         return ""
+
+    @staticmethod
+    def _wiki_outline(messages) -> str:
+        """Wiki 大纲兜底：从用户消息的文档清单行解析出逐文档页面，保证无 key 也能跑通全链路"""
+        import json
+        import re
+        user = MockLLM._last_user(messages)
+        # 文档清单行格式（见 wiki/generator.py）：- [doc_id] 文件名：预览
+        docs = re.findall(r"- \[([^\]]+)\] ([^：\n]+)", user)
+        outline = [
+            {"title": (name or f"文档 {i + 1}").strip()[:60],
+             "summary": f"整理「{name.strip()}」的核心知识点",
+             "sources": [doc_id]}
+            for i, (doc_id, name) in enumerate(docs)
+        ] or [{"title": "知识库总览", "summary": "知识库内容总览", "sources": []}]
+        return json.dumps(outline, ensure_ascii=False)
+
+    @staticmethod
+    def _wiki_page(messages) -> str:
+        """Wiki 页面兜底：回显标题 + 提示内容为模拟生成"""
+        import re
+        user = MockLLM._last_user(messages)
+        m = re.search(r"页面标题[：:](.+)", user)
+        title = m.group(1).strip() if m else "未命名页面"
+        return f"# {title}\n\n（MockLLM 模拟页面：本地开发无 API Key 时的兜底内容）\n\n- 要点一\n- 要点二\n\n## 来源\n\n- 模拟文档"
