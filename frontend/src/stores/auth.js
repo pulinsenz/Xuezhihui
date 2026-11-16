@@ -1,4 +1,5 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
+import { resetAuthExpiredNotice } from '../api/request'
 import {
   login as apiLogin,
   register as apiRegister,
@@ -21,6 +22,8 @@ export const useAuthStore = defineStore('auth', {
   },
   actions: {
     setSession(token, user) {
+      // 拿到新 token 即复位登录失效提醒闩锁，下次过期仍会提醒
+      resetAuthExpiredNotice()
       this.token = token
       this.user = user
       localStorage.setItem('token', token)

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 
 // 提前构造 axios mock，供 request.js 使用
 const mocks = vi.hoisted(() => {
@@ -22,7 +23,8 @@ vi.mock('element-plus', () => ({
   ElMessage: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }))
 
-import request from '../request'
+import request, { resetAuthExpiredNotice } from '../request'
+import { useAuthStore } from '../../stores/auth'
 
 // 拦截器在模块加载时注册一次，这里取引用（不能用 beforeEach 取，会与 mock 清理冲突）
 const onFulfilled = mocks.responseInterceptor.use.mock.calls[0][0]
@@ -73,6 +75,51 @@ describe('axios 请求封装', () => {
       expect(localStorage.getItem('user')).toBeNull()
       expect(handler).toHaveBeenCalledTimes(1)
       window.removeEventListener('auth:expired', handler)
+    })
+
+    it('并发多个 40100 只弹一次提示、派发一次事件（去重）', async () => {
+      resetAuthExpiredNotice()
+      const handler = vi.fn()
+      window.addEventListener('auth:expired', handler)
+      localStorage.setItem('token', 'expired-token')
+
+      // token 过期时页面常有多个并发请求同时返回 40100
+      await Promise.all([
+        expect(onFulfilled({ data: { code: 40100, message: '登录已失效' } })).rejects.toThrow('登录已失效'),
+        expect(onFulfilled({ data: { code: 40100, message: '登录已失效' } })).rejects.toThrow('登录已失效'),
+        expect(onFulfilled({ data: { code: 40100, message: '登录已失效' } })).rejects.toThrow('登录已失效'),
+      ])
+
+      const { ElMessage } = await import('element-plus')
+      expect(ElMessage.error).toHaveBeenCalledTimes(1)
+      expect(handler).toHaveBeenCalledTimes(1)
+      window.removeEventListener('auth:expired', handler)
+    })
+
+    it('闩锁未复位时后续 40100 静默；登录成功（setSession）复位后可再次提醒', async () => {
+      resetAuthExpiredNotice()
+      localStorage.setItem('token', 'expired-token')
+      const { ElMessage } = await import('element-plus')
+
+      await expect(onFulfilled({ data: { code: 40100, message: '未登录' } })).rejects.toThrow('未登录')
+      expect(ElMessage.error).toHaveBeenCalledTimes(1)
+
+      // 未重新登录前的重复 40100：清登录态但不再弹
+      await expect(onFulfilled({ data: { code: 40100, message: '未登录' } })).rejects.toThrow('未登录')
+      expect(ElMessage.error).toHaveBeenCalledTimes(1)
+
+      // 登录成功 → setSession 自动复位闩锁
+      setActivePinia(createPinia())
+      mocks.instance.post.mockResolvedValue({
+        data: { code: 0, data: { token: 'new-token', user: { id: 1, userRole: 'user' } } },
+      })
+      const store = useAuthStore()
+      await store.login('user1', 'pass12345')
+
+      // 下次 token 过期恢复提醒
+      localStorage.setItem('token', 'expired-again')
+      await expect(onFulfilled({ data: { code: 40100, message: '未登录' } })).rejects.toThrow('未登录')
+      expect(ElMessage.error).toHaveBeenCalledTimes(2)
     })
 
     it('HTTP 层错误（网络异常）提示并 reject', async () => {
