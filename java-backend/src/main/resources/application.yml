@@ -60,6 +60,7 @@ app:
   # 长任务消息队列（Redis List）：Java 提交，Python worker 消费
   task:
     queue-vectorize: ${TASK_QUEUE_VECTORIZE:xzh:task:vectorize}
+    queue-wiki: ${TASK_QUEUE_WIKI:xzh:task:wiki}
   # 本地文件存储路径（对象存储可替换实现）
   file:
     storage:

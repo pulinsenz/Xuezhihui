@@ -93,6 +93,23 @@ export const batchVectorizeDoc = (id, docIds) => request.post(`/knowledge/${id}/
 /** 长任务状态查询（上传向量化后轮询） */
 export const getTask = (taskId) => request.get(`/task/${taskId}`)
 
+// ---------- AI Wiki ----------
+
+/** 生成（或重新生成）知识库 Wiki，返回 taskId 供轮询 /task/{taskId} */
+export const generateWiki = (id) => request.post(`/knowledge/${id}/wiki/generate`)
+
+/** Wiki 页面列表（不含正文），按 sortOrder 升序；未生成时为空数组 */
+export const listWikiPages = (id) => request.get(`/knowledge/${id}/wiki`)
+
+/** Wiki 页面详情（含 Markdown 正文） */
+export const getWikiPage = (id, pageId) => request.get(`/knowledge/${id}/wiki/${pageId}`)
+
+/** 手动编辑 Wiki 页面（标题/正文） */
+export const updateWikiPage = (id, pageId, data) => request.put(`/knowledge/${id}/wiki/${pageId}`, data)
+
+/** 删除整个 Wiki（清向量 + 逻辑删页面） */
+export const deleteWiki = (id) => request.delete(`/knowledge/${id}/wiki`)
+
 /** 消息中心：邀请列表 */
 export const listKnowledgeInvitations = () => request.get('/knowledge/invitations')
 

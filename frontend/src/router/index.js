@@ -40,6 +40,12 @@ const routes = [
         meta: { title: '知识库详情' },
       },
       {
+        path: 'knowledge/:id/wiki',
+        name: 'KnowledgeWiki',
+        component: () => import('../views/WikiView.vue'),
+        meta: { title: 'AI Wiki' },
+      },
+      {
         path: 'public-knowledge',
         name: 'PublicKnowledge',
         component: () => import('../views/PublicKnowledgeView.vue'),

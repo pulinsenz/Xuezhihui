@@ -21,7 +21,9 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -50,6 +52,9 @@ public class TaskServiceImpl implements TaskService {
 
     @Value("${app.task.queue-vectorize}")
     private String queueVectorize;
+
+    @Value("${app.task.queue-wiki}")
+    private String queueWiki;
 
     @Override
     public String publishVectorize(Long knowledgeId, Long docId, String fileUrl, String name) {
@@ -81,6 +86,46 @@ public class TaskServiceImpl implements TaskService {
         // 3. 入队：Python worker BRPOP 消费
         stringRedisTemplate.opsForList().leftPush(queueVectorize, JSONUtil.toJsonStr(message));
         log.info("向量化任务已提交: taskId={}, docId={}, queue={}", taskId, docId, queueVectorize);
+        return taskId;
+    }
+
+    @Override
+    public String publishWiki(Long knowledgeId, List<KnowledgeDoc> docs) {
+        String taskId = IdUtil.getSnowflakeNextIdStr();
+        User user = UserContext.getUser();
+        String userId = user == null ? null : String.valueOf(user.getId());
+
+        // 1. 任务消息（Python Wiki worker 消费）：docs 为知识库全部未删除文档，
+        //    file_url 为 COS 私有对象时带临时签名（2h），python worker 无需 COS 凭证即可拉取
+        List<Map<String, Object>> docItems = new ArrayList<>();
+        for (KnowledgeDoc doc : docs) {
+            Map<String, Object> item = new HashMap<>();
+            item.put("doc_id", String.valueOf(doc.getId()));
+            item.put("name", doc.getName());
+            item.put("file_url", fileStorageService.presignedUrl(doc.getFileUrl(), 7200));
+            docItems.add(item);
+        }
+        Map<String, Object> message = new HashMap<>();
+        message.put("task_id", taskId);
+        message.put("knowledge_id", String.valueOf(knowledgeId));
+        message.put("docs", docItems);
+
+        // 2. 任务状态（Redis Hash，前端轮询复用 /task/{taskId}）
+        Map<String, String> status = new HashMap<>();
+        status.put("type", "wiki");
+        status.put("status", STATUS_PENDING);
+        status.put("create_time", LocalDateTime.now().toString());
+        if (userId != null) {
+            status.put("user_id", userId);
+        }
+        stringRedisTemplate.opsForHash().putAll(TASK_KEY_PREFIX + taskId, status);
+        // 任务状态 24h 过期，防止 Redis 无限膨胀
+        stringRedisTemplate.expire(TASK_KEY_PREFIX + taskId, Duration.ofHours(24));
+
+        // 3. 入队：Python Wiki worker BRPOP 消费
+        stringRedisTemplate.opsForList().leftPush(queueWiki, JSONUtil.toJsonStr(message));
+        log.info("Wiki 生成任务已提交: taskId={}, knowledgeId={}, docs={}",
+                taskId, knowledgeId, docItems.size());
         return taskId;
     }
 

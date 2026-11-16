@@ -51,6 +51,14 @@ class Settings:
 
     # ---- 长任务消息队列（Redis List：Java 提交 / 本服务消费）----
     task_queue_vectorize: str = os.getenv("TASK_QUEUE_VECTORIZE", "xzh:task:vectorize")
+    # AI Wiki 生成队列（与向量化同模式：Java publishWiki → 本服务 WikiWorker 消费）
+    task_queue_wiki: str = os.getenv("TASK_QUEUE_WIKI", "xzh:task:wiki")
+
+    # ---- AI Wiki 生成参数（控 LLM 成本与页面规模）----
+    # 单次生成页面数上限（大纲规划时 LLM 被要求 3~N 页，超出的截断）
+    wiki_max_pages: int = int(os.getenv("WIKI_MAX_PAGES", "10"))
+    # 单页撰写的资料上下文字符数预算（源文档 chunk 按关键词重叠贪心选取）
+    wiki_page_context_chars: int = int(os.getenv("WIKI_PAGE_CONTEXT_CHARS", "12000"))
 
     # ---- 文件读取安全（防任意文件读取 /proc/self/environ、/app/.env 等）----
     # 仅允许读取该目录内的本地文件；生产由 docker-compose 固定为共享卷 /app/data/files

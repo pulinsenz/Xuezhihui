@@ -236,3 +236,26 @@ CREATE TABLE IF NOT EXISTS `knowledge_invitation`
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='知识库邀请消息';
 
+-- 18. AI Wiki 页面表（LLM 依据知识库文档生成的结构化知识页，前端浏览/编辑）
+-- 已部署库无需手动执行：Java 启动时 WikiPageInitializer 会确保该表存在
+CREATE TABLE IF NOT EXISTS `wiki_page`
+(
+    `id`           bigint       NOT NULL AUTO_INCREMENT COMMENT 'id',
+    `knowledgeId`  bigint       NOT NULL COMMENT '所属知识库id',
+    `title`        varchar(256) NOT NULL COMMENT '页面标题',
+    `summary`      varchar(1024) DEFAULT NULL COMMENT '页面摘要',
+    `content`      mediumtext   COMMENT 'Markdown 正文',
+    `sourceDocIds` varchar(1024) DEFAULT NULL COMMENT '来源文档id JSON数组',
+    `vectorDocId`  varchar(64)  DEFAULT NULL COMMENT 'Milvus 中 doc_id(wiki-{uuid})，删 Wiki 时清向量用',
+    `sortOrder`    int          NOT NULL DEFAULT 0 COMMENT '页面顺序',
+    `errorMsg`     varchar(512) DEFAULT NULL COMMENT '单页生成失败原因',
+    `createTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updateTime`   datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    `isDelete`     tinyint      NOT NULL DEFAULT 0 COMMENT '是否删除',
+    PRIMARY KEY (`id`),
+    KEY `idx_knowledgeId` (`knowledgeId`)
+) ENGINE = InnoDB
+  DEFAULT CHARSET = utf8mb4
+  COLLATE = utf8mb4_unicode_ci COMMENT ='AI Wiki 页面';
+
+

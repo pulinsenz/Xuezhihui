@@ -16,6 +16,7 @@ from config import settings, validate_settings
 from storage.task_store import TaskStore
 from utils.logger_util import get_logger
 from worker.vectorize_worker import VectorizeWorker
+from worker.wiki_worker import WikiWorker
 
 logger = get_logger("main")
 
@@ -29,11 +30,14 @@ async def lifespan(app: FastAPI):
     # 并发对话稍高即整体排队/超时；LLM 流式任务单次可达分钟级，扩到 100
     import anyio.to_thread
     anyio.to_thread.current_default_thread_limiter().total_tokens = 100
-    # 长任务消费者：Redis List 消息队列，Java 提交、本服务消费执行向量化
+    # 长任务消费者：Redis List 消息队列，Java 提交、本服务消费执行向量化 / Wiki 生成
     worker = VectorizeWorker(TaskStore())
     worker.start()
+    wiki_worker = WikiWorker(TaskStore())
+    wiki_worker.start()
     yield
     worker.stop()
+    wiki_worker.stop()
 
 
 app = FastAPI(
