@@ -13,14 +13,27 @@ from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("retriever")
 
-# 融合权重：向量语义为主、BM25 关键词为辅
-VECTOR_WEIGHT = 0.6
-BM25_WEIGHT = 0.4
+# RRF 融合常数：排名倒数融合的分母平滑项（业界常用 60）
+RRF_K = 60
 
 
 def _tokenize(text: str) -> List[str]:
-    """中文按单字、英文按词切分（不依赖 jieba，轻量可用）"""
-    return re.findall(r"[一-鿿]|[a-zA-Z0-9]+", text.lower())
+    """中文 jieba 分词、英文按词切分（统一小写）；jieba 缺失时降级为单字切分。
+
+    单字切分会把「数据结构」「知识库」等中文词组拆散，BM25 只能靠单字 IDF 匹配，
+    词组精确命中能力弱；jieba 按词切分后 BM25 的词项与文档词组对齐，召回更准。
+    """
+    try:
+        import jieba
+    except ImportError:
+        return re.findall(r"[\u4e00-\u9fff]|[a-zA-Z0-9]+", text.lower())
+    tokens: List[str] = []
+    for seg in jieba.lcut(text.lower()):
+        seg = seg.strip()
+        # 丢弃纯标点/空白，保留含中英文数字的片段（jieba 对英文单词整体保留）
+        if re.search(r"[\u4e00-\u9fff]|[a-zA-Z0-9]", seg):
+            tokens.append(seg)
+    return tokens
 
 
 class HybridRetriever:
@@ -96,25 +109,22 @@ class HybridRetriever:
         return [{"text": docs[i], "score": float(scores[i])} for i in ranked if scores[i] > 0]
 
     def _fuse(self, vector_results, bm25_results, top_k: int) -> List[dict]:
-        """按 text 去重，各自归一化后加权融合（保留 doc_id 供前端展示来源文档）"""
+        """RRF（Reciprocal Rank Fusion）按名次融合 BM25 与向量结果，按 text 去重。
+
+        原实现对两类异构分数做 min-max 归一化后线性加权：BM25 分数无上界、向量余弦
+        [-1,1]，极值会拉偏归一化，且权重需手工调。RRF 只用各列表内的名次贡献分值，
+        对分数分布不敏感、无需调参，融合更鲁棒。
+        """
         items: dict[str, dict] = {}
-        for r in vector_results:
-            item = items.setdefault(r["text"], {"text": r["text"], "v": r["score"], "b": 0.0, "doc_id": r.get("doc_id")})
-            item["v"] = r["score"]
-            item["doc_id"] = r.get("doc_id") or item["doc_id"]
-        for r in bm25_results:
-            item = items.setdefault(r["text"], {"text": r["text"], "v": 0.0, "b": r["score"], "doc_id": None})
-            item["b"] = r["score"]
-
-        v_scores = [i["v"] for i in items.values()]
-        b_scores = [i["b"] for i in items.values()]
-        v_max, v_min = (max(v_scores), min(v_scores)) if v_scores else (1.0, 0.0)
-        b_max, b_min = (max(b_scores), min(b_scores)) if b_scores else (1.0, 0.0)
-
-        for item in items.values():
-            v_norm = (item["v"] - v_min) / (v_max - v_min + 1e-9)
-            b_norm = (item["b"] - b_min) / (b_max - b_min + 1e-9)
-            item["score"] = VECTOR_WEIGHT * v_norm + BM25_WEIGHT * b_norm
-
-        ranked = sorted(items.values(), key=lambda x: -x["score"])[:top_k]
-        return [{"text": r["text"], "score": round(r["score"], 4), "doc_id": r.get("doc_id")} for r in ranked]
+        for rank, r in enumerate(vector_results):
+            item = items.setdefault(r["text"], {"text": r["text"], "rrf": 0.0, "doc_id": r.get("doc_id")})
+            item["rrf"] += 1.0 / (RRF_K + rank + 1)
+            if r.get("doc_id"):
+                item["doc_id"] = r.get("doc_id")
+        for rank, r in enumerate(bm25_results):
+            item = items.setdefault(r["text"], {"text": r["text"], "rrf": 0.0, "doc_id": None})
+            item["rrf"] += 1.0 / (RRF_K + rank + 1)
+            if r.get("doc_id"):
+                item["doc_id"] = r.get("doc_id")
+        ranked = sorted(items.values(), key=lambda x: -x["rrf"])[:top_k]
+        return [{"text": r["text"], "score": round(r["rrf"], 4), "doc_id": r.get("doc_id")} for r in ranked]

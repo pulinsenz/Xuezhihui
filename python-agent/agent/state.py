@@ -15,12 +15,14 @@ class AgentState(TypedDict, total=False):
     # 运行时注入的组件
     llm: Any
     retriever: Any
+    reranker: Any                 # 交叉编码器精排（未配置时为透传对象）
 
     # 节点间流转
     route: str                    # kb / chitchat / other / business
     retrieval_context: str        # 检索到的文档拼接文本
     sources: List[dict]           # 引用来源
     sufficient: bool              # 反思校验：证据是否足够
+    rewritten_query: Optional[str]  # 反思改写后的检索查询（二次检索优先使用）
     retry_count: int
     max_retries: int
     tool_called: bool             # 工具 Agent：是否成功回调 Java 拿到业务数据
