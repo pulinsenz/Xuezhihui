@@ -142,6 +142,14 @@ services:
       AGENT_TOKEN: ${AGENT_TOKEN}
       VECTOR_STORE: milvus
       MILVUS_URI: http://milvus:19530
+      # 交叉编码器重排（RAG 精排）：默认 bge-reranker-base + int8 动态量化
+      # （2C4G 内存受限时约 1.1GB→300MB）；可在根 .env 覆盖 RERANKER_MODEL / RERANKER_INT8
+      RERANKER_MODEL: ${RERANKER_MODEL:-BAAI/bge-reranker-base}
+      RERANKER_INT8: ${RERANKER_INT8:-true}
+      # 模型强制离线加载：容器不连外网，缓存齐全时跳过 huggingface.co HEAD 校验
+      # （不设则 CrossEncoder 每次启动联网校验版本，Network unreachable 反复重试拖慢启动）
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
       REDIS_HOST: redis
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       # 文件读取安全：仅允许读取共享卷内的文件（防任意文件读取 /proc/self/environ 等）
