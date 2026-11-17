@@ -88,3 +88,22 @@ def test_bm25_rehydrates_from_vector_store():
     retriever._dirty.clear()
     docs = retriever.retrieve("操作系统", "kb1", top_k=3)
     assert any("操作系统" in d["text"] for d in docs), "重启后 BM25 应能从向量库自动回灌"
+
+
+def test_retrieve_wiki_only_returns_wiki_docs():
+    """泛化检索：只在 doc_id 带 wiki- 前缀的文档内检索，普通文档不参与"""
+    store = FakeVectorStore()
+    retriever = HybridRetriever(store, chunker=Chunker(chunk_size=20, overlap=2))
+    retriever.add_document("kb1", "wiki-page1", "知识库总览：LangGraph 是编排框架。")
+    retriever.add_document("kb1", "doc1", "数据结构课程涵盖链表与栈。")
+    docs = retriever.retrieve_wiki("总结知识库内容", "kb1", top_k=5)
+    assert docs, "有 Wiki 页面时应召回"
+    assert all("数据结构" not in d["text"] for d in docs), "普通文档片段不应进入 wiki 专用检索"
+
+
+def test_retrieve_wiki_empty_without_wiki():
+    """无 Wiki 页面时，wiki 专用检索返回空（调用方回退全库检索）"""
+    store = FakeVectorStore()
+    retriever = HybridRetriever(store, chunker=Chunker(chunk_size=20, overlap=2))
+    retriever.add_document("kb1", "doc1", "数据结构课程涵盖链表与栈。")
+    assert retriever.retrieve_wiki("总结知识库内容", "kb1", top_k=5) == []

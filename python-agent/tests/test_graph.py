@@ -98,3 +98,78 @@ def test_graph_business_callback_failure_degrades(monkeypatch):
     assert result["tool_called"] is False
     assert result["tool_context"] == ""
     assert result["answer"]
+
+
+def test_graph_general_question_prefers_wiki():
+    """泛化/总结类问题：检索走 Wiki 专用路径（retrieve_wiki）而非全库检索"""
+    class RecordingRetriever(FakeRetriever):
+        def __init__(self):
+            super().__init__()
+            self.calls = []
+
+        def retrieve(self, query, knowledge_id, top_k=5):
+            self.calls.append("retrieve")
+            return self.docs
+
+        def retrieve_wiki(self, query, knowledge_id, top_k=10):
+            self.calls.append("retrieve_wiki")
+            return self.docs
+
+    retriever = RecordingRetriever()
+    graph = build_graph()
+    result = graph.invoke(_state(FakeLLM(route="kb", reflect="yes", answer="LangGraph 教程。"),
+                                 retriever=retriever, query="当前知识库的内容是什么"))
+
+    assert result["sources"], "应召回片段"
+    assert "retrieve_wiki" in retriever.calls, "泛化问题应优先走 Wiki 检索路径"
+    assert result["answer"] == "LangGraph 教程。"
+
+
+def test_graph_general_question_falls_back_without_wiki():
+    """泛化问题但知识库无 Wiki：回退全库混合检索"""
+    class EmptyWikiRetriever(FakeRetriever):
+        def __init__(self):
+            super().__init__()
+            self.calls = []
+
+        def retrieve(self, query, knowledge_id, top_k=5):
+            self.calls.append("retrieve")
+            return self.docs
+
+        def retrieve_wiki(self, query, knowledge_id, top_k=10):
+            self.calls.append("retrieve_wiki")
+            return []
+
+    retriever = EmptyWikiRetriever()
+    graph = build_graph()
+    result = graph.invoke(_state(FakeLLM(route="kb", reflect="yes", answer="基于资料回答。"),
+                                 retriever=retriever, query="总结一下这个知识库"))
+
+    assert "retrieve_wiki" in retriever.calls and "retrieve" in retriever.calls, "无 Wiki 应回退全库检索"
+    assert result["sources"], "回退后应召回片段"
+    assert result["answer"] == "基于资料回答。"
+
+
+def test_graph_general_retry_falls_back_to_full_search():
+    """泛化问题首次 Wiki 检索证据不足 → 二次检索回退全库（避免具体问题被锁死在 Wiki 集合）"""
+    class RetryRetriever(FakeRetriever):
+        def __init__(self):
+            super().__init__()
+            self.calls = []
+
+        def retrieve(self, query, knowledge_id, top_k=5):
+            self.calls.append("retrieve")
+            return self.docs
+
+        def retrieve_wiki(self, query, knowledge_id, top_k=10):
+            self.calls.append("retrieve_wiki")
+            return self.docs
+
+    retriever = RetryRetriever()
+    graph = build_graph()
+    result = graph.invoke(_state(FakeLLM(route="kb", reflect="no", answer="知识库中暂无相关信息。"),
+                                 retriever=retriever, query="总结一下这个知识库"))
+
+    assert result["retry_count"] >= 2, "证据不足应触发二次检索"
+    assert "retrieve_wiki" in retriever.calls, "首次应走 Wiki 检索"
+    assert "retrieve" in retriever.calls, "二次检索应回退全库检索"

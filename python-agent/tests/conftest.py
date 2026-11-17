@@ -31,6 +31,9 @@ class FakeRetriever:
     def retrieve(self, query, knowledge_id, top_k=5):
         return self.docs
 
+    def retrieve_wiki(self, query, knowledge_id, top_k=10):
+        return self.docs
+
 
 class FakeVectorStore:
     """不加载 embedding 的假向量库（按 knowledge_id -> doc_id 隔离，删除精确到文档）"""
@@ -48,11 +51,13 @@ class FakeVectorStore:
     def delete_knowledge(self, knowledge_id):
         self.data.pop(str(knowledge_id), None)
 
-    def search(self, query, knowledge_id=None, top_k=5):
+    def search(self, query, knowledge_id=None, top_k=5, doc_id_prefix=None):
+        def _match(doc_id):
+            return not doc_id_prefix or str(doc_id).startswith(doc_id_prefix)
         if knowledge_id is not None:
-            chunks = [c for v in self.data.get(str(knowledge_id), {}).values() for c in v]
+            chunks = [c for did, v in self.data.get(str(knowledge_id), {}).items() if _match(did) for c in v]
         else:
-            chunks = [c for vv in self.data.values() for v in vv.values() for c in v]
+            chunks = [c for vv in self.data.values() for did, v in vv.items() if _match(did) for c in v]
         return [{"text": c, "score": 0.5} for c in chunks[:top_k]]
 
     def get_chunks(self, knowledge_id, doc_id):

@@ -69,9 +69,14 @@ class MilvusStore(VectorStore):
         self.client.delete(self.collection, filter=f'knowledge_id == "{_expr_value(knowledge_id)}"')
         self.client.flush(self.collection)
 
-    def search(self, query, knowledge_id=None, top_k=5):
+    def search(self, query, knowledge_id=None, top_k=5, doc_id_prefix=None):
         q_vec = self.embedding.embed_query(query)
-        expr = f'knowledge_id == "{_expr_value(knowledge_id)}"' if knowledge_id is not None else None
+        conds = []
+        if knowledge_id is not None:
+            conds.append(f'knowledge_id == "{_expr_value(knowledge_id)}"')
+        if doc_id_prefix:
+            conds.append(f'doc_id like "{_expr_value(doc_id_prefix)}%"')
+        expr = " and ".join(conds) if conds else None
         results = self.client.search(
             self.collection, data=[q_vec], limit=top_k, output_fields=["text", "doc_id"],
             filter=expr, metric_type="COSINE",

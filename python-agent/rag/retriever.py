@@ -74,6 +74,11 @@ class HybridRetriever:
         """查询文档切片文本列表（「向量详情」）"""
         return self.vector_store.get_chunks(knowledge_id, doc_id)
 
+    def retrieve_wiki(self, query: str, knowledge_id: str, top_k: int = 10) -> List[dict]:
+        """泛化/总结类问答专用：仅在 Wiki 页面集合内做向量检索（doc_id 前缀 wiki-）。
+        避开原始文档的代码/日志噪声碎片；无 Wiki 时返回空列表，调用方回退全库检索。"""
+        return self.vector_store.search(query, knowledge_id, top_k=top_k, doc_id_prefix="wiki-")
+
     def _ensure_bm25(self, knowledge_id: str):
         """索引缺失或已 dirty 时，从向量库回灌该知识库全部分块重建"""
         if knowledge_id not in self._dirty and knowledge_id in self._bm25:
