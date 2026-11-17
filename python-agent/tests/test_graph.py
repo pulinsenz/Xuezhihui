@@ -150,31 +150,32 @@ def test_graph_general_question_falls_back_without_wiki():
     assert result["answer"] == "基于资料回答。"
 
 
-def test_graph_general_retry_merges_wiki_evidence():
-    """泛化问题二次全库检索：首次 Wiki 证据合并保留（置前、去重），不被反思循环覆盖"""
-    wiki_doc = {"text": "Wiki：LangGraph 总览与核心定位", "score": 0.8, "doc_id": "wiki-page-1"}
+def test_graph_general_wiki_skips_retry_loop():
+    """泛化问题首轮 Wiki 检索：跳过反思改写循环，不再触发二次全库检索覆盖 Wiki 来源"""
+    wiki_docs = [
+        {"text": "Wiki：LangGraph 总览与核心定位", "score": 0.8, "doc_id": "wiki-page-1"},
+        {"text": "Wiki：核心概念（状态图、检查点）", "score": 0.7, "doc_id": "wiki-page-2"},
+    ]
 
-    class RetryRetriever(FakeRetriever):
+    class WikiRetriever(FakeRetriever):
         def __init__(self):
             super().__init__()
             self.calls = []
 
         def retrieve(self, query, knowledge_id, top_k=5):
             self.calls.append("retrieve")
-            return [{"text": f"全库片段{i}", "score": 0.3, "doc_id": f"doc-{i}"} for i in range(3)]
+            return self.docs
 
         def retrieve_wiki(self, query, knowledge_id, top_k=10):
             self.calls.append("retrieve_wiki")
-            return [dict(wiki_doc)]
+            return wiki_docs
 
-    retriever = RetryRetriever()
+    retriever = WikiRetriever()
     graph = build_graph()
     result = graph.invoke(_state(FakeLLM(route="kb", reflect="no", answer="知识库中暂无相关信息。"),
                                  retriever=retriever, query="总结一下这个知识库"))
 
-    assert result["retry_count"] >= 2, "证据不足应触发二次检索"
-    assert "retrieve_wiki" in retriever.calls, "首次应走 Wiki 检索"
-    assert "retrieve" in retriever.calls, "二次检索仍应走全库检索"
-    texts = [s["text"] for s in result["sources"]]
-    assert wiki_doc["text"] in texts, "二次检索后首次 Wiki 证据不应被覆盖"
-    assert result["sources"][0]["doc_id"] == "wiki-page-1", "Wiki 证据应置前保留（无精排时截断不丢）"
+    assert result["retry_count"] == 1, "泛化首轮 Wiki 检索应跳过反思改写循环"
+    assert retriever.calls == ["retrieve_wiki"], "不应触发二次全库检索"
+    assert [s["doc_id"] for s in result["sources"]].count("wiki-page-1") == 1, "Wiki 来源应保留"
+    assert result["answer"] == "知识库中暂无相关信息。"

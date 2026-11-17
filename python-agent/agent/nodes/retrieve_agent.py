@@ -42,12 +42,6 @@ def retrieve_agent(state):
         else:
             # 召回候选池扩到 10，交给交叉编码器精排后取 top 5；无 reranker 时截断回 5
             docs = retriever.retrieve(query, knowledge_id, top_k=10)
-            # 泛化问题的二次检索：把首次 Wiki 证据合并回候选（Wiki 置前、按 doc_id+text 去重）。
-            # 否则反思循环一旦触发二次全库检索，sources 被整体覆盖，Wiki 优先形同虚设。
-            if _is_general_query(state["query"]) and retry_count == 2:
-                seen = {(d.get("doc_id"), d["text"]) for d in docs}
-                docs = [d for d in state.get("sources", [])
-                        if (d.get("doc_id"), d["text"]) not in seen] + docs
         if reranker is not None and docs:
             docs = reranker.rerank(query, docs, top_k=5)
         else:
@@ -58,4 +52,5 @@ def retrieve_agent(state):
     context = "\n\n".join(d["text"] for d in docs)
     agent_event(logger, "retrieved", knowledge_id=knowledge_id, hits=len(docs), retry=retry_count,
                 query=query[:30], rewritten=query != state["query"])
-    return {"retrieval_context": context, "sources": docs, "retry_count": retry_count}
+    return {"retrieval_context": context, "sources": docs, "retry_count": retry_count,
+            "is_general_query": _is_general_query(state["query"]) and retry_count == 1}

@@ -22,6 +22,7 @@ class AgentState(TypedDict, total=False):
     retrieval_context: str        # 检索到的文档拼接文本
     sources: List[dict]           # 引用来源
     sufficient: bool              # 反思校验：证据是否足够
+    is_general_query: bool        # 泛化/总结类问题的首轮 Wiki 检索（反思节点据此跳过改写循环）
     rewritten_query: Optional[str]  # 反思改写后的检索查询（二次检索优先使用）
     retry_count: int
     max_retries: int
