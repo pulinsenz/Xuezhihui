@@ -91,14 +91,6 @@
                 @change="loadDocs()"
               />
             </div>
-            <div class="filter-item">
-              <span class="filter-label">文档状态:</span>
-              <el-segmented
-                v-model="deletedFilter"
-                :options="deletedFilterOptions"
-                @change="loadDocs()"
-              />
-            </div>
           </div>
 
           <div class="batch-toolbar">
@@ -188,96 +180,53 @@
             <el-tag v-else type="warning" size="small">待处理</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="90">
-          <template #default="{ row }">
-            <el-tag
-              :type="row.isDelete === 1 ? 'danger' : 'success'"
-              size="small"
-              effect="plain"
-            >
-              {{ row.isDelete === 1 ? '已删除' : '正常' }}
-            </el-tag>
-          </template>
-        </el-table-column>
         <el-table-column prop="createTime" label="上传时间" width="170">
           <template #default="{ row }">{{
             row.createTime?.replace('T', ' ').slice(0, 19)
           }}</template>
         </el-table-column>
-        <el-table-column label="操作" :width="canManage ? 390 : 180" fixed="right">
+        <el-table-column label="操作" :width="canManage ? 320 : 180" fixed="right">
           <template #default="{ row }">
-            <template v-if="row.isDelete === 1">
+            <el-button size="small" plain @click="handleViewChunks(row)">切片</el-button>
+            <el-button size="small" @click="handleDownloadDoc(row)">下载</el-button>
+            <template v-if="canManage">
               <el-button
-                v-if="row.deleteSource !== 'admin'"
+                v-if="row.vectorStatus === 'SUCCESS'"
                 size="small"
-                type="success"
-                :loading="busyIds.includes(row.id)"
-                @click="handleRestoreDoc(row)"
+                type="warning"
+                plain
+                @click="handleRemoveVector(row)"
               >
-                恢复
+                移出
               </el-button>
-              <el-tooltip
-                v-else
-                content="该文件已被管理员删除，无法恢复或重新上传"
-                placement="top"
+              <el-button
+                v-if="row.vectorStatus === 'SKIPPED'"
+                size="small"
+                type="primary"
+                :loading="busyIds.includes(row.id)"
+                @click="handleReVectorize(row)"
               >
-                <el-tag type="info" size="small">已被管理员删除</el-tag>
-              </el-tooltip>
+                强制入库
+              </el-button>
+              <el-button
+                v-if="
+                  row.vectorStatus === 'FAILED' ||
+                  row.vectorStatus === 'PENDING' ||
+                  row.vectorStatus === 'REMOVED'
+                "
+                size="small"
+                type="primary"
+                :loading="busyIds.includes(row.id)"
+                @click="handleReVectorize(row)"
+              >
+                入库
+              </el-button>
               <el-button
                 size="small"
                 type="danger"
-                plain
+                link
                 @click="handlePurgeDoc(row)"
-              >彻底删除</el-button>
-            </template>
-            <template v-else>
-              <el-button size="small" plain @click="handleViewChunks(row)">切片</el-button>
-              <el-button size="small" @click="handleDownloadDoc(row)">下载</el-button>
-              <template v-if="canManage">
-                <el-button
-                  v-if="row.vectorStatus === 'SUCCESS'"
-                  size="small"
-                  type="warning"
-                  plain
-                  @click="handleRemoveVector(row)"
-                >
-                  移出
-                </el-button>
-                <el-button
-                  v-if="row.vectorStatus === 'SKIPPED'"
-                  size="small"
-                  type="primary"
-                  :loading="busyIds.includes(row.id)"
-                  @click="handleReVectorize(row)"
-                >
-                  强制入库
-                </el-button>
-                <el-button
-                  v-if="
-                    row.vectorStatus === 'FAILED' ||
-                    row.vectorStatus === 'PENDING' ||
-                    row.vectorStatus === 'REMOVED'
-                  "
-                  size="small"
-                  type="primary"
-                  :loading="busyIds.includes(row.id)"
-                  @click="handleReVectorize(row)"
-                >
-                  入库
-                </el-button>
-                <el-button
-                  size="small"
-                  type="danger"
-                  link
-                  @click="handleDeleteDoc(row)"
-                >禁用</el-button>
-                <el-button
-                  size="small"
-                  type="danger"
-                  link
-                  @click="handlePurgeDoc(row)"
-                >彻底删除</el-button>
-              </template>
+              >删除</el-button>
             </template>
           </template>
         </el-table-column>
@@ -384,11 +333,9 @@ import {
 } from '@element-plus/icons-vue'
 import {
   addMember,
-  batchDeleteDocs,
   batchRemoveVector,
   batchVectorizeDoc,
   copyKnowledge,
-  deleteDoc,
   deleteKnowledge,
   downloadDocFile,
   favoriteKnowledge,
@@ -401,7 +348,6 @@ import {
   reVectorizeDoc,
   removeDocVector,
   removeMember,
-  restoreDoc,
   unfavoriteKnowledge,
   updateKnowledge,
   uploadCover,
@@ -418,17 +364,11 @@ const loading = ref(false)
 const uploading = ref(false)
 const busyIds = ref([])
 const selectedRows = ref([])
-const deletedFilter = ref(0)
 const category = ref('all')
 const categoryOptions = [
   { label: '全部', value: 'all' },
   { label: '已入库', value: 'vectorized' },
   { label: '未入库', value: 'unvectorized' },
-]
-const deletedFilterOptions = [
-  { label: '全部', value: null },
-  { label: '正常', value: 0 },
-  { label: '已删除', value: 1 },
 ]
 const uploadRef = ref(null)
 const pollTimers = new Set()
@@ -459,11 +399,7 @@ const chunks = ref([])
 const loadDocs = async () => {
   loading.value = true
   try {
-    docs.value = await listDocs(
-      knowledgeId,
-      deletedFilter.value,
-      category.value
-    )
+    docs.value = await listDocs(knowledgeId, 0, category.value)
   } finally {
     loading.value = false
   }
@@ -672,25 +608,14 @@ const handleSelectionChange = (rows) => {
   selectedRows.value = rows
 }
 
-const handleDeleteDoc = async (row) => {
-  await ElMessageBox.confirm(
-    '确定禁用文档「' + row.name + '」吗？将把它移入「已删除」，可恢复。',
-    '禁用确认',
-    { type: 'warning' }
-  )
-  await deleteDoc(knowledgeId, row.id)
-  ElMessage.success('已禁用')
-  loadDocs()
-}
-
 const handlePurgeDoc = async (row) => {
   await ElMessageBox.confirm(
-    '确定彻底删除文档「' + row.name + '」吗？将把它从知识库移除，不再显示，且无法自行恢复。',
-    '彻底删除',
+    '确定删除文档「' + row.name + '」吗？将把它从知识库移除，不再显示，且无法恢复。',
+    '删除确认',
     { type: 'error' }
   )
   await purgeDoc(knowledgeId, row.id)
-  ElMessage.success('已彻底删除')
+  ElMessage.success('已删除')
   loadDocs()
 }
 
@@ -711,12 +636,12 @@ const handleBatchDelete = async () => {
   const ids = selectedRows.value.map((r) => r.id)
   if (!ids.length) return
   await ElMessageBox.confirm(
-    '确定删除选中的 ' + ids.length + ' 个文档吗？将同时删除其向量，可在「已删除」中恢复。',
+    '确定删除选中的 ' + ids.length + ' 个文档吗？将同时删除其向量，且无法恢复。',
     '批量删除',
-    { type: 'warning' }
+    { type: 'error' }
   )
-  const count = await batchDeleteDocs(knowledgeId, ids)
-  ElMessage.success('已删除 ' + count + ' 个文档')
+  await Promise.all(ids.map((docId) => purgeDoc(knowledgeId, docId)))
+  ElMessage.success('已删除 ' + ids.length + ' 个文档')
   loadDocs()
 }
 
@@ -769,42 +694,6 @@ const pollTasks = (taskIds) =>
     }, 1000)
     pollTimers.add(timer)
   })
-
-const handleRestoreDoc = async (row) => {
-  await ElMessageBox.confirm(
-    '确定恢复文档「' + row.name + '」吗？将重新向量化入库。',
-    '恢复确认',
-    { type: 'info' }
-  )
-  busyIds.value = [...busyIds.value, row.id]
-  try {
-    const taskId = await restoreDoc(knowledgeId, row.id)
-    ElMessage.success('已恢复，正在重新入库...')
-    clearInterval(pollTimer)
-    pollTimer = setInterval(async () => {
-      try {
-        const task = await getTask(taskId)
-        const done = task?.status === 'SUCCESS' || task?.status === 'FAILED'
-        if (done) {
-          clearInterval(pollTimer)
-          await loadDocs()
-          if (task.status === 'FAILED') {
-            ElMessage.warning('向量化失败：' + (task.message || '未知原因'))
-          } else {
-            ElMessage.success('恢复完成，已可检索')
-          }
-        }
-      } catch (err) {
-        clearInterval(pollTimer)
-        await loadDocs()
-      }
-    }, 1000)
-  } catch (err) {
-    // 错误已由拦截器提示
-  } finally {
-    busyIds.value = busyIds.value.filter((id) => id !== row.id)
-  }
-}
 
 const blobErrorMessage = async (blob) => {
   if (!(blob instanceof Blob) || !blob.type.includes('application/json')) return null
