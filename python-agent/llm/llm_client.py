@@ -75,6 +75,46 @@ class LLMClient:
             raise LLMError(f"大模型流式调用失败: {e}") from e
 
 
+class FallbackLLM:
+    """双通道故障转移：主通道（用户代理网关）失败自动切备用通道（官方 DeepSeek）。
+
+    背景：生产曾因网关上游账号池耗尽（503 No available accounts）导致普通用户
+    对话与 Wiki 生成同时瘫痪，而官方通道空闲——多通道只做成本隔离不做互备等于两个单点。
+
+    策略：
+    - chat：主通道任何异常都转移；备用再失败抛备用异常（主通道已确认不可用，备用错误更有行动价值）。
+    - stream：仅在首个 token 前失败才转移（首 token 后内容已发出，无法无痕重放，只能让其失败）。
+    每次转移发 llm_fallback 事件（日志可观测网关健康度）。
+    """
+
+    def __init__(self, primary, fallback, label="网关→官方"):
+        self.primary = primary
+        self.fallback = fallback
+        self.label = label
+
+    def chat(self, messages: List[dict], temperature: float = 0.3, max_tokens: int = None) -> str:
+        try:
+            return self.primary.chat(messages, temperature=temperature, max_tokens=max_tokens)
+        except Exception as e:
+            agent_event(logger, "llm_fallback", channel=self.label, error=str(e)[:200])
+            logger.warning("LLM 主通道失败，切换备用通道(%s): %s", self.label, str(e)[:200])
+            return self.fallback.chat(messages, temperature=temperature, max_tokens=max_tokens)
+
+    def stream(self, messages: List[dict], temperature: float = 0.3):
+        try:
+            it = self.primary.stream(messages, temperature=temperature)
+            first = next(it)  # 请求级失败（连接/鉴权/5xx）在拿到首个 token 前抛出
+        except StopIteration:
+            return  # 主通道正常但输出为空，照常结束
+        except Exception as e:
+            agent_event(logger, "llm_fallback", channel=self.label, error=str(e)[:200])
+            logger.warning("LLM 主通道失败（首 token 前），切换备用通道(%s): %s", self.label, str(e)[:200])
+            yield from self.fallback.stream(messages, temperature=temperature)
+            return
+        yield first
+        yield from it
+
+
 class MockLLM:
     """无 API Key 时的兜底实现：
     - 路由/反思节点：识别 system prompt 返回关键词，保证无 key 也能走完整 Agent 链路
