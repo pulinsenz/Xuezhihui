@@ -27,6 +27,7 @@ class Settings:
     llm_model: str = os.getenv("LLM_MODEL", "deepseek-chat")
     # 普通用户 LLM：独立密钥 + 独立模型/地址（走内部代理网关）
     # 模型为 deepseek-v4-flash-0731；代理当前账号另有 deepseek-v4-pro-0813 可选（覆盖 USER_LLM_MODEL 切换）
+    # 网关与官方不同源时 runtime 自动包 FallbackLLM：网关失败自动回退官方 DeepSeek
     user_api_key: str = os.getenv("USER_API_KEY", "")
     user_llm_model: str = os.getenv("USER_LLM_MODEL", "deepseek-v4-flash-0731")
     # 网关地址不落代码/仓库默认值（公网 IP 明文已属泄露），由 .env / compose 注入
