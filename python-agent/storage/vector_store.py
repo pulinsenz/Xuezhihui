@@ -27,8 +27,9 @@ class VectorStore(ABC):
         """删除整个知识库的向量"""
 
     @abstractmethod
-    def search(self, query: str, knowledge_id: Optional[str] = None, top_k: int = 5) -> List[dict]:
-        """向量检索，返回 [{"text", "score"}]"""
+    def search(self, query: str, knowledge_id: Optional[str] = None, top_k: int = 5,
+               doc_id_prefix: Optional[str] = None) -> List[dict]:
+        """向量检索，返回 [{"text", "score"}]；doc_id_prefix 非空时仅检索该前缀的文档（Wiki 专用）"""
 
     @abstractmethod
     def get_chunks(self, knowledge_id: str, doc_id: str) -> List[str]:
@@ -77,12 +78,14 @@ class LocalVectorStore(VectorStore):
             self._vectors = [v for v in self._vectors if v["knowledge_id"] != str(knowledge_id)]
             logger.info("删除知识库向量: knowledge_id=%s removed=%d", knowledge_id, before - len(self._vectors))
 
-    def search(self, query, knowledge_id=None, top_k=5):
+    def search(self, query, knowledge_id=None, top_k=5, doc_id_prefix=None):
         q_vec = self.embedding.embed_query(query)
         with self._lock:
             candidates = self._vectors
             if knowledge_id is not None:
                 candidates = [v for v in candidates if v["knowledge_id"] == str(knowledge_id)]
+            if doc_id_prefix:
+                candidates = [v for v in candidates if v["doc_id"].startswith(doc_id_prefix)]
         if not candidates:
             return []
         scored = []
