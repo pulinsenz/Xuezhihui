@@ -150,8 +150,10 @@ def test_graph_general_question_falls_back_without_wiki():
     assert result["answer"] == "基于资料回答。"
 
 
-def test_graph_general_retry_falls_back_to_full_search():
-    """泛化问题首次 Wiki 检索证据不足 → 二次检索回退全库（避免具体问题被锁死在 Wiki 集合）"""
+def test_graph_general_retry_merges_wiki_evidence():
+    """泛化问题二次全库检索：首次 Wiki 证据合并保留（置前、去重），不被反思循环覆盖"""
+    wiki_doc = {"text": "Wiki：LangGraph 总览与核心定位", "score": 0.8, "doc_id": "wiki-page-1"}
+
     class RetryRetriever(FakeRetriever):
         def __init__(self):
             super().__init__()
@@ -159,11 +161,11 @@ def test_graph_general_retry_falls_back_to_full_search():
 
         def retrieve(self, query, knowledge_id, top_k=5):
             self.calls.append("retrieve")
-            return self.docs
+            return [{"text": f"全库片段{i}", "score": 0.3, "doc_id": f"doc-{i}"} for i in range(3)]
 
         def retrieve_wiki(self, query, knowledge_id, top_k=10):
             self.calls.append("retrieve_wiki")
-            return self.docs
+            return [dict(wiki_doc)]
 
     retriever = RetryRetriever()
     graph = build_graph()
@@ -172,4 +174,7 @@ def test_graph_general_retry_falls_back_to_full_search():
 
     assert result["retry_count"] >= 2, "证据不足应触发二次检索"
     assert "retrieve_wiki" in retriever.calls, "首次应走 Wiki 检索"
-    assert "retrieve" in retriever.calls, "二次检索应回退全库检索"
+    assert "retrieve" in retriever.calls, "二次检索仍应走全库检索"
+    texts = [s["text"] for s in result["sources"]]
+    assert wiki_doc["text"] in texts, "二次检索后首次 Wiki 证据不应被覆盖"
+    assert result["sources"][0]["doc_id"] == "wiki-page-1", "Wiki 证据应置前保留（无精排时截断不丢）"
