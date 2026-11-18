@@ -132,6 +132,15 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
     }
 
     @Override
+    public List<ChatMessage> getEvidenceMessages(String sessionId, Long userId) {
+        requireOwned(sessionId, userId);
+        return chatMessageMapper.selectList(new LambdaQueryWrapper<ChatMessage>()
+                .eq(ChatMessage::getSessionId, sessionId)
+                .eq(ChatMessage::getUserId, userId)
+                .orderByAsc(ChatMessage::getId));
+    }
+
+    @Override
     @Transactional
     public void deleteSession(String sessionId, Long userId) {
         requireOwned(sessionId, userId);

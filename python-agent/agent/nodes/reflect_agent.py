@@ -36,11 +36,9 @@ def _parse_reflect(reply: str):
 def reflect_agent(state):
     context = state.get("retrieval_context", "")
     query = state["query"]
-    # 泛化/总结类问题的首轮 Wiki 检索：Wiki 整理页已是最佳概括证据，跳过改写循环。
-    # 实测改写 query 触发二次全库检索后会用新 query 重排并覆盖 Wiki 来源，反而稀释回答质量。
-    if state.get("is_general_query") and state.get("retry_count", 0) == 1:
-        sufficient, rewritten = True, None
-    # 空上下文必然不足（无改写依据，二次检索仍用原 query）
+    # 目录完整性由只读取证路径检查；历史加工无需重新检索。
+    if state.get("evidence_kind") in ("outline", "provenance", "transform") or state.get("evidence_error"):
+        sufficient, rewritten = state.get("evidence_complete", False), None
     elif not context.strip():
         sufficient, rewritten = False, None
     else:
@@ -52,9 +50,9 @@ def reflect_agent(state):
             ])
             sufficient, rewritten = _parse_reflect(reply)
         except Exception as e:
-            logger.error("反思校验失败，默认认为证据足够: %s", e)
-            sufficient, rewritten = True, None
+            logger.error("反思校验失败，不认定证据充分: %s", e)
+            sufficient, rewritten = False, None
     agent_event(logger, "reflect_done", query=query[:30], sufficient=sufficient,
                 retry=state.get("retry_count", 0), rewritten=bool(rewritten),
-                skipped=state.get("is_general_query", False))
+                evidence_kind=state.get("evidence_kind", "retrieval"))
     return {"sufficient": sufficient, "rewritten_query": rewritten}

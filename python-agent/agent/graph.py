@@ -59,6 +59,8 @@ def _route_next(state):
     route = state.get("route")
     if route == "business":
         return "tool"
+    if state.get("intent_plan", {}).get("intent") in ("provenance", "transform"):
+        return "retrieve"
     # 用户显式选中了知识库 → 除业务数据外都先尝试检索（路由可能把"问自己上传的内容"误判为
     # other/chitchat，检索 + 反思兜底：命中则基于资料回答，未命中才回退闲聊）
     if state.get("knowledge_id") and route != "chitchat":
@@ -67,6 +69,8 @@ def _route_next(state):
 
 
 def _should_retry(state):
+    if state.get("evidence_kind") in ("outline", "provenance", "transform") or state.get("evidence_error"):
+        return "answer"
     sufficient = state.get("sufficient", False)
     retry_count = state.get("retry_count", 0)
     max_retries = state.get("max_retries", MAX_RETRIES)

@@ -192,7 +192,15 @@ def stream(req: StreamRequest):
                         elif node == "retrieve":
                             sources = update.get("sources", [])
                             retry = update.get("retry_count", 1)
-                            yield emit_thinking(f"检索知识库，命中 {len(sources)} 条资料（第 {retry} 次检索）")
+                            kind = update.get("evidence_kind")
+                            if update.get("evidence_error"):
+                                yield emit_thinking("资料读取受限，回答将说明限制")
+                            elif kind == "outline":
+                                yield emit_thinking(f"读取知识目录，共 {len(sources)} 个条目")
+                            elif kind in ("provenance", "transform"):
+                                yield emit_thinking("读取对应历史回答及其实际引用")
+                            else:
+                                yield emit_thinking(f"检索知识库，命中 {len(sources)} 条资料（第 {retry} 次检索）")
                         elif node == "reflect":
                             sufficient = update.get("sufficient", False)
                             yield emit_thinking("证据校验：" + ("证据充分，开始回答" if sufficient else "证据不足，继续检索"))

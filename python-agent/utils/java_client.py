@@ -2,7 +2,7 @@
 Java 业务服务回调客户端：工具 Agent 获取业务数据的唯一通道。
 信任边界：Python Agent 不直接访问 MySQL，业务数据一律回调 Java internal 接口获取。
 双向内部鉴权：Java 调 Python 带 X-Agent-Token，Python 回调 Java 同样携带（同一把钥匙）。
-失败一律降级为 None（不阻断对话），由 answer 节点兜底为普通回答。
+旧统计/写回接口保留降级契约；问答取证接口失败明确抛出 JavaEvidenceError。
 """
 import httpx
 
@@ -95,3 +95,53 @@ def persist_chat(session_id, user_id, query, answer, route=None, knowledge_id=No
         # 网络异常 / Java 未启动：不阻断对话，历史缺该轮（可接受）
         logger.warning("对话落库异常（降级，不阻断）: %s", e)
         return False
+
+
+class JavaEvidenceError(RuntimeError):
+    """Java 问答取证失败；不得将服务不可用或无权访问当成空知识库。"""
+
+
+def _fetch_evidence(endpoint: str, params: dict) -> dict:
+    if any(value is None or not str(value).strip() for value in params.values()):
+        raise JavaEvidenceError(f"{endpoint}: 缺少取证参数")
+    if not settings.java_token:
+        raise JavaEvidenceError(f"{endpoint}: JAVA_TOKEN 未配置")
+    url = f"{settings.java_base_url.rstrip('/')}/internal/agent/{endpoint}"
+    try:
+        response = _client.get(url, params={key: str(value) for key, value in params.items()},
+                               headers=_headers())
+        response.raise_for_status()
+        body = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise JavaEvidenceError(f"{endpoint}: Java 取证请求失败 ({exc})") from exc
+    if not isinstance(body, dict) or body.get("code") != 0:
+        code = body.get("code") if isinstance(body, dict) else None
+        message = body.get("message") if isinstance(body, dict) else "响应格式错误"
+        raise JavaEvidenceError(f"{endpoint}: Java 取证失败 code={code}, {message}")
+    data = body.get("data")
+    if not isinstance(data, dict):
+        raise JavaEvidenceError(f"{endpoint}: Java 取证响应缺少有效 data")
+    return data
+
+
+def fetch_knowledge_outline(user_id, knowledge_id) -> dict:
+    """获取经当前读取权限校验的完整 Wiki/文档目录；失败抛异常，合法空库返回空数组。"""
+    data = _fetch_evidence("knowledge-outline", {"user_id": user_id, "knowledge_id": knowledge_id})
+    if (not isinstance(data.get("wiki_pages"), list)
+            or not isinstance(data.get("documents"), list)
+            or not isinstance(data.get("total"), int)
+            or not isinstance(data.get("version"), str)
+            or not isinstance(data.get("uncovered_document_count"), int)):
+        raise JavaEvidenceError("knowledge-outline: Java 目录响应格式错误")
+    return data
+
+
+def fetch_conversation_evidence(user_id, session_id) -> dict:
+    """按所有权读取带真实消息 id 的历史；sources 已解析并按当前权限过滤。"""
+    data = _fetch_evidence("conversation-evidence", {"user_id": user_id, "session_id": session_id})
+    messages = data.get("messages")
+    if not isinstance(messages, list) or any(
+            not isinstance(message, dict) or not isinstance(message.get("sources"), list)
+            for message in messages):
+        raise JavaEvidenceError("conversation-evidence: Java 历史响应格式错误")
+    return data
