@@ -5,6 +5,8 @@ import com.agent.rag.common.Result;
 import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.service.KnowledgeService;
+import com.agent.rag.service.AgentEvidenceService;
+import java.util.Map;
 import com.agent.rag.util.InternalAuthUtil;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +34,9 @@ public class AgentDataController {
     @Resource
     private KnowledgeService knowledgeService;
 
+    @Resource
+    private AgentEvidenceService agentEvidenceService;
+
     @Value("${app.agent.token:}")
     private String agentToken;
 
@@ -47,5 +52,31 @@ public class AgentDataController {
         UserStatsVO vo = knowledgeService.getUserStats(userId);
         log.info("工具回调: userId={}, 知识库数={}, 文档数={}", userId, vo.getKnowledgeCount(), vo.getDocCount());
         return Result.success(vo);
+    }
+
+    /** 全库目录取证：复用现有知识库读取权限，无业务写入。 */
+    @GetMapping("/knowledge-outline")
+    public Result<Map<String, Object>> knowledgeOutline(
+            @RequestParam("user_id") Long userId,
+            @RequestParam("knowledge_id") Long knowledgeId,
+            @RequestHeader(value = "X-Agent-Token", required = false) String token) {
+        requireInternalToken(token);
+        return Result.success(agentEvidenceService.knowledgeOutline(userId, knowledgeId));
+    }
+
+    /** 历史取证：校验会话所有权及引用来源的当前读取权限。 */
+    @GetMapping("/conversation-evidence")
+    public Result<Map<String, Object>> conversationEvidence(
+            @RequestParam("user_id") Long userId,
+            @RequestParam("session_id") String sessionId,
+            @RequestHeader(value = "X-Agent-Token", required = false) String token) {
+        requireInternalToken(token);
+        return Result.success(agentEvidenceService.conversationEvidence(userId, sessionId));
+    }
+
+    private void requireInternalToken(String token) {
+        if (!InternalAuthUtil.check(agentToken, token)) {
+            throw new BusinessException(ErrorCode.NO_AUTH, "内部接口未授权");
+        }
     }
 }

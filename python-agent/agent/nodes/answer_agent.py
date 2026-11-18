@@ -45,14 +45,28 @@ def answer_agent(state):
     route = state.get("route", "")
     llm = state["llm"]
 
+    plan = state.get("intent_plan", {})
+    evidence_kind = state.get("evidence_kind")
+    evidence_error = state.get("evidence_error")
     # 上下文优先级：工具业务数据 > 知识库检索证据 > 知识问题但未选知识库(引导) > 闲聊
-    if tool_context:
+    if plan.get("needs_clarification"):
+        system = "请仅向用户澄清以下缺失信息，不猜测内容：" + plan.get("clarification_question", "请说明要询问的对象。")
+    elif evidence_error:
+        system = "如实向用户说明以下取证结果，不补写未经核实的事实：" + evidence_error
+    elif evidence_kind == "outline":
+        system = ANSWER_SYSTEM_TEMPLATE.format(context=context) + "\n这是完整目录概览。覆盖每个主题，允许合并相关条目，但不得只选一个主题。无正文的目录仅说明内容范围。未覆盖文档和目录局限需明确说明。"
+    elif evidence_kind == "provenance":
+        system = ANSWER_SYSTEM_TEMPLATE.format(context=context) + "\n用户在核对历史回答。只解释该回答实际保存的依据，给出对应原文和引用；不得把新检索或模型知识称作旧依据。"
+    elif evidence_kind == "transform":
+        system = "按用户要求加工指定历史回答，保持事实及引用对应关系，不添加新事实。若要求扩展而现有依据不足，明确说明。\n" + context
+    elif tool_context:
         system = TOOL_SYSTEM_TEMPLATE.format(context=tool_context)
     elif context:
         system = ANSWER_SYSTEM_TEMPLATE.format(context=context)
-    elif route == "kb":
-        # 知识类问题但没选知识库 → 明确引导，避免空泛闲聊
+    elif route == "kb" and not state.get("knowledge_id"):
         system = NO_KB_SYSTEM
+    elif route == "kb":
+        system = "当前所选知识库未检索到足够的相关依据。请明确说明这一限制，不将其说成未选择知识库，不编造答案。"
     else:
         system = CHITCHAT_SYSTEM
     messages = [{"role": "system", "content": system}]

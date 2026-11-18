@@ -2,6 +2,7 @@ package com.agent.rag.service;
 
 import com.agent.rag.dto.resp.HistoryMessageVO;
 import com.agent.rag.dto.resp.SessionVO;
+import com.agent.rag.entity.ChatMessage;
 
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,9 @@ public interface ChatHistoryService {
      * 会话完整历史（校验属主，非本人/不存在抛 NOT_FOUND）
      */
     List<HistoryMessageVO> getHistory(String sessionId, Long userId);
+
+    /** 内部问答取证：校验会话所有权，保留消息主键及原始来源。 */
+    List<ChatMessage> getEvidenceMessages(String sessionId, Long userId);
 
     /**
      * 删除会话及其消息（仅本人）
