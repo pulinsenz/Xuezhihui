@@ -2,6 +2,7 @@ package com.agent.rag.service;
 
 import com.agent.rag.common.ErrorCode;
 import com.agent.rag.controller.AgentDataController;
+import com.agent.rag.config.JacksonConfig;
 import com.agent.rag.entity.*;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.*;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
 import java.util.List;
 import java.util.Map;
@@ -96,6 +98,23 @@ class AgentEvidenceServiceTest {
     }
 
     @Test
+    void outlineCountersRemainJsonNumbersWithProductionSerializer() throws Exception {
+        knowledge(true);
+        emptyDirectory();
+        KnowledgeDoc doc = new KnowledgeDoc();
+        doc.setId(9007199254740993L);
+        doc.setName("未覆盖文档");
+        when(docMapper.selectList(any())).thenReturn(List.of(doc));
+        Jackson2ObjectMapperBuilder builder = new Jackson2ObjectMapperBuilder();
+        new JacksonConfig().longToStringCustomizer().customize(builder);
+        ObjectMapper mapper = builder.build();
+        var json = mapper.readTree(mapper.writeValueAsString(service.knowledgeOutline(1L, 5L)));
+        assertTrue(json.get("total").isIntegralNumber());
+        assertTrue(json.get("uncovered_document_count").isIntegralNumber());
+        assertEquals(1, json.get("uncovered_document_count").intValue());
+    }
+
+    @Test
     void collaboratorUsesExistingReadRule() {
         knowledge(false);
         when(memberMapper.selectCount(any())).thenReturn(1L);
@@ -144,7 +163,7 @@ class AgentEvidenceServiceTest {
         when(docMapper.selectList(any())).thenReturn(List.of(doc, uncovered));
         Map<String, Object> result = service.knowledgeOutline(1L, 5L);
         assertEquals(1, result.get("total"));
-        assertEquals(1L, result.get("uncovered_document_count"));
+        assertEquals(1, result.get("uncovered_document_count"));
         List<?> pages = (List<?>) result.get("wiki_pages");
         assertEquals("wiki-17", ((Map<?, ?>) pages.get(0)).get("doc_id"));
         List<?> docs = (List<?>) result.get("documents");

@@ -52,7 +52,7 @@ public class AgentEvidenceService {
                 }
             }
             List<Map<String, Object>> documents = new ArrayList<>();
-            long uncovered = 0;
+            int uncovered = 0;
             for (KnowledgeDoc doc : docs) {
                 if (Integer.valueOf(1).equals(doc.getIsDelete())) continue;
                 String id = String.valueOf(doc.getId());
