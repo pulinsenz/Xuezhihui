@@ -244,6 +244,12 @@ npm run dev
 
 - 开发地址 `http://localhost:5173`，Vite 已把 `/api` 代理到 `http://localhost:8123`
 
+### 采集知识库测试文档
+
+在项目根目录运行 `python scripts/crawl_kb_docs.py`，将 8 篇 MDN 中文 HTTP 指南下载到 `data/kb-test-docs/mdn-http/`。脚本只用 Python 标准库，保留每篇文档的署名和许可，跳过已有文件，不会自动上传。
+
+用 `python scripts/crawl_kb_docs.py caching conditional_requests --output data/kb-cache-test` 可只采集缓存和条件请求两篇。将生成的 `.md` 文件上传到测试知识库，待文档处理完成后点击「生成 Wiki」。
+
 ## 接口文档
 
 ### Java 对外接口（前端调用，统一前缀 `/api`）
