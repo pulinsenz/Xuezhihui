@@ -339,6 +339,8 @@ npm run dev
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/internal/agent/user-stats` | Agent 获取业务数据 |
+| GET | `/internal/agent/knowledge-outline` | 完整 Wiki/文档目录；`total`、`uncovered_document_count` 为 JSON 整数，文档 ID 为字符串 |
+| GET | `/internal/agent/conversation-evidence` | 按会话所有权读取历史回答及当前有权访问的原始引用 |
 | POST | `/internal/agent/chat-save` | 回写对话（回答 / 思考 / 参考文献） |
 | POST | `/internal/agent/vector-callback` | 向量化结果回调 |
 | POST | `/internal/agent/wiki-callback` | Wiki 生成结果回调（SUCCESS 整体替换 wiki_page，FAILED 旧 Wiki 保留） |
