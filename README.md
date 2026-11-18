@@ -250,6 +250,8 @@ npm run dev
 
 用 `python scripts/crawl_kb_docs.py caching conditional_requests --output data/kb-cache-test` 可只采集缓存和条件请求两篇。将生成的 `.md` 文件上传到测试知识库，待文档处理完成后点击「生成 Wiki」。
 
+> 知识库详情页的「上传文档」支持一次选择多个文件，逐个提交；单个文件失败不影响其余文件，上传完成后会汇总提示提交向量化、内容重复和失败的个数。
+
 ## 接口文档
 
 ### Java 对外接口（前端调用，统一前缀 `/api`）
