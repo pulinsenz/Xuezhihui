@@ -62,7 +62,9 @@
           <input
             ref="uploadRef"
             type="file"
+            multiple
             class="hidden-input"
+            title="可选择多个文件批量上传"
             @change="handleUpload"
           />
         </template>
@@ -522,44 +524,65 @@ const handleRemoveMember = async (row) => {
 }
 
 const handleUpload = async (e) => {
-  const file = e.target.files?.[0]
+  const files = [...(e.target.files || [])]
   e.target.value = ''
-  if (!file) return
+  if (!files.length) return
   uploading.value = true
+  let ok = 0
+  let duplicate = 0
+  let failed = 0
+  const taskIds = []
   try {
-    const taskId = await uploadDoc(knowledgeId, file)
-    if (!taskId) {
-      ElMessage.warning(
-        '该文件与已有文档内容相同，默认未入库；可点击「强制入库」'
-      )
-      await loadDocs()
-      return
-    }
-    ElMessage.success('上传成功，正在向量化...')
-    clearInterval(pollTimer)
-    pollTimer = setInterval(async () => {
+    for (const file of files) {
       try {
-        const task = await getTask(taskId)
-        const done = task?.status === 'SUCCESS' || task?.status === 'FAILED'
-        if (done) {
-          clearInterval(pollTimer);
-          await loadDocs()
-          if (task.status === 'FAILED') {
-            ElMessage.warning('向量化失败：' + (task.message || '未知原因'))
-          } else {
-            ElMessage.success('向量化完成，已可检索')
-          }
+        const taskId = await uploadDoc(knowledgeId, file)
+        if (taskId) {
+          taskIds.push(taskId)
+          ok++
+        } else {
+          duplicate++
         }
       } catch (err) {
-        clearInterval(pollTimer)
-        await loadDocs()
+        // 单文件错误已由拦截器提示，继续传下一个
+        failed++
       }
-    }, 1000)
-  } catch (err) {
-    // 错误已由拦截器提示
+    }
+    if (ok || duplicate) {
+      await loadDocs()
+    }
+    if (files.length > 1) {
+      const parts = [`共 ${files.length} 个文件`]
+      if (ok) parts.push(`${ok} 个已提交向量化`)
+      if (duplicate) parts.push(`${duplicate} 个内容重复未入库`)
+      if (failed) parts.push(`${failed} 个失败`)
+      if (ok) {
+        ElMessage.success(parts.join('，'))
+      } else if (failed) {
+        ElMessage.error(parts.join('，'))
+      } else {
+        ElMessage.warning(parts.join('，'))
+      }
+    } else if (duplicate) {
+      ElMessage.warning('该文件与已有文档内容相同，默认未入库；可点击「强制入库」')
+    } else if (ok) {
+      ElMessage.success('上传成功，正在向量化...')
+    }
+    pollUploadTasks(taskIds)
   } finally {
     uploading.value = false
   }
+}
+
+const pollUploadTasks = (taskIds) => {
+  if (!taskIds.length) return
+  pollTasks(taskIds).then(async (failedMessages) => {
+    await loadDocs()
+    if (failedMessages.length) {
+      ElMessage.warning(failedMessages.length + ' 个文档向量化失败，请查看文档状态')
+    } else {
+      ElMessage.success('向量化完成，已可检索')
+    }
+  })
 }
 
 const handleReVectorize = async (row) => {
