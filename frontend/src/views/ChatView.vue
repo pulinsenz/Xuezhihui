@@ -160,7 +160,7 @@
                   <div v-if="refsOpenOf(msg)" class="refs-list-box">
                     <div v-for="(s, i) in msg.sources" :key="i" class="ref-item">
                       <div class="ref-lead">
-                        <span class="refs-num">[{{ i + 1 }}]</span>
+                        <span class="refs-num">[{{ s.cite_no ?? i + 1 }}]</span>
                         <span v-if="s.doc_name" class="refs-doc">{{ s.doc_name }}</span>
                       </div>
                       <div class="refs-text">{{ truncateText(s.text) }}</div>
