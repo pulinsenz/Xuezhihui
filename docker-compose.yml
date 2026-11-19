@@ -58,8 +58,11 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
     command: minio server /minio_data --console-address ":9001"
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      # 宿主 9050/9051：Windows Hyper-V 动态保留区间随机盖住大片端口（如 8902-9001、
+      # 9481-9580），9000/9500 均会绑定失败；9050 落在保留空隙内
+      # （容器间仍走 minio:9000，仅宿主侧调试端口变化）
+      - "9050:9000"
+      - "9051:9001"
     volumes:
       - minio-data:/minio_data
 

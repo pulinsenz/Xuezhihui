@@ -13,7 +13,8 @@ WORKDIR /app
 # 依赖分层缓存（依赖均提供 amd64 预编译 wheel，无需 gcc/g++；
 # 移除 apt 以规避 deb.debian.org 在部分网络下 apt update/install 拉取失败）
 COPY requirements.txt .
-RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} --timeout 60 --retries 5 -r requirements.txt
+# --timeout 300：torch 等 500MB+ 大 wheel 在国内镜像源下载慢，60s 读间隔会反复超时耗尽重试
+RUN pip install --no-cache-dir -i ${PIP_INDEX_URL} --timeout 300 --retries 5 -r requirements.txt
 
 # 应用代码
 COPY . .

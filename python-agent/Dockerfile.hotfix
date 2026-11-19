@@ -1,0 +1,11 @@
+# 临时热修镜像：基于现有完整依赖镜像，仅叠加新代码 + 新增依赖 jieba
+# （正式全量重建见 Dockerfile；torch 539MB 在国内源下载极慢时的过渡方案）
+FROM xuezhihui-python-agent:latest
+
+USER root
+COPY . /app
+RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ --timeout 300 jieba==0.42.1 \
+    && chown -R agentuser:agentuser /app
+USER agentuser
+
+EXPOSE 8000
