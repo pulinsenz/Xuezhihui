@@ -1,9 +1,14 @@
 """
 回答组装 Agent：基于检索证据生成答案（流式），引用来源编号。
 """
+import re
+
 from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("answer")
+
+# 正文引用编号：容忍连写 [1][3]、逗号列举 [2, 4]，不支持范围写法
+_CITE_RE = re.compile(r"\[(\d+(?:\s*[,，、;；]\s*\d+)*)\]")
 
 ANSWER_SYSTEM_TEMPLATE = (
     "你是一个校园知识库问答助手「学智汇」。根据提供的知识库内容回答用户问题。\n"
@@ -11,7 +16,7 @@ ANSWER_SYSTEM_TEMPLATE = (
     "1. 只能基于提供的知识库内容回答，不得编造\n"
     "2. 如果知识库内容与问题无关或为空，明确告知用户『知识库中暂无相关信息』\n"
     "3. 回答简洁清晰，必要时分点\n"
-    "4. 引用相关内容时标注来源编号，如 [1][2]\n\n"
+    "4. 引用相关内容时标注来源编号，如 [1][2]；只标注实际支撑回答内容的编号，未用到的资料不要标注\n\n"
     "知识库内容：\n{context}"
 )
 
@@ -35,6 +40,24 @@ TOOL_SYSTEM_TEMPLATE = (
     "请根据以下系统统计数据如实转述，不要编造或夸大数字。\n\n"
     "业务数据：\n{context}"
 )
+
+
+def filter_cited_sources(answer, sources):
+    """只保留回答正文实际引用的分片（编号为 numbered_context 的 1 起始序号）。
+    兜底：无来源原样返回；解析不到任何有效编号（LLM 未标注）不裁剪，宁多勿少；
+    保留分片原有顺序，附加 cite_no 原始编号供前端展示与正文编号一致。"""
+    if not sources:
+        return sources
+    total = len(sources)
+    cited = set()
+    for group in _CITE_RE.findall(answer or ""):
+        for piece in re.split(r"[,，、;；]", group):
+            n = int(piece)
+            if 1 <= n <= total:
+                cited.add(n)
+    if not cited:
+        return sources
+    return [{**source, "cite_no": n} for n, source in enumerate(sources, 1) if n in cited]
 
 
 def answer_agent(state):
@@ -80,4 +103,4 @@ def answer_agent(state):
         chunks.append(token)
     answer = "".join(chunks).strip()
     agent_event(logger, "answer_done", query=query[:30], context_hits=len(state.get("sources", [])))
-    return {"answer": answer}
+    return {"answer": answer, "sources": filter_cited_sources(answer, state.get("sources", []))}

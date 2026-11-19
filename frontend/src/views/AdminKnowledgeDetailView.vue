@@ -323,7 +323,7 @@ onBeforeUnmount(() => {
 
 .back-btn {
   border: 1px solid rgba(148, 163, 184, 0.25);
-  background: rgba(255, 255, 255, 0.8);
+  background: #ffffff;
 }
 
 .title-status-row {
@@ -341,16 +341,15 @@ onBeforeUnmount(() => {
 
 .meta-row {
   margin-top: 4px;
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
 }
 
 .admin-panel {
-  background: rgba(255, 255, 255, 0.85);
+  background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 24px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(16px);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   padding: 24px;
 }
 
@@ -367,12 +366,12 @@ onBeforeUnmount(() => {
   gap: 12px;
   margin-bottom: 16px;
   padding: 10px 16px;
-  background: rgba(241, 245, 249, 0.8);
+  background: #f1f5f9;
   border-radius: 12px;
 }
 
 .batch-hint {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: #0f766e;
 }
@@ -381,6 +380,10 @@ onBeforeUnmount(() => {
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid rgba(148, 163, 184, 0.16);
+}
+
+.table-card :deep(.el-button--small) {
+  min-height: 28px;
 }
 
 .file-name-cell {

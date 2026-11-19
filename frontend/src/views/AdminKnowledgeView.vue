@@ -153,14 +153,14 @@ onMounted(loadData)
 }
 
 .page-kicker {
-  font-size: 13px;
+  font-size: 12px;
   color: #0f766e;
   font-weight: 600;
 }
 
 .page-header h2 {
   margin: 4px 0 0;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -168,15 +168,14 @@ onMounted(loadData)
 .page-subtitle {
   margin-top: 6px;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .admin-panel {
-  background: rgba(255, 255, 255, 0.85);
+  background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 24px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(16px);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
   padding: 24px;
 }
 
@@ -193,7 +192,12 @@ onMounted(loadData)
   border: 1px solid rgba(148, 163, 184, 0.16);
 }
 
+.table-card :deep(.el-button--small) {
+  min-height: 28px;
+}
+
 .kb-name-text {
+  font-size: var(--text-heading);
   font-weight: 600;
   color: #0f172a;
 }

@@ -86,10 +86,13 @@
         <el-form-item label="知识库简介">
           <el-input v-model="createForm.description" type="textarea" :rows="3" placeholder="简要介绍该知识库包含哪些内容..." maxlength="512" />
         </el-form-item>
-        <el-form-item label="公开权限">
-          <div class="switch-row">
-            <el-switch v-model="createForm.isPublic" :active-value="1" :inactive-value="0" />
-            <span class="switch-tip">公开后所有人可在公开知识库中检索与浏览</span>
+        <el-form-item label="可见性">
+          <div class="visibility-row">
+            <el-radio-group v-model="createForm.isPublic">
+              <el-radio :value="0">私有</el-radio>
+              <el-radio :value="1">公开</el-radio>
+            </el-radio-group>
+            <span class="visibility-tip">公开后所有人可在公开知识库中检索与浏览</span>
           </div>
         </el-form-item>
       </el-form>
@@ -117,10 +120,13 @@
         <el-form-item label="知识库简介">
           <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="简要介绍该知识库包含哪些内容..." maxlength="512" />
         </el-form-item>
-        <el-form-item label="公开权限">
-          <div class="switch-row">
-            <el-switch v-model="editForm.isPublic" :active-value="1" :inactive-value="0" />
-            <span class="switch-tip">公开后所有人可在公开知识库中检索与浏览</span>
+        <el-form-item label="可见性">
+          <div class="visibility-row">
+            <el-radio-group v-model="editForm.isPublic">
+              <el-radio :value="0">私有</el-radio>
+              <el-radio :value="1">公开</el-radio>
+            </el-radio-group>
+            <span class="visibility-tip">公开后所有人可在公开知识库中检索与浏览</span>
           </div>
         </el-form-item>
       </el-form>
@@ -273,7 +279,7 @@ onMounted(loadList)
 }
 
 .page-header h2 {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -281,13 +287,12 @@ onMounted(loadList)
 .sub {
   margin-top: 4px;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .create-btn {
   border-radius: 12px;
   font-weight: 600;
-  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.2);
 }
 
 .kb-row {
@@ -297,23 +302,20 @@ onMounted(loadList)
 /* 知识库卡片 */
 .kb-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 20px;
   overflow: hidden;
   margin-bottom: 20px;
   cursor: pointer;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.03);
-  backdrop-filter: blur(16px);
-  transition: all 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: var(--shadow-card);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
   display: flex;
   flex-direction: column;
 }
 
 .kb-card:hover {
-  transform: translateY(-4px);
   border-color: rgba(20, 184, 166, 0.4);
-  box-shadow: 0 16px 36px rgba(20, 184, 166, 0.1);
 }
 
 .kb-badge-wrapper {
@@ -334,11 +336,6 @@ onMounted(loadList)
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
-}
-
-.kb-card:hover .kb-cover-img {
-  transform: scale(1.04);
 }
 
 .kb-cover {
@@ -350,7 +347,7 @@ onMounted(loadList)
   font-size: 40px;
   font-weight: 700;
   color: #ffffff;
-  background: linear-gradient(135deg, #0f766e, #14b8a6, #38bdf8);
+  background: #0f766e;
 }
 
 .kb-body {
@@ -368,7 +365,7 @@ onMounted(loadList)
 }
 
 .kb-name {
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
@@ -387,7 +384,7 @@ onMounted(loadList)
 .author-avatar {
   background: #64748b;
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
@@ -436,7 +433,7 @@ onMounted(loadList)
 }
 
 .doc-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: #0f766e;
   background: rgba(20, 184, 166, 0.1);
@@ -449,7 +446,7 @@ onMounted(loadList)
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 8px;
 }
 
 .cover-preview {
@@ -483,13 +480,14 @@ onMounted(loadList)
   background: rgba(20, 184, 166, 0.04);
 }
 
-.switch-row {
+.visibility-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.switch-tip {
+.visibility-tip {
   font-size: 12px;
   color: #64748b;
 }

@@ -44,7 +44,9 @@
             :key="page.id"
             class="page-item"
             :class="{ active: String(currentId) === String(page.id) }"
+            tabindex="0"
             @click="selectPage(page.id)"
+            @keydown.enter.prevent="selectPage(page.id)"
           >
             <span class="page-order">{{ page.sortOrder }}</span>
             <span class="page-title">{{ page.title }}</span>
@@ -327,7 +329,7 @@ onBeforeUnmount(() => {
 
 .title-row h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 22px;
 }
 
 .meta-row {
@@ -336,7 +338,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   margin-top: 6px;
   color: var(--el-text-color-secondary);
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .meta-tip {
@@ -426,12 +428,12 @@ onBeforeUnmount(() => {
 
 .content-header h3 {
   margin: 0;
-  font-size: 20px;
+  font-size: 16px;
 }
 
 .content-summary {
   color: var(--el-text-color-secondary);
-  font-size: 13px;
+  font-size: 12px;
   margin: 8px 0;
 }
 
@@ -470,7 +472,7 @@ onBeforeUnmount(() => {
   background: var(--el-fill-color);
   padding: 1px 5px;
   border-radius: 4px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .md-body :deep(table) {
@@ -486,6 +488,11 @@ onBeforeUnmount(() => {
 
 .empty-tip {
   color: var(--el-text-color-secondary);
-  font-size: 13px;
+  font-size: 12px;
+}
+
+.page-item:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
 }
 </style>

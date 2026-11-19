@@ -16,3 +16,6 @@ data/
 # 数据库备份/导出（可能含用户密码哈希与隐私，严禁提交；本地副本放 data/backup/）
 backup/
 memory/
+
+# 项目记忆文档（含 SSH 密钥信息，不入库）
+AGENTS.md

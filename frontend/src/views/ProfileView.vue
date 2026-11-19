@@ -20,7 +20,7 @@
             :http-request="handleAvatarUpload"
             accept="image/*"
           >
-            <div class="avatar-wrap">
+            <div class="avatar-wrap" tabindex="0">
               <el-avatar :size="92" class="avatar" :src="form.userAvatar || undefined">
                 {{ avatarText }}
               </el-avatar>
@@ -405,19 +405,19 @@ onMounted(() => {
 
 .hero-title-block h2 {
   margin: 4px 0 0;
-  font-size: 28px;
+  font-size: 22px;
   color: #0f172a;
 }
 
 .hero-kicker {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #0f766e;
 }
 
 .hero-subtitle {
   margin-top: 4px;
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
 }
 
@@ -436,11 +436,10 @@ onMounted(() => {
 
 .summary-card,
 .panel {
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 24px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(16px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .summary-card {
@@ -463,12 +462,12 @@ onMounted(() => {
 
 .panel-head h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
   color: #0f172a;
 }
 
 .panel-head span {
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
 }
 
@@ -485,7 +484,7 @@ onMounted(() => {
 }
 
 .avatar {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: #0f766e;
   color: #fff;
   font-weight: 700;
   font-size: 34px;
@@ -517,14 +516,14 @@ onMounted(() => {
 
 .avatar-meta strong {
   display: block;
-  font-size: 18px;
+  font-size: 16px;
   color: #0f172a;
 }
 
 .avatar-meta span {
   display: block;
   margin-top: 4px;
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
 }
 
@@ -545,7 +544,6 @@ onMounted(() => {
   padding: 14px 16px;
   border-radius: 18px;
   background: rgba(248, 250, 252, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .status-pill span {
@@ -557,7 +555,7 @@ onMounted(() => {
 .status-pill strong {
   display: block;
   margin-top: 6px;
-  font-size: 15px;
+  font-size: 14px;
   color: #0f172a;
 }
 
@@ -589,7 +587,6 @@ onMounted(() => {
   padding: 14px 16px;
   border-radius: 18px;
   background: rgba(248, 250, 252, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .setting-copy,
@@ -643,11 +640,10 @@ onMounted(() => {
   padding: 14px 16px;
   border-radius: 18px;
   background: rgba(248, 250, 252, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.14);
 }
 
 .avatar-large {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: #0f766e;
   color: #fff;
   font-weight: 700;
 }

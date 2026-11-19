@@ -141,7 +141,9 @@
               <div class="file-icon-box">
                 <el-icon><Document /></el-icon>
               </div>
-              <span class="doc-file-name" :title="row.name">{{ row.name }}</span>
+              <el-tooltip :content="row.name" placement="top" :show-after="300">
+                <span class="doc-file-name">{{ row.name }}</span>
+              </el-tooltip>
             </div>
           </template>
         </el-table-column>
@@ -251,9 +253,12 @@
           <el-input v-model="editForm.description" type="textarea" :rows="3" placeholder="可选" maxlength="512" />
         </el-form-item>
         <el-form-item label="公开权限">
-          <div class="switch-row">
-            <el-switch v-model="editForm.isPublic" :active-value="1" :inactive-value="0" />
-            <span class="switch-tip">公开后所有人可在公开知识库中检索与浏览</span>
+          <div class="perm-block">
+            <el-radio-group v-model="editForm.isPublic">
+              <el-radio :value="0">私有</el-radio>
+              <el-radio :value="1">公开</el-radio>
+            </el-radio-group>
+            <p class="perm-tip">公开后所有人可在公开知识库中检索与浏览</p>
           </div>
         </el-form-item>
       </el-form>
@@ -808,12 +813,11 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 20px;
+  border-radius: 16px;
   padding: 18px 24px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.03);
-  backdrop-filter: blur(16px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .header-left {
@@ -856,7 +860,7 @@ onBeforeUnmount(() => {
   font-size: 22px;
   font-weight: 700;
   color: #fff;
-  background: linear-gradient(135deg, #0f766e, #14b8a6, #38bdf8);
+  background: #0f766e;
 }
 
 .head-text-block {
@@ -871,7 +875,7 @@ onBeforeUnmount(() => {
 
 .head-title-line h2 {
   margin: 0;
-  font-size: 19px;
+  font-size: 22px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -916,7 +920,6 @@ onBeforeUnmount(() => {
 
 .upload-btn {
   font-weight: 600;
-  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.2);
 }
 
 .desc-strip {
@@ -936,18 +939,17 @@ onBeforeUnmount(() => {
 }
 
 .desc-strip p {
-  font-size: 13px;
+  font-size: 14px;
   color: #134e4a;
   line-height: 1.5;
 }
 
 .docs-main-card {
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 20px;
+  border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.03);
-  backdrop-filter: blur(16px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .docs-toolbar {
@@ -973,7 +975,7 @@ onBeforeUnmount(() => {
 }
 
 .filter-label {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #64748b;
 }
@@ -1003,7 +1005,8 @@ onBeforeUnmount(() => {
 }
 
 .doc-file-name {
-  font-weight: 500;
+  font-size: var(--text-heading);
+  font-weight: 600;
   color: #1e293b;
 }
 
@@ -1034,13 +1037,12 @@ onBeforeUnmount(() => {
   background: #f8fafc;
 }
 
-.switch-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.perm-block {
+  width: 100%;
 }
 
-.switch-tip {
+.perm-tip {
+  margin: 4px 0 0;
   font-size: 12px;
   color: #64748b;
 }
@@ -1081,7 +1083,7 @@ onBeforeUnmount(() => {
 }
 
 .chunk-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: #0f766e;
   background: rgba(20, 184, 166, 0.12);
@@ -1093,9 +1095,17 @@ onBeforeUnmount(() => {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.6;
   color: #334155;
+}
+
+.doc-table :deep(.el-button) {
+  min-height: 28px;
+}
+
+.doc-table :deep(.el-button + .el-button) {
+  margin-left: 8px;
 }
 
 @media (max-width: 768px) {

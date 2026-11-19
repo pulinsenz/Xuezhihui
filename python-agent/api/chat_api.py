@@ -208,6 +208,9 @@ def stream(req: StreamRequest):
                             yield emit_thinking("正在生成回答…")
                             if update.get("answer"):
                                 final_answer = update["answer"]
+                            # answer 节点已按正文引用过滤 sources（未被引用的分片不展示）
+                            if update.get("sources"):
+                                sources = update["sources"]
             # 会话记忆 + 历史持久化（含回答属性/思考过程/参考文献）
             if not final_answer:
                 final_answer = "".join(tokens)
