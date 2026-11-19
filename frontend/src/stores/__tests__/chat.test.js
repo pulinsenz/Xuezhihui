@@ -136,13 +136,32 @@ describe('chat store', () => {
     expect(store.messages[1].streaming).toBe(false)
   })
 
-  it('failStream 显示错误占位并结束发送态', () => {
+  it('failStream 错误写 errorText 标记失败；停止保留内容不算失败', () => {
     const store = useChatStore()
+    // 失败：错误进 errorText，标记 failed（显示重试）
     store.sending = true
     store.pushAssistantPlaceholder()
     store.failStream('出错了')
-    expect(store.messages[0].content).toContain('出错了')
+    expect(store.messages[0].errorText).toBe('出错了')
+    expect(store.messages[0].failed).toBe(true)
+    expect(store.messages[0].streaming).toBe(false)
     expect(store.sending).toBe(false)
+
+    // 失败但已有部分内容：content 保留，错误仍可读
+    store.pushAssistantPlaceholder()
+    store.appendToken('部分回答')
+    store.failStream('网络中断')
+    expect(store.messages[1].content).toBe('部分回答')
+    expect(store.messages[1].errorText).toBe('网络中断')
+
+    // 用户主动停止：标记 stopped，不算失败（不显示重试）
+    store.sending = true
+    store.pushAssistantPlaceholder()
+    store.appendToken('已生成一半')
+    store.failStream('已停止生成', true)
+    expect(store.messages[2].content).toBe('已生成一半')
+    expect(store.messages[2].stopped).toBe(true)
+    expect(store.messages[2].failed).toBe(false)
   })
 
   it('finishStream 记录路由/参考文献/思考轨迹', async () => {

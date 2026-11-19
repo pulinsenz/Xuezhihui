@@ -76,8 +76,8 @@
 
       <!-- 右侧：对话区 -->
       <div class="chat-column">
-        <!-- 消息流展示区 -->
-        <div ref="messageAreaRef" class="message-area" @scroll="onScroll">
+        <!-- 消息流展示区；cite 点击委托到容器 -->
+        <div ref="messageAreaRef" class="message-area" @scroll="onScroll" @click="onMessageAreaClick">
           <div v-if="chat.messages.length === 0" class="chat-welcome">
             <div class="welcome-icon-box">
               <el-icon><ChatDotRound /></el-icon>
@@ -100,9 +100,11 @@
             v-for="(msg, idx) in chat.messages"
             :key="idx"
             class="msg-row"
-            :class="msg.role"
+            :class="[msg.role, { cont: isContMsg(idx) }]"
+            :data-midx="idx"
           >
-            <el-avatar :size="36" class="msg-avatar" :class="msg.role">
+            <!-- 连续同人消息不重复头像，气泡对齐到头像下方区域 -->
+            <el-avatar v-if="!isContMsg(idx)" :size="36" class="msg-avatar" :class="msg.role">
               <template v-if="msg.role === 'user'">
                 {{ userAvatarText }}
               </template>
@@ -114,16 +116,24 @@
             <div class="msg-bubble-wrap" :class="msg.role">
               <div class="msg-bubble" :class="msg.role">
                 <template v-if="msg.role === 'assistant'">
-                  <!-- 意图与数据来源标识 -->
-                  <div v-if="provenanceOf(msg).label" class="msg-provenance">
+                  <!-- 意图与数据来源标识：思考阶段先不显示，避免与「正在思考…」抢占 -->
+                  <div v-if="provenanceOf(msg).label && (msg.content || !msg.streaming)" class="msg-provenance">
                     <el-tag size="small" :type="provenanceOf(msg).type" effect="plain" class="route-tag">
                       {{ provenanceOf(msg).label }}
                     </el-tag>
                   </div>
-                  <span v-if="msg.streaming" class="typing-cursor" />
+                  <!-- 首个 token 到达前的思考中指示 -->
+                  <span v-if="msg.streaming && !msg.content" class="thinking-indicator">
+                    <span class="thinking-dots"><i /><i /><i /></span>
+                    正在思考…
+                  </span>
                 </template>
 
-                <div class="msg-text" v-html="renderText(msg.content)" />
+                <div v-if="msg.content" class="msg-text" v-html="bubbleHtmlOf(msg)" />
+
+                <!-- 停止 / 失败尾注 -->
+                <div v-if="msg.stopped" class="stopped-note">⏸ 已停止生成</div>
+                <div v-else-if="msg.errorText" class="failed-note">⚠️ {{ msg.errorText }}</div>
 
                 <!-- 思考过程折叠卡片 -->
                 <details v-if="msg.role === 'assistant' && msg.thinking?.length" class="msg-thinking">
@@ -151,7 +161,12 @@
                     <span class="refs-arrow">{{ refsOpenOf(msg) ? '收起 ▴' : '展开 ▾' }}</span>
                   </div>
                   <div v-if="refsOpenOf(msg)" class="refs-list-box">
-                    <div v-for="(s, i) in msg.sources" :key="i" class="ref-item">
+                    <div
+                      v-for="(s, i) in msg.sources"
+                      :key="i"
+                      class="ref-item"
+                      :data-ref-no="String(s.cite_no ?? i + 1)"
+                    >
                       <div class="ref-lead">
                         <span class="refs-num">[{{ s.cite_no ?? i + 1 }}]</span>
                         <span v-if="s.doc_name" class="refs-doc">{{ s.doc_name }}</span>
@@ -160,6 +175,18 @@
                     </div>
                   </div>
                 </div>
+              </div>
+
+              <!-- 消息操作条：复制 / 失败重试 -->
+              <div v-if="msg.role === 'assistant' && !msg.streaming" class="msg-actions">
+                <button type="button" class="act-btn" @click="copyMessage(msg)">
+                  <el-icon><CopyDocument /></el-icon>
+                  <span>复制</span>
+                </button>
+                <button v-if="msg.failed" type="button" class="act-btn retry" @click="retryMessage(msg, idx)">
+                  <el-icon><RefreshLeft /></el-icon>
+                  <span>重试</span>
+                </button>
               </div>
             </div>
           </div>
@@ -189,14 +216,17 @@
                 <span>Enter 发送 / Shift+Enter 换行</span>
               </div>
               <el-button
-                type="primary"
+                :type="chat.sending ? 'warning' : 'primary'"
+                :plain="chat.sending"
                 class="send-btn"
-                :loading="chat.sending"
-                :disabled="!inputText.trim()"
-                @click="handleSend"
+                :disabled="!chat.sending && !inputText.trim()"
+                @click="chat.sending ? handleStop() : handleSend()"
               >
-                <span>{{ chat.sending ? '生成中' : '发送' }}</span>
-                <el-icon class="send-icon"><Promotion /></el-icon>
+                <span>{{ chat.sending ? '停止' : '发送' }}</span>
+                <el-icon class="send-icon">
+                  <VideoPause v-if="chat.sending" />
+                  <Promotion v-else />
+                </el-icon>
               </el-button>
             </div>
           </div>
@@ -214,6 +244,7 @@ import {
   ArrowDown,
   ChatDotRound,
   ChatLineSquare,
+  CopyDocument,
   Cpu,
   Delete,
   Document,
@@ -222,7 +253,10 @@ import {
   Opportunity,
   Plus,
   Promotion,
+  RefreshLeft,
+  VideoPause,
 } from '@element-plus/icons-vue'
+import { renderMarkdown } from '../utils/markdown'
 import { listMyKnowledge, listDocs } from '../api/knowledge'
 import { getSettings } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
@@ -231,6 +265,8 @@ import { useChatStore } from '../stores/chat'
 const authStore = useAuthStore()
 // 当前流式请求的中止控制器：切路由/卸载时中断 fetch，不再向已卸载组件写消息
 let streamAbort = null
+// 区分「用户点停止」与「离开页面」两种中断：停止保留内容且不算失败
+const stopRequested = ref(false)
 onBeforeUnmount(() => {
   if (streamAbort) streamAbort.abort()
 })
@@ -289,13 +325,16 @@ const onEnterKey = (e) => {
   handleSend()
 }
 
-// 简单文本渲染：换行转 <br>，并高亮引用编号 [1][2]
-const renderText = (text) => {
-  const escaped = (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-  return escaped
-    .replace(/\n/g, '<br>')
-    .replace(/\[(\d+)\]/g, '<span class="cite">[$1]</span>')
+// 气泡 HTML：Markdown 渲染（utils/markdown 内置 [n] 引用高亮与 XSS 消毒）；
+// 流式中把光标拼进 HTML 尾部，闪烁跟随最后一个字符
+const bubbleHtmlOf = (msg) => {
+  const html = renderMarkdown(msg.content)
+  return msg.streaming ? `${html}<span class="typing-cursor"></span>` : html
 }
+
+// 连续同人消息：不重复头像，气泡对齐到头像下方区域
+const isContMsg = (idx) =>
+  idx > 0 && chat.messages[idx - 1]?.role === chat.messages[idx]?.role
 
 // 回答属性：路由 → 标签文案与颜色
 const provenanceOf = (msg) => {
@@ -368,14 +407,10 @@ const useSuggestion = (tip) => {
   inputText.value = tip
 }
 
-const handleSend = async () => {
-  const text = inputText.value.trim()
-  if (!text || chat.sending) return
-
-  inputText.value = ''
-
+const sendQuery = async (text) => {
   followBottom.value = true
   showJumpBtn.value = false
+  stopRequested.value = false
   chat.pushUserMessage(text)
   chat.pushAssistantPlaceholder()
   chat.sending = true
@@ -427,9 +462,9 @@ const handleSend = async () => {
     }
     if (!finished) await chat.finishStream({})
   } catch (e) {
-    // 主动离开页面触发的中止不算错误，静默即可
     if (e.name === 'AbortError') {
-      chat.failStream('已离开对话')
+      // 用户点「停止」保留已生成内容且不算失败；离开页面的中断不提示
+      chat.failStream(stopRequested.value ? '已停止生成' : '已离开对话', stopRequested.value)
     } else {
       chat.failStream(e.message || '对话失败，请稍后再试')
       ElMessage.error(e.message || '对话失败，请稍后再试')
@@ -439,6 +474,75 @@ const handleSend = async () => {
     chat.sending = false
     scrollToBottom()
   }
+}
+
+const handleSend = () => {
+  const text = inputText.value.trim()
+  if (!text || chat.sending) return
+
+  inputText.value = ''
+  sendQuery(text)
+}
+
+// 停止生成：中断流式请求，已生成内容保留（streaming 态发送按钮触发）
+const handleStop = () => {
+  if (!chat.sending || !streamAbort) return
+  stopRequested.value = true
+  streamAbort.abort()
+}
+
+// 失败重试：失败轮次后端未落库，本地移除该轮并原样重发
+const retryMessage = (msg, idx) => {
+  if (chat.sending) return
+  const userMsg = chat.messages[idx - 1]
+  if (!userMsg || userMsg.role !== 'user' || !userMsg.content) return
+  chat.messages.splice(idx - 1, 2)
+  sendQuery(userMsg.content)
+}
+
+// 复制回答（HTTP 非安全上下文无 navigator.clipboard，降级 execCommand）
+const copyMessage = async (msg) => {
+  const text = msg.content
+  if (!text) return
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text)
+    } else {
+      const ta = document.createElement('textarea')
+      ta.value = text
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      ta.remove()
+    }
+    ElMessage.success('已复制到剪贴板')
+  } catch (e) {
+    ElMessage.error('复制失败，请手动选择文本复制')
+  }
+}
+
+// 正文引用编号 [n] 点击：展开引用区，滚动定位并闪烁高亮对应条目
+const onMessageAreaClick = (e) => {
+  const citeEl = e.target.closest('.cite')
+  if (!citeEl) return
+  const row = citeEl.closest('.msg-row')
+  const idx = row ? Number(row.dataset.midx) : NaN
+  const msg = chat.messages[idx]
+  if (!msg?.sources?.length) return
+  const no = (citeEl.textContent.match(/\d+/) || [])[0]
+  if (!no) return
+  msg.refsOpen = true
+  nextTick(() => {
+    const target = messageAreaRef.value?.querySelector(
+      `.msg-row[data-midx="${idx}"] .ref-item[data-ref-no="${no}"]`
+    )
+    if (!target) return
+    target.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    target.classList.add('ref-flash')
+    setTimeout(() => target.classList.remove('ref-flash'), 1600)
+  })
 }
 
 const handleNewSession = () => {
@@ -871,13 +975,23 @@ watch(
 }
 
 .msg-bubble-wrap {
-  max-width: 78%;
+  max-width: 88%;
   display: flex;
   flex-direction: column;
+  min-width: 0;
 }
 
 .msg-bubble-wrap.user {
   align-items: flex-end;
+}
+
+/* 连续同人消息：无头像行，气泡缩进对齐到首条头像正下方 */
+.msg-row.cont:not(.user) .msg-bubble-wrap {
+  margin-left: 50px;
+}
+
+.msg-row.cont.user .msg-bubble-wrap {
+  margin-right: 50px;
 }
 
 .msg-bubble {
@@ -915,6 +1029,145 @@ watch(
 .msg-bubble.user .cite {
   background: rgba(255, 255, 255, 0.2);
   color: #ffffff;
+}
+
+/* 正文可点击：cite 有 hover 反馈 */
+.msg-text .cite {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.msg-text .cite:hover {
+  background: rgba(20, 184, 166, 0.28);
+}
+
+.msg-bubble.user .msg-text .cite {
+  cursor: default;
+}
+
+.msg-bubble.user .msg-text .cite:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* Markdown 元素（v-html 内容走 :deep） */
+.msg-text :deep(p) {
+  margin: 0 0 8px;
+}
+
+.msg-text :deep(p:last-child) {
+  margin-bottom: 0;
+}
+
+.msg-text :deep(h1),
+.msg-text :deep(h2),
+.msg-text :deep(h3),
+.msg-text :deep(h4) {
+  margin: 12px 0 8px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.5;
+}
+
+.msg-text :deep(h1:first-child),
+.msg-text :deep(h2:first-child),
+.msg-text :deep(h3:first-child) {
+  margin-top: 0;
+}
+
+.msg-text :deep(ul),
+.msg-text :deep(ol) {
+  margin: 6px 0 10px;
+  padding-left: 20px;
+}
+
+.msg-text :deep(li) {
+  margin: 3px 0;
+}
+
+.msg-text :deep(li > p) {
+  margin: 0;
+}
+
+.msg-text :deep(table) {
+  border-collapse: collapse;
+  margin: 10px 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.msg-text :deep(th),
+.msg-text :deep(td) {
+  border: 1px solid #e2e8f0;
+  padding: 5px 12px;
+  text-align: left;
+}
+
+.msg-text :deep(th) {
+  background: #f1f5f9;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.msg-text :deep(pre) {
+  margin: 10px 0;
+  padding: 10px 14px;
+  background: #0f172a;
+  color: #e2e8f0;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.msg-text :deep(code) {
+  font-family: 'Cascadia Code', Consolas, monospace;
+  font-size: 12.5px;
+}
+
+.msg-text :deep(:not(pre) > code) {
+  background: rgba(20, 184, 166, 0.1);
+  color: #0f766e;
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.msg-text :deep(blockquote) {
+  margin: 8px 0;
+  padding: 2px 0 2px 12px;
+  border-left: 3px solid #cbd5e1;
+  color: #64748b;
+}
+
+.msg-text :deep(a) {
+  color: #0f766e;
+  font-weight: 500;
+}
+
+.msg-text :deep(img) {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+.msg-text :deep(hr) {
+  border: 0;
+  border-top: 1px solid #e2e8f0;
+  margin: 12px 0;
+}
+
+/* 用户气泡（teal 底）内的 markdown 适配 */
+.msg-bubble.user .msg-text :deep(:not(pre) > code) {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+.msg-bubble.user .msg-text :deep(a) {
+  color: #ffffff;
+  text-decoration: underline;
 }
 
 .msg-provenance {
@@ -1025,8 +1278,8 @@ watch(
 .typing-cursor {
   display: inline-block;
   width: 6px;
-  height: 16px;
-  margin-right: 4px;
+  height: 15px;
+  margin-left: 2px;
   vertical-align: text-bottom;
   background: #14b8a6;
   animation: blink 0.8s infinite;
@@ -1035,6 +1288,113 @@ watch(
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+/* 首个 token 到达前的思考中指示 */
+.thinking-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.thinking-dots {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.thinking-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #14b8a6;
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+
+.thinking-dots i:nth-child(2) { animation-delay: 0.15s; }
+.thinking-dots i:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes thinking-pulse {
+  0%, 70%, 100% { opacity: 0.25; transform: scale(0.85); }
+  35% { opacity: 1; transform: scale(1); }
+}
+
+/* 停止 / 失败尾注 */
+.stopped-note {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 8px;
+  padding: 3px 12px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 999px;
+  background: #f8fafc;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.failed-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 8px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+  font-size: 12px;
+  color: #ef4444;
+  line-height: 1.5;
+}
+
+/* 消息操作条：常显弱化，保证触屏可达 */
+.msg-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  opacity: 0.55;
+  transition: opacity 0.18s ease;
+}
+
+.msg-bubble-wrap:hover .msg-actions,
+.msg-actions:focus-within {
+  opacity: 1;
+}
+
+.act-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.act-btn:hover {
+  color: #0f766e;
+  background: rgba(20, 184, 166, 0.09);
+}
+
+.act-btn.retry {
+  color: #b45309;
+}
+
+.act-btn.retry:hover {
+  color: #92400e;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+/* 引用条目点击定位后的闪烁高亮 */
+.ref-item.ref-flash {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.55);
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.15);
 }
 
 /* 跳至最新：真浮层，唯一配重阴影的元素 */
@@ -1131,6 +1491,15 @@ watch(
   }
   .message-area {
     padding: 16px;
+  }
+  .msg-bubble-wrap {
+    max-width: 92%;
+  }
+  .msg-row.cont:not(.user) .msg-bubble-wrap {
+    margin-left: 42px;
+  }
+  .msg-row.cont.user .msg-bubble-wrap {
+    margin-right: 42px;
   }
   .chat-input-wrapper {
     padding: 12px 16px 16px;

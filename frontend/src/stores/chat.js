@@ -118,11 +118,14 @@ export const useChatStore = defineStore('chat', {
         // 忽略：列表刷新失败不影响当前对话
       }
     },
-    failStream(msg) {
+    // stopped=true 表示用户主动停止（不算失败，不显示重试）；失败轮次后端未落库，本地可安全重试
+    failStream(msg, stopped = false) {
       const cur = this.messages[this.messages.length - 1]
       if (cur) {
         cur.streaming = false
-        cur.content = cur.content || `⚠️ ${msg}`
+        cur.errorText = msg // 气泡内尾注：content 为空时是唯一内容，有部分内容时作补充
+        cur.failed = !stopped
+        if (stopped) cur.stopped = true
       }
       this.sending = false
     },
