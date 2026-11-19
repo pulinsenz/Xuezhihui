@@ -289,7 +289,7 @@ const formatTime = (epochSec) => {
 }
 
 .hero-kicker {
-  font-size: 13px;
+  font-size: 12px;
   color: #0f766e;
   font-weight: 600;
 }
@@ -297,7 +297,7 @@ const formatTime = (epochSec) => {
 .hero-subtitle {
   margin-top: 4px;
   color: #64748b;
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .hero-actions {
@@ -314,11 +314,10 @@ const formatTime = (epochSec) => {
 
 .stat-card,
 .panel {
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 24px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-card);
 }
 
 .stat-card {
@@ -339,24 +338,12 @@ const formatTime = (epochSec) => {
   font-size: 22px;
 }
 
-.stat-icon.mint {
+.stat-icon.mint,
+.stat-icon.blue,
+.stat-icon.violet,
+.stat-icon.amber {
   background: rgba(20, 184, 166, 0.14);
   color: #0f766e;
-}
-
-.stat-icon.blue {
-  background: rgba(59, 130, 246, 0.14);
-  color: #2563eb;
-}
-
-.stat-icon.violet {
-  background: rgba(168, 85, 247, 0.14);
-  color: #7c3aed;
-}
-
-.stat-icon.amber {
-  background: rgba(245, 158, 11, 0.14);
-  color: #b45309;
 }
 
 .stat-copy {
@@ -401,12 +388,12 @@ const formatTime = (epochSec) => {
 }
 
 .panel-head h3 {
-  font-size: 18px;
+  font-size: 16px;
   color: #0f172a;
 }
 
 .panel-head span {
-  font-size: 13px;
+  font-size: 12px;
   color: #64748b;
 }
 
@@ -428,13 +415,12 @@ const formatTime = (epochSec) => {
   justify-content: center;
   gap: 8px;
   cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
 .shortcut:hover {
-  transform: translateY(-1px);
   border-color: rgba(20, 184, 166, 0.32);
-  box-shadow: 0 10px 24px rgba(20, 184, 166, 0.08);
+  background: #f6f8fa;
 }
 
 .shortcut .el-icon {
@@ -458,8 +444,7 @@ const formatTime = (epochSec) => {
 .status-pill {
   padding: 14px 16px;
   border-radius: 18px;
-  background: rgba(248, 250, 252, 0.92);
-  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: #f8fafc;
 }
 
 .setting-strip span,
@@ -473,7 +458,7 @@ const formatTime = (epochSec) => {
 .status-pill strong {
   display: block;
   margin-top: 6px;
-  font-size: 15px;
+  font-size: 14px;
   color: #0f172a;
 }
 
@@ -492,17 +477,17 @@ const formatTime = (epochSec) => {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 16px;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 0;
   border-radius: 18px;
-  background: #fff;
+  background: #f8fafc;
   cursor: pointer;
   text-align: left;
+  transition: background-color 0.18s ease;
 }
 
 .session-row:hover,
 .knowledge-row:hover {
-  border-color: rgba(20, 184, 166, 0.28);
-  box-shadow: 0 12px 26px rgba(15, 23, 42, 0.05);
+  background: rgba(20, 184, 166, 0.08);
 }
 
 .session-main,

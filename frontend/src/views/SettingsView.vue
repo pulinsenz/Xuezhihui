@@ -121,14 +121,14 @@ const handleCollapseChange = async (val) => {
 }
 
 .hero-kicker {
-  font-size: 13px;
+  font-size: 12px;
   color: #0f766e;
   font-weight: 600;
 }
 
 .hero-bar h2 {
   margin: 4px 0 0;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -136,7 +136,7 @@ const handleCollapseChange = async (val) => {
 .hero-subtitle {
   margin-top: 6px;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .settings-card {
@@ -151,17 +151,15 @@ const handleCollapseChange = async (val) => {
   justify-content: space-between;
   gap: 20px;
   padding: 24px;
-  background: rgba(255, 255, 255, 0.85);
+  background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
-  backdrop-filter: blur(12px);
-  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: border-color 0.2s ease;
 }
 
 .setting-item:hover {
   border-color: rgba(20, 184, 166, 0.28);
-  box-shadow: 0 14px 34px rgba(20, 184, 166, 0.06);
 }
 
 .setting-main {
@@ -183,7 +181,7 @@ const handleCollapseChange = async (val) => {
 
 .setting-desc {
   margin-top: 6px;
-  font-size: 13.5px;
+  font-size: 12px;
   color: #64748b;
   line-height: 1.6;
 }

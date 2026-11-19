@@ -30,10 +30,15 @@
         </el-form-item>
         <el-form-item prop="captchaAnswer">
           <div class="captcha-row">
-            <div class="captcha-img" :title="captchaImage ? '看不清？点击图片刷新' : '验证码加载失败，点击重试'" @click="refreshCaptcha">
-              <el-icon v-if="!captchaImage" class="captcha-img-loading"><Loading /></el-icon>
-              <img v-else :src="captchaImageSrc" alt="验证码" />
-            </div>
+            <el-tooltip
+              :content="captchaImage ? '看不清？点击图片刷新' : '验证码加载失败，点击重试'"
+              placement="top"
+            >
+              <div class="captcha-img" @click="refreshCaptcha">
+                <el-icon v-if="!captchaImage" class="captcha-img-loading"><Loading /></el-icon>
+                <img v-else :src="captchaImageSrc" alt="验证码" />
+              </div>
+            </el-tooltip>
             <el-input v-model="registerForm.captchaAnswer" placeholder="验证码计算结果" :prefix-icon="Key" @keyup.enter="handleRegister" />
           </div>
         </el-form-item>
@@ -194,7 +199,7 @@ const handleRegister = async () => {
   width: 164px;
   height: 52px;
   border: 1px solid var(--el-border-color);
-  border-radius: 4px;
+  border-radius: var(--el-border-radius-base);
   overflow: hidden;
   cursor: pointer;
   background: #f4f4f4;

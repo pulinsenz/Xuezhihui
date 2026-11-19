@@ -3,7 +3,6 @@
     <!-- 顶部：标题 + 知识库选择与状态 -->
     <div class="chat-header">
       <div class="header-main">
-        <div class="header-badge">AI Assistant</div>
         <h2>智能对话</h2>
       </div>
       <div class="header-right">
@@ -59,22 +58,16 @@
                 <div class="session-title" :title="s.title">{{ s.title || '未命名会话' }}</div>
                 <div class="session-sub">{{ formatTime(s.update_time) }} · {{ s.message_count }} 条消息</div>
               </div>
-              <el-icon
-                v-if="!chat.sending"
-                class="session-edit"
-                title="重命名会话"
-                @click.stop="handleRenameSession(s)"
-              >
-                <EditPen />
-              </el-icon>
-              <el-icon
-                v-if="!chat.sending"
-                class="session-del"
-                title="删除会话"
-                @click.stop="handleDeleteSession(s)"
-              >
-                <Delete />
-              </el-icon>
+              <el-tooltip v-if="!chat.sending" content="重命名会话" placement="top">
+                <button type="button" class="session-edit" @click.stop="handleRenameSession(s)">
+                  <el-icon><EditPen /></el-icon>
+                </button>
+              </el-tooltip>
+              <el-tooltip v-if="!chat.sending" content="删除会话" placement="top">
+                <button type="button" class="session-del" @click.stop="handleDeleteSession(s)">
+                  <el-icon><Delete /></el-icon>
+                </button>
+              </el-tooltip>
             </div>
           </div>
           <div v-else class="panel-tip">暂无历史会话，点击上方开启新对话</div>
@@ -84,7 +77,7 @@
       <!-- 右侧：对话区 -->
       <div class="chat-column">
         <!-- 消息流展示区 -->
-        <div ref="messageAreaRef" class="message-area">
+        <div ref="messageAreaRef" class="message-area" @scroll="onScroll">
           <div v-if="chat.messages.length === 0" class="chat-welcome">
             <div class="welcome-icon-box">
               <el-icon><ChatDotRound /></el-icon>
@@ -172,6 +165,12 @@
           </div>
         </div>
 
+        <!-- 用户上翻后停止自动跟随，提供跳至最新入口 -->
+        <button v-if="showJumpBtn" type="button" class="jump-latest" @click="jumpToLatest">
+          <span>跳至最新</span>
+          <el-icon><ArrowDown /></el-icon>
+        </button>
+
         <!-- 输入控制区 -->
         <div class="chat-input-wrapper">
           <div class="input-card">
@@ -183,7 +182,7 @@
               placeholder="输入你的问题，按 Enter 发送，Shift + Enter 换行..."
               :disabled="chat.sending"
               class="custom-textarea"
-              @keydown.enter.exact.prevent="handleSend"
+              @keydown.enter.exact.prevent="onEnterKey"
             />
             <div class="input-toolbar">
               <div class="input-hints">
@@ -212,6 +211,7 @@ import { onMounted, onBeforeUnmount, ref, nextTick, watch, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
+  ArrowDown,
   ChatDotRound,
   ChatLineSquare,
   Cpu,
@@ -257,11 +257,36 @@ const userAvatarText = computed(() => {
   return name.charAt(0).toUpperCase()
 })
 
-const scrollToBottom = () => {
+// 用户上翻（距底 > 60px）时暂停自动跟随，避免流式输出把历史内容拽走
+const followBottom = ref(true)
+const showJumpBtn = ref(false)
+
+const onScroll = () => {
+  const el = messageAreaRef.value
+  if (!el) return
+  const dist = el.scrollHeight - el.scrollTop - el.clientHeight
+  followBottom.value = dist < 60
+  showJumpBtn.value = dist >= 60 && chat.messages.length > 0
+}
+
+const jumpToLatest = () => {
+  followBottom.value = true
+  showJumpBtn.value = false
+  scrollToBottom(true)
+}
+
+const scrollToBottom = (force = false) => {
   nextTick(() => {
     const el = messageAreaRef.value
-    if (el) el.scrollTop = el.scrollHeight
+    if (!el || (!force && !followBottom.value)) return
+    el.scrollTop = el.scrollHeight
   })
+}
+
+// 中文输入法组词确认的回车只选字，不发送
+const onEnterKey = (e) => {
+  if (e.isComposing || e.keyCode === 229) return
+  handleSend()
 }
 
 // 简单文本渲染：换行转 <br>，并高亮引用编号 [1][2]
@@ -349,10 +374,12 @@ const handleSend = async () => {
 
   inputText.value = ''
 
+  followBottom.value = true
+  showJumpBtn.value = false
   chat.pushUserMessage(text)
   chat.pushAssistantPlaceholder()
   chat.sending = true
-  scrollToBottom()
+  scrollToBottom(true)
 
   const body = { session_id: chat.activeSessionId, query: text }
   if (knowledgeId.value) body.knowledge_id = knowledgeId.value
@@ -423,7 +450,7 @@ const handleOpenSession = async (s) => {
   if (chat.sending) return
   await chat.openSession(s.session_id)
   enrichHistorySources()
-  scrollToBottom()
+  scrollToBottom(true)
 }
 
 const handleDeleteSession = async (s) => {
@@ -476,7 +503,7 @@ const initLoggedIn = async () => {
   if (id && chat.sessions.some((s) => s.session_id === id)) {
     await chat.openSession(id)
     enrichHistorySources()
-    scrollToBottom()
+    scrollToBottom(true)
   } else {
     chat.newSession()
   }
@@ -518,7 +545,7 @@ watch(
     if (known) {
       await chat.openSession(id)
       enrichHistorySources()
-      scrollToBottom()
+      scrollToBottom(true)
     } else {
       chat.newSession()
     }
@@ -532,11 +559,11 @@ watch(
   min-height: 580px;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 20px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.04);
-  backdrop-filter: blur(16px);
+  background: #ffffff;
+  border: 1px solid #e8eef1;
+  border-radius: 16px;
+  corner-shape: squircle;
+  box-shadow: var(--shadow-card);
   overflow: hidden;
 }
 
@@ -556,20 +583,9 @@ watch(
   gap: 10px;
 }
 
-.header-badge {
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 2px 8px;
-  border-radius: 6px;
-  background: rgba(20, 184, 166, 0.12);
-  color: #0f766e;
-}
-
 .header-main h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: var(--text-heading);
   font-weight: 700;
   color: #0f172a;
 }
@@ -617,8 +633,6 @@ watch(
   width: 100%;
   height: 40px;
   font-weight: 600;
-  border-radius: 12px;
-  box-shadow: 0 4px 14px rgba(20, 184, 166, 0.2);
 }
 
 .session-section-title {
@@ -656,8 +670,7 @@ watch(
 
 .session-item.active {
   background: #ffffff;
-  border: 1px solid rgba(20, 184, 166, 0.25);
-  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.08);
+  border: 1px solid rgba(20, 184, 166, 0.35);
 }
 
 .session-lead-icon {
@@ -676,13 +689,13 @@ watch(
 }
 
 .session-title {
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: 600;
   color: #1e293b;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-right: 36px;
+  padding-right: 72px;
 }
 
 .session-item.active .session-title {
@@ -691,46 +704,55 @@ watch(
 
 .session-sub {
   margin-top: 3px;
-  font-size: 11px;
+  font-size: var(--text-muted);
   color: #94a3b8;
 }
 
-.session-edit {
+/* 行内操作按钮：视觉图标 15px，热区 28px，留出间距防误触 */
+.session-edit,
+.session-del {
   position: absolute;
-  right: 30px;
   top: 50%;
   transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
   color: #cbd5e1;
-  font-size: 14px;
+  font-size: 16px;
+  cursor: pointer;
   opacity: 0;
-  transition: opacity 0.2s ease, color 0.2s ease;
+  transition: opacity 0.2s ease, color 0.15s ease, background 0.15s ease;
 }
 
-.session-item:hover .session-edit {
+.session-edit {
+  right: 40px;
+}
+
+.session-del {
+  right: 4px;
+}
+
+.session-item:hover .session-edit,
+.session-item:hover .session-del,
+.session-edit:focus-visible,
+.session-del:focus-visible {
   opacity: 1;
 }
 
 .session-edit:hover {
   color: #0f766e;
-}
-
-.session-del {
-  position: absolute;
-  right: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: #cbd5e1;
-  font-size: 14px;
-  opacity: 0;
-  transition: opacity 0.2s ease, color 0.2s ease;
-}
-
-.session-item:hover .session-del {
-  opacity: 1;
+  background: #f1f5f9;
 }
 
 .session-del:hover {
   color: #ef4444;
+  background: #fef2f2;
 }
 
 .panel-tip {
@@ -747,6 +769,7 @@ watch(
   display: flex;
   flex-direction: column;
   min-width: 0;
+  position: relative;
   background: #ffffff;
 }
 
@@ -771,8 +794,9 @@ watch(
   width: 64px;
   height: 64px;
   margin: 0 auto 16px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.15), rgba(14, 165, 233, 0.15));
+  border-radius: 16px;
+  corner-shape: squircle;
+  background: rgba(15, 118, 110, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -781,7 +805,7 @@ watch(
 }
 
 .chat-welcome h3 {
-  font-size: 20px;
+  font-size: var(--text-heading);
   font-weight: 700;
   color: #0f172a;
   margin-bottom: 8px;
@@ -805,18 +829,17 @@ watch(
   background: #f8fafc;
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 12px;
-  font-size: 13px;
+  font-size: var(--text-body);
   color: #334155;
   cursor: pointer;
   text-align: left;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
 .suggest-chip:hover {
   background: #f0fdfa;
   border-color: rgba(20, 184, 166, 0.4);
   color: #0f766e;
-  transform: translateY(-1px);
 }
 
 /* 消息流气泡 */
@@ -836,13 +859,13 @@ watch(
 }
 
 .msg-avatar.user {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: #0f766e;
   color: #fff;
   font-weight: 600;
 }
 
 .msg-avatar.assistant {
-  background: linear-gradient(135deg, #3b82f6, #06b6d4);
+  background: #475569;
   color: #fff;
   font-size: 18px;
 }
@@ -860,14 +883,13 @@ watch(
 .msg-bubble {
   padding: 14px 18px;
   border-radius: 18px;
-  font-size: 14px;
+  font-size: var(--text-body);
   line-height: 1.7;
   word-break: break-word;
-  box-shadow: 0 2px 10px rgba(15, 23, 42, 0.03);
 }
 
 .msg-bubble.user {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: #0f766e;
   color: #ffffff;
   border-top-right-radius: 4px;
 }
@@ -946,7 +968,7 @@ watch(
   justify-content: space-between;
   color: #334155;
   font-weight: 600;
-  font-size: 13px;
+  font-size: var(--text-muted);
   cursor: pointer;
   user-select: none;
 }
@@ -959,7 +981,7 @@ watch(
 }
 
 .refs-arrow {
-  font-size: 11px;
+  font-size: var(--text-muted);
   color: #94a3b8;
 }
 
@@ -1015,6 +1037,33 @@ watch(
   50% { opacity: 0; }
 }
 
+/* 跳至最新：真浮层，唯一配重阴影的元素 */
+.jump-latest {
+  position: absolute;
+  left: 50%;
+  bottom: 96px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 0 14px;
+  border: 1px solid #e8eef1;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #334155;
+  font-size: var(--text-muted);
+  cursor: pointer;
+  box-shadow: var(--shadow-pop);
+  z-index: 2;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.jump-latest:hover {
+  color: #0f766e;
+  border-color: rgba(20, 184, 166, 0.4);
+}
+
 /* 输入框 */
 .chat-input-wrapper {
   padding: 16px 28px 24px;
@@ -1023,17 +1072,17 @@ watch(
 }
 
 .input-card {
-  border: 1px solid rgba(203, 213, 225, 0.8);
-  border-radius: 16px;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  corner-shape: squircle;
   padding: 10px 14px;
   background: #ffffff;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .input-card:focus-within {
-  border-color: #14b8a6;
-  box-shadow: 0 4px 20px rgba(20, 184, 166, 0.12);
+  border-color: #0f766e;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
 .custom-textarea :deep(.el-textarea__inner) {
@@ -1054,7 +1103,7 @@ watch(
 }
 
 .input-hints {
-  font-size: 11px;
+  font-size: var(--text-muted);
   color: #94a3b8;
 }
 

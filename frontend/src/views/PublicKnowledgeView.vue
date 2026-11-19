@@ -23,7 +23,12 @@
 
     <el-row v-loading="loading" :gutter="20" class="kb-row">
       <el-col v-for="kb in list" :key="kb.id" :xs="24" :sm="12" :md="8" :lg="6" :xl="6">
-        <div class="kb-card" @click="goDetail(kb.id)">
+        <div
+          class="kb-card"
+          tabindex="0"
+          @click="goDetail(kb.id)"
+          @keydown.enter.prevent="goDetail(kb.id)"
+        >
           <!-- 自己的公开知识库：右上角“我的”徽标 -->
           <div v-if="kb.isOwner" class="kb-badge-wrapper">
             <el-tag type="success" effect="dark" size="small" class="mine-badge">我的</el-tag>
@@ -36,7 +41,9 @@
 
           <div class="kb-body">
             <div class="kb-head-row">
-              <h3 class="kb-name" :title="kb.name">{{ kb.name }}</h3>
+              <el-tooltip :content="kb.name" placement="top" :show-after="300">
+                <h3 class="kb-name">{{ kb.name }}</h3>
+              </el-tooltip>
               <el-tag size="small" type="success" effect="plain">公开</el-tag>
             </div>
 
@@ -45,7 +52,9 @@
               <span class="author-name">{{ kb.authorName || '未知作者' }}</span>
             </div>
 
-            <p class="kb-desc" :title="kb.description">{{ kb.description || '暂无知识库简介' }}</p>
+            <el-tooltip :content="kb.description || '暂无知识库简介'" placement="top" :show-after="300" :disabled="!kb.description">
+              <p class="kb-desc">{{ kb.description || '暂无知识库简介' }}</p>
+            </el-tooltip>
 
             <div class="kb-meta-row">
               <div class="kb-stats">
@@ -151,7 +160,7 @@ onMounted(loadList)
 }
 
 .page-header h2 {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -159,7 +168,7 @@ onMounted(loadList)
 .sub {
   margin-top: 4px;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .header-tools {
@@ -178,23 +187,25 @@ onMounted(loadList)
 
 .kb-card {
   position: relative;
-  background: rgba(255, 255, 255, 0.9);
+  background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 20px;
+  border-radius: 16px;
   overflow: hidden;
   margin-bottom: 20px;
   cursor: pointer;
-  box-shadow: 0 10px 25px rgba(15, 23, 42, 0.03);
-  backdrop-filter: blur(16px);
-  transition: all 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
 }
 
 .kb-card:hover {
-  transform: translateY(-4px);
-  border-color: rgba(20, 184, 166, 0.4);
-  box-shadow: 0 16px 36px rgba(20, 184, 166, 0.1);
+  border-color: rgba(15, 118, 110, 0.4);
+}
+
+.kb-card:focus-visible {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 2px;
 }
 
 .kb-badge-wrapper {
@@ -215,11 +226,6 @@ onMounted(loadList)
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform 0.3s ease;
-}
-
-.kb-card:hover .kb-cover-img {
-  transform: scale(1.04);
 }
 
 .kb-cover {
@@ -231,7 +237,7 @@ onMounted(loadList)
   font-size: 40px;
   font-weight: 700;
   color: #ffffff;
-  background: linear-gradient(135deg, #0284c7, #38bdf8, #2dd4bf);
+  background: #0f766e;
 }
 
 .kb-body {
@@ -249,7 +255,7 @@ onMounted(loadList)
 }
 
 .kb-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 700;
   color: #0f172a;
   white-space: nowrap;
@@ -268,7 +274,7 @@ onMounted(loadList)
 .author-avatar {
   background: #64748b;
   color: #fff;
-  font-size: 11px;
+  font-size: 12px;
   flex-shrink: 0;
 }
 
@@ -317,10 +323,10 @@ onMounted(loadList)
 }
 
 .doc-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
-  color: #0284c7;
-  background: rgba(14, 165, 233, 0.1);
+  color: #0f766e;
+  background: rgba(15, 118, 110, 0.08);
   padding: 2px 8px;
   border-radius: 6px;
 }
@@ -330,6 +336,10 @@ onMounted(loadList)
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 6px;
+  gap: 8px;
+}
+
+.kb-footer :deep(.el-button) {
+  min-height: 28px;
 }
 </style>

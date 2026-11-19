@@ -313,14 +313,14 @@ onUnmounted(() => {
 }
 
 .page-kicker {
-  font-size: 13px;
+  font-size: 12px;
   color: #0f766e;
   font-weight: 600;
 }
 
 .page-head h2 {
   margin: 4px 0 0;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
   color: #0f172a;
 }
@@ -328,7 +328,7 @@ onUnmounted(() => {
 .page-subtitle {
   margin-top: 6px;
   color: #64748b;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .message-shell {
@@ -342,11 +342,10 @@ onUnmounted(() => {
 .thread-list,
 .conversation {
   min-height: 0;
-  background: rgba(255, 255, 255, 0.88);
+  background: #ffffff;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 24px;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.06);
-  backdrop-filter: blur(16px);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .thread-list {
@@ -367,13 +366,13 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: #0f172a;
 }
 
 .unread-pill {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 9999px;
@@ -396,11 +395,11 @@ onUnmounted(() => {
   background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: background-color 0.18s ease;
 }
 
 .thread-item:hover {
-  background: rgba(241, 245, 249, 0.65);
+  background: #f1f5f9;
 }
 
 .thread-item.active {
@@ -415,7 +414,7 @@ onUnmounted(() => {
 
 .thread-avatar {
   flex: 0 0 auto;
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: #0f766e;
   color: #fff;
   font-weight: 700;
 }
@@ -450,13 +449,13 @@ onUnmounted(() => {
 }
 
 .thread-time {
-  font-size: 11.5px;
+  font-size: 12px;
   color: #94a3b8;
 }
 
 .thread-snippet {
   margin-top: 6px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: #64748b;
   line-height: 1.5;
   display: -webkit-box;
@@ -480,7 +479,7 @@ onUnmounted(() => {
 }
 
 .conversation-avatar {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: #0f766e;
   color: #fff;
   font-weight: 700;
 }
@@ -505,7 +504,7 @@ onUnmounted(() => {
 
 .conversation-subtitle {
   margin-top: 4px;
-  font-size: 12.5px;
+  font-size: 12px;
   color: #64748b;
 }
 
@@ -535,7 +534,7 @@ onUnmounted(() => {
   min-height: 0;
   padding: 24px 22px;
   overflow-y: auto;
-  background: linear-gradient(180deg, rgba(248, 250, 252, 0.6) 0%, rgba(255, 255, 255, 0.9) 100%);
+  background: #f6f8fa;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -553,7 +552,7 @@ onUnmounted(() => {
 }
 
 .bubble-avatar {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: #0f766e;
   color: #fff;
   font-weight: 700;
   flex-shrink: 0;
@@ -571,7 +570,7 @@ onUnmounted(() => {
   background: #fff;
   border: 1px solid rgba(148, 163, 184, 0.2);
   border-radius: 20px;
-  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
 }
 
 .bubble-row.incoming .bubble {
@@ -580,13 +579,13 @@ onUnmounted(() => {
 
 .bubble-row.outgoing .bubble {
   border-top-right-radius: 6px;
-  background: linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(13, 148, 136, 0.06));
+  background: rgba(20, 184, 166, 0.08);
   border-color: rgba(20, 184, 166, 0.25);
 }
 
 .bubble-title {
   margin-bottom: 8px;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: #0f766e;
 }

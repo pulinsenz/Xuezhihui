@@ -252,11 +252,10 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.92);
-  border-right: 1px solid rgba(226, 232, 240, 0.8);
-  backdrop-filter: blur(20px);
+  background: #ffffff;
+  border-right: 1px solid #e2e8f0;
   transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 2px 0 16px rgba(15, 23, 42, 0.02);
+  box-shadow: 1px 0 2px rgba(15, 23, 42, 0.05);
   z-index: 10;
 }
 
@@ -275,7 +274,6 @@ onUnmounted(() => {
   border-radius: 14px;
   object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 8px 20px rgba(20, 184, 166, 0.25);
 }
 
 .brand-copy {
@@ -283,7 +281,7 @@ onUnmounted(() => {
 }
 
 .brand-name {
-  font-size: 17px;
+  font-size: var(--text-heading);
   font-weight: 700;
   color: #0f172a;
   letter-spacing: -0.01em;
@@ -291,7 +289,7 @@ onUnmounted(() => {
 
 .brand-sub {
   margin-top: 2px;
-  font-size: 11px;
+  font-size: var(--text-muted);
   font-weight: 500;
   color: #0d9488;
   background: rgba(20, 184, 166, 0.1);
@@ -329,12 +327,11 @@ onUnmounted(() => {
 
 .side-menu :deep(.el-menu-item:hover) {
   color: #0f766e;
-  transform: translateX(2px);
 }
 
 .menu-divider-label {
   padding: 14px 20px 6px;
-  font-size: 11px;
+  font-size: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -380,9 +377,8 @@ onUnmounted(() => {
   height: auto;
   min-height: 80px;
   padding: 16px 28px;
-  background: rgba(255, 255, 255, 0.85);
-  border-bottom: 1px solid rgba(226, 232, 240, 0.8);
-  backdrop-filter: blur(20px);
+  background: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
   position: sticky;
   top: 0;
   z-index: 9;
@@ -394,7 +390,7 @@ onUnmounted(() => {
 
 .title-block h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--text-title);
   font-weight: 700;
   line-height: 1.2;
   color: #0f172a;
@@ -403,8 +399,8 @@ onUnmounted(() => {
 
 .title-block p {
   margin-top: 4px;
-  color: #64748b;
-  font-size: 13px;
+  color: var(--text-muted);
+  font-size: var(--text-muted);
 }
 
 .topbar-tools {
@@ -434,22 +430,19 @@ onUnmounted(() => {
   padding: 4px 12px 4px 4px;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.95);
+  background: #ffffff;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease;
 }
 
 .user-chip:hover {
-  border-color: rgba(20, 184, 166, 0.4);
-  box-shadow: 0 4px 12px rgba(20, 184, 166, 0.12);
+  border-color: #14b8a6;
 }
 
 .avatar {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: #0f766e;
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(20, 184, 166, 0.25);
 }
 
 .user-copy {
@@ -459,15 +452,15 @@ onUnmounted(() => {
 }
 
 .user-copy strong {
-  font-size: 13px;
+  font-size: var(--text-body);
   font-weight: 600;
   color: #0f172a;
 }
 
 .user-copy small {
   margin-top: 2px;
-  font-size: 11px;
-  color: #64748b;
+  font-size: var(--text-muted);
+  color: var(--text-muted);
 }
 
 .chevron {
