@@ -13,11 +13,12 @@
           filterable
           class="kb-select"
           :loading="kbLoading"
+          @change="onKnowledgeChange"
         >
           <template #prefix>
             <el-icon class="select-icon"><Folder /></el-icon>
           </template>
-          <el-option v-for="kb in kbList" :key="kb.id" :label="kb.name" :value="kb.id">
+          <el-option v-for="kb in kbList" :key="kb.id" :label="kb.name" :value="String(kb.id)">
             <div class="kb-option-row">
               <span class="kb-option-name">{{ kb.name }}</span>
               <el-tag size="small" effect="plain" type="info">{{ kb.docCount || 0 }} 篇文档</el-tag>
@@ -257,6 +258,7 @@ import {
   VideoPause,
 } from '@element-plus/icons-vue'
 import { renderMarkdown } from '../utils/markdown'
+import { readDraft, writeDraft, writeSessionSel, resolveSessionKb, resolveDraftKb, kbIdInList } from '../utils/kbMemory'
 import { listMyKnowledge, listDocs } from '../api/knowledge'
 import { getSettings } from '../api/settings'
 import { useAuthStore } from '../stores/auth'
@@ -278,6 +280,36 @@ const inputText = ref('')
 const knowledgeId = ref('')
 const kbList = ref([])
 const kbLoading = ref(false)
+
+// ---- 知识库选择记忆 ----
+// 会话级：切回会话恢复该会话上次的选择（本地覆盖 > 最后一条 assistant 消息所用库）
+// 空会话草稿：新开空对话默认上次空对话的选择，空会话发送定型后草稿清空
+const kbNamespace = () => String(authStore.user?.id ?? 'guest')
+
+const restoreKnowledge = () => {
+  const sid = chat.activeSessionId
+  if (!sid) {
+    knowledgeId.value = ''
+  } else if (chat.messages.length) {
+    knowledgeId.value = resolveSessionKb({
+      uid: kbNamespace(),
+      sessionId: sid,
+      messages: chat.messages,
+      kbList: kbList.value,
+    })
+  } else {
+    knowledgeId.value = resolveDraftKb({ uid: kbNamespace(), kbList: kbList.value })
+  }
+}
+
+const onKnowledgeChange = (value) => {
+  const sid = chat.activeSessionId
+  if (!sid) return
+  const v = value ? String(value) : ''
+  if (chat.messages.length) writeSessionSel(kbNamespace(), sid, v)
+  else writeDraft(kbNamespace(), v)
+}
+
 const messageAreaRef = ref(null)
 // 参考文献默认折叠（来自用户设置，1=折叠 0=展开）
 const refsCollapsedDefault = ref(true)
@@ -398,6 +430,10 @@ const loadKnowledge = async () => {
   kbLoading.value = true
   try {
     kbList.value = await listMyKnowledge()
+    // 列表就绪后校正当前选择：记忆的库已删除/无权限则回退为空
+    if (knowledgeId.value && !kbList.value.some((kb) => String(kb.id) === String(knowledgeId.value))) {
+      knowledgeId.value = ''
+    }
   } finally {
     kbLoading.value = false
   }
@@ -411,6 +447,7 @@ const sendQuery = async (text) => {
   followBottom.value = true
   showJumpBtn.value = false
   stopRequested.value = false
+  const wasEmptySession = chat.messages.length === 0 // 空会话本次发送即定型
   chat.pushUserMessage(text)
   chat.pushAssistantPlaceholder()
   chat.sending = true
@@ -452,6 +489,8 @@ const sendQuery = async (text) => {
           chat.addThinking(payload.content || '')
         } else if (payload.type === 'done') {
           finished = true
+          // 空会话已定型：按规则清空草稿，之后新开的空对话知识库选择为空
+          if (wasEmptySession) writeDraft(kbNamespace(), '')
           await chat.finishStream(payload)
           await enrichSourceNames(chat.messages[chat.messages.length - 1])
           scrollToBottom()
@@ -548,11 +587,13 @@ const onMessageAreaClick = (e) => {
 const handleNewSession = () => {
   if (chat.sending) return
   chat.newSession()
+  restoreKnowledge()
 }
 
 const handleOpenSession = async (s) => {
   if (chat.sending) return
   await chat.openSession(s.session_id)
+  restoreKnowledge()
   enrichHistorySources()
   scrollToBottom(true)
 }
@@ -560,7 +601,10 @@ const handleOpenSession = async (s) => {
 const handleDeleteSession = async (s) => {
   if (chat.sending) return
   await ElMessageBox.confirm(`确定删除会话「${s.title}」吗？历史将不可恢复。`, '删除确认', { type: 'warning' })
-  await chat.deleteSession(s.session_id)
+  const removedId = s.session_id
+  await chat.deleteSession(removedId)
+  writeSessionSel(kbNamespace(), removedId, '') // 清理被删会话的本地记忆
+  restoreKnowledge()
   enrichHistorySources()
   scrollToBottom()
 }
@@ -606,28 +650,39 @@ const initLoggedIn = async () => {
   const id = route.params.sessionId || localStorage.getItem('chat_session_id')
   if (id && chat.sessions.some((s) => s.session_id === id)) {
     await chat.openSession(id)
+    restoreKnowledge()
     enrichHistorySources()
     scrollToBottom(true)
   } else {
     chat.newSession()
+    restoreKnowledge()
   }
 }
 
 onMounted(() => {
-  loadKnowledge()
   scrollToBottom()
-  if (authStore.isLogin) initLoggedIn()
-  else chat.resetForGuest()
+  if (authStore.isLogin) {
+    // 先就绪知识库列表再初始化会话，记忆值可被校验；列表加载失败不阻塞会话恢复
+    loadKnowledge()
+      .catch(() => {})
+      .finally(() => initLoggedIn())
+  } else {
+    loadKnowledge()
+    chat.resetForGuest()
+    restoreKnowledge()
+  }
 })
 
 watch(
   () => authStore.isLogin,
   (login) => {
     if (login) {
-      initLoggedIn()
       loadKnowledge()
+        .catch(() => {})
+        .finally(() => initLoggedIn())
     } else {
       chat.resetForGuest()
+      knowledgeId.value = ''
     }
   }
 )
@@ -653,6 +708,7 @@ watch(
     } else {
       chat.newSession()
     }
+    restoreKnowledge()
   }
 )
 </script>
