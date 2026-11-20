@@ -1,0 +1,38 @@
+/* ========== 基础 reset 与元素级 ========== */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, #app { min-height: 100%; }
+
+body {
+  font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--bg);
+  /* 圆点阵：本主题体系的基础纹理 */
+  background-image: radial-gradient(circle, var(--dot) 1.3px, transparent 1.3px);
+  background-size: 26px 26px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 变化的数字用等宽排版，防抖动 */
+body { font-variant-numeric: tabular-nums; }
+
+a { color: var(--blue-ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button, input, textarea, select { font: inherit; color: inherit; }
+button { border: none; background: none; cursor: pointer; }
+
+img { display: block; max-width: 100%; }
+
+/* 键盘焦点必须可见（WCAG 2.4.7）；鼠标点击不触发 */
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; border-radius: 4px; }
+
+/* 防孤字 */
+p, h1, h2, h3, h4, h5 { text-wrap: pretty; }
+
+/* 自定义滚动条 */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--dot); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }

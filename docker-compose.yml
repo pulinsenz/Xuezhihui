@@ -200,6 +200,23 @@ services:
       retries: 5
       start_period: 5s
 
+  # 前端 v2（主题化新前端）：独立容器与端口，与老前端并存；生产由 prod override 对外开 8080
+  frontend-v2:
+    build:
+      context: ./frontend-v2
+    container_name: xzh-frontend-v2
+    ports:
+      - "8080:80"
+    depends_on:
+      java-backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
 volumes:
   mysql-data:
   redis-data:
