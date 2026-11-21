@@ -35,6 +35,7 @@
             </template>
           </el-table-column>
           <el-table-column prop="userId" label="所属用户 ID" width="180" />
+          <el-table-column prop="ownerNickname" label="所属昵称" min-width="120" show-overflow-tooltip />
           <el-table-column prop="docCount" label="文档数" width="100">
             <template #default="{ row }">
               <el-tag size="small" effect="plain">{{ row.docCount }} 篇</el-tag>

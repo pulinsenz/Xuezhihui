@@ -32,6 +32,11 @@ public class KnowledgeVO implements Serializable {
     private Long userId;
 
     /**
+     * 所属用户昵称（管理员列表展示，昵称缺省取账号）
+     */
+    private String ownerNickname;
+
+    /**
      * 是否公开：1=公开 0=私有
      */
     private Integer isPublic;

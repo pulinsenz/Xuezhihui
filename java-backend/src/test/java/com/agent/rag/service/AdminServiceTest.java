@@ -19,6 +19,7 @@ import com.agent.rag.mapper.KnowledgeFavoriteMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.mapper.KnowledgeMemberMapper;
 import com.agent.rag.mapper.UserMapper;
+import com.agent.rag.mapper.WikiPageMapper;
 import com.agent.rag.service.impl.AdminServiceImpl;
 import com.agent.rag.util.UserContext;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -69,6 +70,8 @@ class AdminServiceTest {
     @Mock
     private ForbiddenFileHashMapper forbiddenFileHashMapper;
     @Mock
+    private WikiPageMapper wikiPageMapper;
+    @Mock
     private StringRedisTemplate stringRedisTemplate;
     @Mock
     private Cursor<String> cursor;
@@ -93,6 +96,7 @@ class AdminServiceTest {
         ReflectionTestUtils.setField(adminService, "knowledgeFavoriteMapper", knowledgeFavoriteMapper);
         ReflectionTestUtils.setField(adminService, "knowledgeMemberMapper", knowledgeMemberMapper);
         ReflectionTestUtils.setField(adminService, "forbiddenFileHashMapper", forbiddenFileHashMapper);
+        ReflectionTestUtils.setField(adminService, "wikiPageMapper", wikiPageMapper);
         ReflectionTestUtils.setField(adminService, "stringRedisTemplate", stringRedisTemplate);
         ReflectionTestUtils.setField(adminService, "jwtProperties", jwtProperties);
         ReflectionTestUtils.setField(adminService, "pythonAgentClient", pythonAgentClient);
@@ -244,11 +248,17 @@ class AdminServiceTest {
         Knowledge kb = new Knowledge();
         kb.setId(10L);
         kb.setName("高数");
+        kb.setUserId(5L);
         kb.setIsDelete(1);
         Page<Knowledge> page = new Page<>(1, 10, 1);
         page.setRecords(List.of(kb));
         when(knowledgeMapper.selectKnowledgePage(any(Page.class), any(), eq(1))).thenReturn(page);
         when(knowledgeDocMapper.countAll(10L)).thenReturn(3L);
+        User owner = new User();
+        owner.setId(5L);
+        owner.setUserName("小明");
+        owner.setUserAccount("xm01");
+        when(userMapper.selectBatchIds(any())).thenReturn(List.of(owner));
 
         UserQueryRequest req = new UserQueryRequest();
         req.setDeleted(1);
@@ -258,6 +268,7 @@ class AdminServiceTest {
         assertEquals(1, result.getTotal());
         assertEquals(Integer.valueOf(1), result.getRecords().get(0).getIsDelete());
         assertEquals(Long.valueOf(3), result.getRecords().get(0).getDocCount());
+        assertEquals("小明", result.getRecords().get(0).getOwnerNickname());
     }
 
     // ---------- 知识库详情 / 文档列表 ----------

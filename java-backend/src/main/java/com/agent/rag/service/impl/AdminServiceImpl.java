@@ -41,7 +41,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * 管理员服务实现
@@ -171,6 +175,20 @@ public class AdminServiceImpl implements AdminService {
             vo.setDocCount(knowledgeDocMapper.countAll(knowledge.getId()));
             return vo;
         }).toList();
+        // 批量填充所属用户昵称（一次 in 查询；昵称缺省取账号，用户已删除则显示未知用户）
+        List<Long> ownerIds = knowledgePage.getRecords().stream()
+                .map(Knowledge::getUserId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, User> owners = ownerIds.isEmpty() ? Map.of()
+                : userMapper.selectBatchIds(ownerIds).stream()
+                        .collect(Collectors.toMap(User::getId, Function.identity()));
+        records.forEach(vo -> {
+            User owner = owners.get(vo.getUserId());
+            vo.setOwnerNickname(owner == null ? "未知用户"
+                    : StrUtil.blankToDefault(owner.getUserName(), owner.getUserAccount()));
+        });
         Page<KnowledgeVO> voPage = new Page<>(knowledgePage.getCurrent(), knowledgePage.getSize(), knowledgePage.getTotal());
         voPage.setRecords(records);
         return voPage;
