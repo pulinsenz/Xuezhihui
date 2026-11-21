@@ -172,6 +172,7 @@ SSE 流式返回前端
 3. RAG 全套：文档分块（语义分块 + 重叠窗口）、混合检索（BM25 + 向量）、交叉编码器重排；
 4. 读写 Milvus 向量库；读写 Redis 存放会话、Agent 状态、任务；
 5. 提供接口给 Java 调用（`AGENT_TOKEN` 校验）；必要时回调 Java 接口获取业务数据。
+6. LLM 答案缓存（精确 + 语义）：新会话首问命中即直接返回历史答案，省 token 与延迟；business（用户业务数据）与历史追问类回答永不缓存，知识库内容变更（入库/删向量/Wiki 回灌）自动按域失效，缓存层异常静默降级不影响问答。配置见 `.env.example` 的 `ANSWER_CACHE_*`。
 
 ## 快速启动（Docker Compose）
 
@@ -217,10 +218,11 @@ MySQL 首次启动会自动执行 `java-backend/sql/init.sql` 建表。
 
 ```bash
 cd java-backend
-./mvnw spring-boot:run
+./mvnw spring-boot:run -Dspring-boot.run.profiles=local
 ```
 
 - 配置在 `src/main/resources/application.yml`（MySQL / Redis / Python Agent 地址；本地端口 `8123`，context-path=`/api`）
+- MySQL 走本地 Docker 容器（`localhost:3307`）；真实密码在 gitignored 的 `application-local.yml`（`spring.datasource.password`，与根目录 `.env` 的 `MYSQL_ROOT_PASSWORD` 保持一致）
 - 需设置环境变量 `JWT_SECRET`（本地开发可临时给任意字符串）
 
 ### 3. 启动 python-agent

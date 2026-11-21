@@ -81,7 +81,7 @@
       </article>
     </section>
 
-    <section class="panel-grid bottom-grid">
+    <section class="panel-grid">
       <article class="panel">
         <div class="panel-head">
           <h3>知识概览</h3>
@@ -507,10 +507,6 @@ const formatTime = (epochSec) => {
   margin-top: 4px;
   font-size: 12px;
   color: #64748b;
-}
-
-.bottom-grid {
-  align-items: start;
 }
 
 .status-grid {

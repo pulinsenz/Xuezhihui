@@ -58,16 +58,14 @@
         </template>
       </el-menu>
 
-      <div class="sidebar-footer">
-        <el-tooltip :content="collapsed ? '展开侧栏' : '收起侧栏'" placement="right">
-          <el-button
-            class="collapse-btn"
-            circle
-            :icon="collapsed ? Expand : Fold"
-            @click="toggleSidebar"
-          />
-        </el-tooltip>
-      </div>
+      <el-tooltip :content="collapsed ? '展开侧栏' : '收起侧栏'" placement="top">
+        <el-button
+          class="collapse-btn"
+          circle
+          :icon="collapsed ? Expand : Fold"
+          @click="toggleSidebar"
+        />
+      </el-tooltip>
     </el-aside>
 
     <el-container class="content-shell">
@@ -248,6 +246,7 @@ onUnmounted(() => {
 }
 
 .sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -304,7 +303,7 @@ onUnmounted(() => {
   overflow-y: auto;
   border-right: 0;
   background: transparent;
-  padding: 8px 0;
+  padding: 8px 0 64px;
   --el-menu-bg-color: transparent;
   --el-menu-hover-bg-color: rgba(20, 184, 166, 0.06);
   --el-menu-active-color: #0f766e;
@@ -316,7 +315,7 @@ onUnmounted(() => {
   border-radius: 12px;
   height: 46px;
   font-weight: 500;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 .side-menu :deep(.el-menu-item.is-active) {
@@ -344,19 +343,16 @@ onUnmounted(() => {
   margin-right: 10px;
 }
 
-.sidebar-footer {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 14px 16px;
-  border-top: 1px solid rgba(226, 232, 240, 0.6);
-}
-
+/* 锚定左侧：展开(260px)/收起(80px)切换时按钮坐标不变 */
 .collapse-btn {
+  position: absolute;
+  left: 24px;
+  bottom: 16px;
+  z-index: 20;
+  background: #ffffff;
   border-color: rgba(226, 232, 240, 0.9);
   color: #64748b;
-  transition: all 0.2s ease;
+  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .collapse-btn:hover {
@@ -374,8 +370,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  height: auto;
-  min-height: 80px;
+  height: 80px;
   padding: 16px 28px;
   background: #ffffff;
   border-bottom: 1px solid #e2e8f0;
@@ -395,20 +390,27 @@ onUnmounted(() => {
   line-height: 1.2;
   color: #0f172a;
   letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .title-block p {
   margin-top: 4px;
   color: var(--text-muted);
   font-size: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .topbar-tools {
   display: flex;
   align-items: center;
   gap: 12px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
+  flex-shrink: 0;
 }
 
 .icon-button {
@@ -478,6 +480,8 @@ onUnmounted(() => {
   .topbar {
     align-items: flex-start;
     flex-direction: column;
+    height: auto;
+    min-height: 80px;
     padding: 14px 20px;
   }
   .page-body {

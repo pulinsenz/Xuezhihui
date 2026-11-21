@@ -16,7 +16,8 @@ services:
       MYSQL_DATABASE: xuezhihui
     ports:
       # 宿主 3307（避开本机 MySQL 的 3306；容器间仍走 mysql:3306）；生产由 prod override 关闭
-      - "3307:3306"
+      # 仅绑定回环地址，禁止局域网访问本地开发库
+      - "127.0.0.1:3307:3306"
     volumes:
       - mysql-data:/var/lib/mysql
       - ./java-backend/sql:/docker-entrypoint-initdb.d

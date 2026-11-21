@@ -7,9 +7,10 @@ spring:
     name: xuezhihui-backend
   #数据库配置
   datasource:
-    url: jdbc:mysql://localhost:3306/xuezhihui?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    url: jdbc:mysql://localhost:3307/xuezhihui?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
     username: root
-    password: 111111
+    # 默认 111111 仅供本机 MySQL 开发；容器部署由 compose 注入 MYSQL_PASSWORD（fallback 到 MYSQL_ROOT_PASSWORD）
+    password: ${MYSQL_PASSWORD:111111}
     driver-class-name: com.mysql.cj.jdbc.Driver
   #redis数据库配置
   data:
