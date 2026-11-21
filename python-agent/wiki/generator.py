@@ -109,6 +109,9 @@ def process_wiki_generate(knowledge_id: str, docs: List[dict]) -> dict:
     succeeded = [p for p in pages if p["status"] == "SUCCESS"]
     status = "SUCCESS" if succeeded else "FAILED"
     message = None if succeeded else "所有页面生成失败"
+    # Wiki 回灌改变了知识库内容：失效该库答案缓存，防返回过时答案
+    if succeeded and runtime.answer_cache:
+        runtime.answer_cache.invalidate(knowledge_id)
     agent_event(logger, "wiki_done", knowledge_id=str(knowledge_id),
                 total=len(pages), success=len(succeeded), status=status)
     return {"status": status, "message": message, "pages": pages}

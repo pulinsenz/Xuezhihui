@@ -7,6 +7,7 @@ from llm.llm_client import FallbackLLM, LLMClient
 from rag.chunker import Chunker
 from rag.reranker import Reranker
 from rag.retriever import HybridRetriever
+from storage.answer_cache import AnswerCache
 from storage.embedding import EmbeddingModel
 from storage.redis_store import RedisStore
 from storage.vector_store import LocalVectorStore
@@ -18,6 +19,7 @@ vector_store = None
 retriever = None
 redis_store = None
 reranker = None
+answer_cache = None
 
 
 def create_vector_store(embedding_model):
@@ -40,7 +42,7 @@ def _build_user_llm(default_llm):
 
 
 def init_runtime():
-    global llm, user_llm, embedding, vector_store, retriever, redis_store, reranker
+    global llm, user_llm, embedding, vector_store, retriever, redis_store, reranker, answer_cache
     llm = LLMClient()  # 管理员/默认：DEEPSEEK_API_KEY
     # 普通用户 LLM：仅在有 USER_API_KEY 时创建；无 key 时 _pick_llm 回退到 llm
     user_llm = None
@@ -52,3 +54,10 @@ def init_runtime():
     redis_store = RedisStore(host=settings.redis_host, port=settings.redis_port,
                              password=settings.redis_password or None)
     reranker = Reranker(model_name=settings.reranker_model)
+    # 答案缓存：复用会话 Redis 与检索 embedding；查询/写入全程降级容错
+    answer_cache = AnswerCache(redis_store.client,
+                               enabled=settings.answer_cache_enabled,
+                               sem_threshold=settings.answer_cache_sem_threshold,
+                               ttl_hours=settings.answer_cache_ttl_hours,
+                               max_entries=settings.answer_cache_max_entries,
+                               embed_fn=embedding.embed_query)

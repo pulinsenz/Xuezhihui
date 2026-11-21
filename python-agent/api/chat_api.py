@@ -90,12 +90,44 @@ def _route_label(route: str) -> str:
     return _ROUTE_LABELS.get(route, route or "未知")
 
 
+def _cache_lookup(knowledge_id, query):
+    """答案缓存查询（business/历史依赖的回答不会入库，见 answer_cache）。
+    缓存层内部全程降级容错；未启用/未初始化返回 None。调用方保证只在会话首问时调用。"""
+    cache = runtime.answer_cache
+    if cache is None:
+        return None
+    return cache.lookup(knowledge_id, query)
+
+
+def _cache_store(knowledge_id, query, answer, sources, route, intent):
+    """图跑完后写入缓存（可缓存性在 AnswerCache.store 内部硬过滤）。"""
+    cache = runtime.answer_cache
+    if cache is None:
+        return
+    cache.store(knowledge_id, query, answer, sources, route, intent)
+
+
 @router.post("/chat")
 def chat(req: ChatRequest):
     """普通对话（非流式），返回完整回答"""
     if not req.session_id or not req.query.strip():
         raise HTTPException(status_code=400, detail="session_id 和 query 不能为空")
     history = runtime.redis_store.get_history(req.session_id)
+    # 新会话首问先查答案缓存（重复问题省 token 与延迟）
+    cache_hit = _cache_lookup(req.knowledge_id, req.query) if not history else None
+    if cache_hit:
+        answer = cache_hit["answer"]
+        route = cache_hit.get("route", "")
+        sources = cache_hit.get("sources", [])
+        match_label = "精确匹配" if cache_hit.get("match") == "exact" else "语义匹配"
+        thinking = [f"命中答案缓存（{match_label}），直接返回历史回答"]
+        _save_session(req.session_id, req.query, answer, req.user_id, route,
+                      req.knowledge_id, thinking, sources)
+        return {
+            "code": 0, "message": "ok",
+            "data": ChatResponse(answer=answer, sources=sources, route=route,
+                                 session_id=req.session_id).model_dump(),
+        }
     graph = get_graph()
     result = graph.invoke(_build_state(req.query, req.session_id, req.knowledge_id, history,
                                        req.user_id, req.user_role))
@@ -105,6 +137,10 @@ def chat(req: ChatRequest):
     # 非流式没有节点轨迹，构造最简思考过程
     thinking = [f"判断问题类型：{_route_label(route)}", "正在生成回答…"]
     _save_session(req.session_id, req.query, answer, req.user_id, route, req.knowledge_id, thinking, sources)
+    # 首问结果写入缓存（business/历史依赖的回答在缓存层内部被过滤）
+    if not history:
+        intent = (result.get("intent_plan") or {}).get("intent", "")
+        _cache_store(req.knowledge_id, req.query, answer, sources, route, intent)
     return {
         "code": 0, "message": "ok",
         "data": ChatResponse(
@@ -136,6 +172,8 @@ def stream(req: StreamRequest):
     if not session_id or not query.strip():
         raise HTTPException(status_code=400, detail="session_id 和 query 不能为空")
     history = runtime.redis_store.get_history(session_id)
+    # 新会话首问先查答案缓存（重复问题省 token 与延迟）
+    cache_hit = _cache_lookup(knowledge_id, query) if not history else None
     state = _build_state(query, session_id, knowledge_id, history, user_id, user_role)
     graph = get_graph()
 
@@ -147,6 +185,7 @@ def stream(req: StreamRequest):
         final_answer = ""
         sources = []
         route = ""
+        intent = ""
         thinking_steps = []
         saved = False
 
@@ -166,6 +205,25 @@ def stream(req: StreamRequest):
             thinking_steps.append(content)
             return sse_event({"type": "thinking", "content": content})
 
+        if cache_hit:
+            # 缓存命中回放：thinking + 分块 token（保持前端打字机效果）+ done（cached 扩展字段，
+            # 旧前端不识别会忽略，行为不变）
+            match_label = "精确匹配" if cache_hit.get("match") == "exact" else "语义匹配"
+            final_answer = cache_hit["answer"]
+            route = cache_hit.get("route", "")
+            sources = cache_hit.get("sources", [])
+            try:
+                yield emit_thinking(f"命中答案缓存（{match_label}），直接返回历史回答")
+                for i in range(0, len(final_answer), 16):
+                    chunk = final_answer[i:i + 16]
+                    tokens.append(chunk)
+                    yield sse_event({"type": "token", "content": chunk})
+                yield sse_event({"type": "done", "answer": final_answer, "sources": sources,
+                                 "route": route, "knowledge_id": knowledge_id, "cached": True})
+            finally:
+                save_once()
+            return
+
         try:
             # stream_mode=["messages","updates"]：messages 输出 LLM token，updates 输出各节点结果
             async for mode, payload in graph.astream(state, stream_mode=["messages", "updates"]):
@@ -183,6 +241,7 @@ def stream(req: StreamRequest):
                     for node, update in payload.items():
                         if node == "router":
                             route = update.get("route", "")
+                            intent = (update.get("intent_plan") or {}).get("intent", "")
                             yield emit_thinking(f"判断问题类型：{_route_label(route)}")
                         elif node == "tool":
                             if update.get("tool_called"):
@@ -215,6 +274,9 @@ def stream(req: StreamRequest):
             if not final_answer:
                 final_answer = "".join(tokens)
             save_once()
+            # 首问结果写入缓存（business/历史依赖的回答在缓存层内部被过滤）
+            if not history and final_answer:
+                _cache_store(knowledge_id, query, final_answer, sources, route, intent)
             yield sse_event({"type": "done", "answer": final_answer, "sources": sources,
                              "route": route, "knowledge_id": knowledge_id})
         except Exception as e:

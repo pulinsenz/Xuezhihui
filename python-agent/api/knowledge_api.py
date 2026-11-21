@@ -161,6 +161,9 @@ def process_vectorize(knowledge_id: str, doc_id: str, file_url: str, name: str) 
     chunk_count = runtime.retriever.add_document(knowledge_id, doc_id, text)
     agent_event(logger, "vectorized", knowledge_id=knowledge_id,
                 doc_id=doc_id, chunks=chunk_count)
+    # 知识库内容变更：失效该库的答案缓存，防返回过时答案
+    if runtime.answer_cache:
+        runtime.answer_cache.invalidate(knowledge_id)
     return chunk_count
 
 
@@ -185,6 +188,9 @@ def delete(req: DeleteRequest):
     else:
         runtime.retriever.delete_knowledge(req.knowledge_id)
     agent_event(logger, "vectors_deleted", knowledge_id=req.knowledge_id, doc_id=req.doc_id)
+    # 知识库内容变更：失效该库的答案缓存
+    if runtime.answer_cache:
+        runtime.answer_cache.invalidate(req.knowledge_id)
     return {"code": 0, "message": "ok", "data": True}
 
 

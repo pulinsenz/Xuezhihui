@@ -61,6 +61,16 @@ class Settings:
     # 单页撰写的资料上下文字符数预算（源文档 chunk 按关键词重叠贪心选取）
     wiki_page_context_chars: int = int(os.getenv("WIKI_PAGE_CONTEXT_CHARS", "12000"))
 
+    # ---- LLM 答案缓存（新会话首问的精确 + 语义缓存，重复问题省 token/延迟）----
+    # 总开关；缓存层任何异常静默降级为未命中，不影响问答主链路
+    answer_cache_enabled: bool = os.getenv("ANSWER_CACHE_ENABLED", "true").lower() == "true"
+    # 语义命中相似度阈值（归一化向量点积；保守值防"语义相近但意图不同"误配）
+    answer_cache_sem_threshold: float = float(os.getenv("ANSWER_CACHE_SEM_THRESHOLD", "0.95"))
+    # 缓存条目 TTL（小时）
+    answer_cache_ttl_hours: int = int(os.getenv("ANSWER_CACHE_TTL_HOURS", "168"))
+    # 每个知识库域的语义条目上限（超出按时间淘汰最旧，控制内存与扫描成本）
+    answer_cache_max_entries: int = int(os.getenv("ANSWER_CACHE_MAX_ENTRIES", "300"))
+
     # ---- 文件读取安全（防任意文件读取 /proc/self/environ、/app/.env 等）----
     # 仅允许读取该目录内的本地文件；生产由 docker-compose 固定为共享卷 /app/data/files
     file_base_dir: str = os.getenv("FILE_BASE_DIR", "/app/data/files")
