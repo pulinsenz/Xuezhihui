@@ -70,9 +70,3 @@ services:
       - /etc/letsencrypt/live/xuezhihui.site/privkey.pem:/etc/nginx/ssl/privkey.pem:ro
     ports:
       - "443:443"
-
-  # 前端 v2：HTTP 8080 对外（独立端口与老前端 80/443 并存；HTTPS 如需可后续复用同证书加 8443）
-  frontend-v2:
-    restart: unless-stopped
-    mem_limit: 256m
-    logging: *default-logging
