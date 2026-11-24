@@ -32,6 +32,7 @@ import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -406,5 +407,39 @@ class AuthControllerTest {
                         .header("Authorization", "Bearer " + newToken))
                 .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
         assertEquals(testAccount, newTokenMe.get("data").get("userAccount").asText(), "新 token 应立即可用");
+    }
+
+    @Test
+    void login_twice_bothTokensRemainValid() throws Exception {
+        // 多端登录共存：同一账号连续登录两次，两次签发的 token 均有效（后登录不挤掉先登录）
+        RegisterRequest register = validRegisterWithCaptcha();
+        assertEquals(0, objectMapper.readTree(postJson("/auth/register", register)).get("code").asInt(), "注册应成功");
+
+        LoginRequest login = new LoginRequest();
+        login.setUserAccount(testAccount);
+        login.setUserPassword(testPassword);
+
+        JsonNode firstNode = objectMapper.readTree(postJson("/auth/login", login));
+        assertEquals(0, firstNode.get("code").asInt(), "第一次登录应成功");
+        String token1 = firstNode.get("data").get("token").asText();
+        createdTokens.add(token1);
+
+        JsonNode secondNode = objectMapper.readTree(postJson("/auth/login", login));
+        assertEquals(0, secondNode.get("code").asInt(), "第二次登录应成功");
+        String token2 = secondNode.get("data").get("token").asText();
+        createdTokens.add(token2);
+        assertNotEquals(token1, token2, "两次登录应签发不同 token");
+
+        // 先登录的 token 仍可访问 /me（2026-11-24 起去掉单点互斥，多端共存）
+        JsonNode me1 = objectMapper.readTree(mockMvc.perform(get("/auth/me")
+                        .header("Authorization", "Bearer " + token1))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertEquals(0, me1.get("code").asInt(), "先登录的 token 应仍有效（多端共存）");
+        assertEquals(testAccount, me1.get("data").get("userAccount").asText());
+
+        JsonNode me2 = objectMapper.readTree(mockMvc.perform(get("/auth/me")
+                        .header("Authorization", "Bearer " + token2))
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+        assertEquals(0, me2.get("code").asInt(), "后登录的 token 应有效");
     }
 }

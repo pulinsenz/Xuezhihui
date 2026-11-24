@@ -38,7 +38,9 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -332,8 +334,6 @@ class AuthServiceTest {
         when(userMapper.selectOne(any())).thenReturn(user);
         when(jwtUtil.createToken(7L, "user")).thenReturn("token123");
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
-        // 单点登录：无旧会话（用户→token 映射不存在）
-        when(valueOperations.get(jwtProperties.getRedisPrefix() + "user:7")).thenReturn(null);
 
         LoginRequest req = new LoginRequest();
         req.setUserAccount("bob");
@@ -345,14 +345,12 @@ class AuthServiceTest {
         assertEquals("bob", resp.getUser().getUserAccount());
         // 白名单：xzh:login:{token} -> userId，TTL=1小时
         verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "token123"), eq("7"), eq(1L), eq(TimeUnit.HOURS));
-        // 用户→token 映射写入：xzh:login:user:7 -> token123
-        verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "user:7"), eq("token123"), eq(1L), eq(TimeUnit.HOURS));
         // 成功后清除失败计数与锁定
         verify(loginAttemptService).recordSuccess("bob");
     }
 
     @Test
-    void login_singleSession_evictsOldTokenOfSameUser() {
+    void login_multiLogin_oldSessionsRemainValid() {
         allowLoginAttempt();
         User user = new User();
         user.setId(7L);
@@ -363,41 +361,17 @@ class AuthServiceTest {
         when(jwtUtil.createToken(7L, "user")).thenReturn("new-token");
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
 
-        // 模拟该账号已有活跃会话（旧 token=old-token-1）
-        when(valueOperations.get(jwtProperties.getRedisPrefix() + "user:7")).thenReturn("old-token-1");
-
         LoginRequest req = new LoginRequest();
         req.setUserAccount("bob");
         req.setUserPassword("pass12345");
         authService.login(req, "127.0.0.1");
 
-        // 后登录挤掉先登录：旧 token 的白名单 key 被删
-        verify(stringRedisTemplate).delete(jwtProperties.getRedisPrefix() + "old-token-1");
-        // 新 token 写入白名单 + 更新用户→token 映射
-        verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "new-token"), eq("7"), eq(1L), eq(TimeUnit.HOURS));
-        verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "user:7"), eq("new-token"), eq(1L), eq(TimeUnit.HOURS));
-    }
-
-    @Test
-    void login_noOldToken_doesNotDeleteAnything() {
-        allowLoginAttempt();
-        User user = new User();
-        user.setId(7L);
-        user.setUserAccount("bob");
-        user.setUserPassword(BCrypt.hashpw("pass12345"));
-        user.setUserRole("user");
-        when(userMapper.selectOne(any())).thenReturn(user);
-        when(jwtUtil.createToken(7L, "user")).thenReturn("token-new");
-        when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.get(jwtProperties.getRedisPrefix() + "user:7")).thenReturn(null);
-
-        LoginRequest req = new LoginRequest();
-        req.setUserAccount("bob");
-        req.setUserPassword("pass12345");
-        authService.login(req, "127.0.0.1");
-
-        // 无旧会话：不应删除任何白名单 key
+        // 多端登录共存：登录不得删除任何已存在的白名单 key（其他设备的 token 保持有效），
+        // 也不再维护 用户→token 映射（单点互斥时代的 xzh:login:user:{userId} 已移除）
         verify(stringRedisTemplate, never()).delete(anyString());
+        verify(valueOperations, never()).set(contains("user:"), anyString(), anyLong(), any());
+        // 新 token 正常写入白名单
+        verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "new-token"), eq("7"), eq(1L), eq(TimeUnit.HOURS));
     }
 
     // ---------- 登出 ----------
@@ -487,9 +461,10 @@ class AuthServiceTest {
         assertEquals(7L, update.getId());
         assertNotNull(update.getUserPassword());
         verify(stringRedisTemplate).delete(jwtProperties.getRedisPrefix() + "token-abc");
-        verify(stringRedisTemplate).delete(jwtProperties.getRedisPrefix() + "user:7");
-        verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "user:7"), eq("new-token"), eq(1L), eq(TimeUnit.HOURS));
+        // 只轮换当前会话 token；不再维护 用户→token 映射（多端登录共存）
+        verify(stringRedisTemplate, never()).delete(eq(jwtProperties.getRedisPrefix() + "user:7"));
         verify(valueOperations).set(eq(jwtProperties.getRedisPrefix() + "new-token"), eq("7"), eq(1L), eq(TimeUnit.HOURS));
+        verify(valueOperations, never()).set(eq(jwtProperties.getRedisPrefix() + "user:7"), anyString(), anyLong(), any());
     }
 
     @Test

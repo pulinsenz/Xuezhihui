@@ -155,18 +155,10 @@ public class AuthServiceImpl implements AuthService {
         loginAttemptService.recordSuccess(userAccount);
         // 签发 JWT
         String token = jwtUtil.createToken(user.getId(), user.getUserRole());
-        // 单点登录互斥：同一账号只允许一个在线会话，先删掉该账号旧 token 的白名单 key，再写新 token。
-        // 旧设备下次请求时白名单查不到 → 拦截器返回"登录已失效" → 被强制下线（后登录挤掉先登录）。
-        // 实现：每用户维护 xzh:login:user:{userId} → 当前活跃 token，登录时精确删除旧 key（O(1)，
-        // 不依赖 SCAN 全量遍历——SCAN 在大量 key 下可能漏掉部分 key，导致旧会话未被踢下线）。
-        String userTokenKey = jwtProperties.getRedisPrefix() + "user:" + user.getId();
-        String oldToken = stringRedisTemplate.opsForValue().get(userTokenKey);
-        if (StrUtil.isNotBlank(oldToken)) {
-            stringRedisTemplate.delete(jwtProperties.getRedisPrefix() + oldToken);
-            log.info("单点登录: 已下线该账号旧会话 userId={}", user.getId());
-        }
-        // 记录当前活跃 token，TTL 与 token 过期时间一致
-        stringRedisTemplate.opsForValue().set(userTokenKey, token, jwtProperties.getExpireHours(), TimeUnit.HOURS);
+        // 多端登录共存：每次登录签发独立 token，各写各的白名单，互不影响。
+        // （2026-11-24 前为单点互斥：登录时经 xzh:login:user:{userId} 找到旧 token 并删其白名单，
+        //   后登录挤掉先登录；现按产品需求去掉挤下线，允许同一账号多设备同时在线。）
+        // 强制下线能力保留：管理员删用户走 SCAN 清白名单（AdminServiceImpl），登出走 delete 当前 key。
         // 写入 Redis 白名单，TTL 与 token 过期时间一致，支持强制下线
         stringRedisTemplate.opsForValue().set(
                 jwtProperties.getRedisPrefix() + token,
@@ -249,12 +241,10 @@ public class AuthServiceImpl implements AuthService {
         update.setEditTime(LocalDateTime.now());
         userMapper.updateById(update);
         String newToken = jwtUtil.createToken(loginUser.getId(), loginUser.getUserRole());
-        String userTokenKey = jwtProperties.getRedisPrefix() + "user:" + loginUser.getId();
+        // 只轮换当前会话的 token（删旧白名单、签新 token）；其他设备的会话不受影响（多端登录共存）
         if (StrUtil.isNotBlank(token)) {
             stringRedisTemplate.delete(jwtProperties.getRedisPrefix() + token);
         }
-        stringRedisTemplate.delete(userTokenKey);
-        stringRedisTemplate.opsForValue().set(userTokenKey, newToken, jwtProperties.getExpireHours(), TimeUnit.HOURS);
         stringRedisTemplate.opsForValue().set(
                 jwtProperties.getRedisPrefix() + newToken,
                 String.valueOf(loginUser.getId()),
