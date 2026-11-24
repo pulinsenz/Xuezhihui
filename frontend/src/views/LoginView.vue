@@ -4,7 +4,6 @@
       <div class="login-brand">
         <img class="brand-logo" :src="logo" alt="学智汇" />
         <h1>学智汇</h1>
-        <p>AI RAG 工作台</p>
       </div>
 
       <div class="login-card">
@@ -67,12 +66,6 @@ const handleSuccess = () => {
   font-size: var(--text-title);
   font-weight: 700;
   color: var(--t1);
-}
-
-.login-brand p {
-  margin-top: 6px;
-  font-size: var(--text-muted);
-  color: var(--text-muted);
 }
 
 .login-card {
