@@ -7,9 +7,6 @@
           <div class="setting-title-row">
             <span class="setting-title">知识库上传文档时默认入库</span>
           </div>
-          <p class="setting-desc">
-            开启后新上传的文档将自动切块入库并建立向量索引，立即可供 AI 对话检索；关闭后仅保存文档元数据，可随时在文档列表按需入库。
-          </p>
         </div>
         <div class="setting-control">
           <el-switch
@@ -30,9 +27,6 @@
           <div class="setting-title-row">
             <span class="setting-title">参考文献默认折叠</span>
           </div>
-          <p class="setting-desc">
-            开启后 AI 对话回复底部的知识库检索切片和参考来源将默认收起，保持版面清爽利落；关闭后将直接平铺展示所有溯源来源。
-          </p>
         </div>
         <div class="setting-control">
           <el-switch
@@ -141,13 +135,6 @@ const handleCollapseChange = async (val) => {
   font-size: 16px;
   font-weight: 600;
   color: #0f172a;
-}
-
-.setting-desc {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.6;
 }
 
 .setting-control {

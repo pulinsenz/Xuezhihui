@@ -4,8 +4,7 @@
       <div>
         <p class="page-kicker">系统管控</p>
         <h2>全局知识库</h2>
-        <p class="page-subtitle">审查系统内所有知识库、穿透查看所属文档及管理知识库生命周期</p>
-      </div>
+              </div>
     </div>
 
     <section class="admin-panel">
@@ -164,12 +163,6 @@ onMounted(loadData)
   font-size: 22px;
   font-weight: 700;
   color: #0f172a;
-}
-
-.page-subtitle {
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 12px;
 }
 
 .admin-panel {

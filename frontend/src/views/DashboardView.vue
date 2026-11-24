@@ -16,7 +16,6 @@
         <div class="stat-copy">
           <div class="stat-label">{{ card.label }}</div>
           <div class="stat-value">{{ card.value }}</div>
-          <div class="stat-hint">{{ card.hint }}</div>
         </div>
       </article>
     </section>
@@ -187,9 +186,7 @@ watch(
 )
 
 const knowledgeCount = computed(() => knowledgeList.value.length)
-const ownerCount = computed(() => knowledgeList.value.filter((item) => item.isOwner).length)
 const memberCount = computed(() => knowledgeList.value.filter((item) => item.isMember).length)
-const publicCount = computed(() => knowledgeList.value.filter((item) => item.isPublic === 1).length)
 const sessionCount = computed(() => chat.sessions.length)
 const recentSessions = computed(() => chat.sessions.slice(0, 5))
 
@@ -206,28 +203,24 @@ const statCards = computed(() => [
   {
     label: '知识库',
     value: knowledgeCount.value,
-    hint: `${ownerCount.value} 个自建 · ${publicCount.value} 个公开`,
     icon: Folder,
     tone: 'mint',
   },
   {
     label: '会话',
     value: sessionCount.value,
-    hint: authStore.isLogin ? '最近的聊天记录' : '登录后可查看',
     icon: ChatDotRound,
     tone: 'blue',
   },
   {
     label: '未读邀请',
     value: messageStore.unreadCount,
-    hint: '知识协作和消息提醒',
     icon: Bell,
     tone: 'violet',
   },
   {
     label: '协作中',
     value: memberCount.value,
-    hint: authStore.isLogin ? '当前可编辑的协作知识库' : '登录后可查看',
     icon: Collection,
     tone: 'amber',
   },
@@ -344,12 +337,6 @@ const formatTime = (epochSec) => {
   color: #0f172a;
   /* 变化数字用等宽数字排版，数值刷新时不左右抖动（uiup 组 7） */
   font-variant-numeric: tabular-nums;
-}
-
-.stat-hint {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #64748b;
 }
 
 .panel-grid {

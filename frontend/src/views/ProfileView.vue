@@ -114,7 +114,6 @@
           <div class="setting-row">
             <div class="setting-copy">
               <strong>默认入库</strong>
-              <p>上传文档后自动进入向量化流程。</p>
             </div>
             <el-tag effect="plain">
               {{ settings.defaultVectorize ? '开启' : '关闭' }}
@@ -124,20 +123,12 @@
           <div class="setting-row">
             <div class="setting-copy">
               <strong>引用折叠</strong>
-              <p>控制对话引用是否默认收起。</p>
             </div>
             <!-- 偏好状态非警告，不用 warning 黄（uiup 组 17：功能色语义专用） -->
             <el-tag effect="plain">
               {{ settings.collapseRefs ? '收起' : '展开' }}
             </el-tag>
           </div>
-        </div>
-
-        <el-divider />
-
-        <div class="notice-card">
-          <strong>支持信息</strong>
-          <p>如遇到资料上传或头像更新异常，请先检查图片格式和网络连接。</p>
         </div>
       </article>
     </section>
@@ -212,11 +203,6 @@
           <el-button type="primary" :icon="Lock" :loading="passwordSaving" @click="handleChangePassword">
             修改密码
           </el-button>
-        </div>
-
-        <div class="notice-card">
-          <strong>说明</strong>
-          <p>修改成功后会立即切换到新会话。</p>
         </div>
       </article>
     </section>
@@ -572,15 +558,13 @@ onMounted(() => {
   margin-top: 4px;
 }
 
-.setting-list,
-.security-list {
+.setting-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.setting-row,
-.security-row {
+.setting-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -590,41 +574,14 @@ onMounted(() => {
   background: rgba(248, 250, 252, 0.92);
 }
 
-.setting-copy,
-.security-row > div {
+.setting-copy {
   min-width: 0;
 }
 
-.setting-copy strong,
-.security-row strong {
+.setting-copy strong {
   display: block;
   font-size: 14px;
   color: #0f172a;
-}
-
-.setting-copy p,
-.security-row p {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.6;
-}
-
-.notice-card {
-  padding: 4px 2px 0;
-}
-
-.notice-card strong {
-  display: block;
-  font-size: 14px;
-  color: #0f172a;
-}
-
-.notice-card p {
-  margin-top: 6px;
-  font-size: 12px;
-  color: #64748b;
-  line-height: 1.7;
 }
 
 .avatar-tools {
@@ -681,8 +638,7 @@ onMounted(() => {
 @media (max-width: 768px) {
   .hero-bar,
   .avatar-block,
-  .setting-row,
-  .security-row {
+  .setting-row {
     flex-direction: column;
     align-items: flex-start;
   }

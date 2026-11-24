@@ -72,7 +72,6 @@
       <el-header class="topbar">
         <div class="title-block">
           <h1>{{ pageTitle }}</h1>
-          <p>{{ pageSubtitle }}</p>
         </div>
 
         <div class="topbar-tools">
@@ -147,15 +146,15 @@ const collapsed = ref(JSON.parse(localStorage.getItem('sidebar_collapsed') || 'f
 let refreshTimer = null
 
 const routeInfo = {
-  '/dashboard': { title: '仪表盘', subtitle: '概览知识库、会话和协作提醒。' },
-  '/chat': { title: 'AI 对话', subtitle: '基于检索增强生成的智能知识交互。' },
-  '/knowledge': { title: '我的知识库', subtitle: '维护你的专属文档与知识空间。' },
-  '/public-knowledge': { title: '公开知识库', subtitle: '浏览并收藏可公开访问的知识空间。' },
-  '/messages': { title: '消息通知', subtitle: '查看知识邀请和协作通知。' },
-  '/profile': { title: '个人资料', subtitle: '更新头像、昵称和简介。' },
-  '/settings': { title: '系统设置', subtitle: '调整默认入库和引用展开策略。' },
-  '/admin/users': { title: '用户管理', subtitle: '管理成员权限和账号状态。' },
-  '/admin/knowledge': { title: '全局知识库', subtitle: '查看和管理平台级知识空间。' },
+  '/dashboard': { title: '仪表盘' },
+  '/chat': { title: 'AI 对话' },
+  '/knowledge': { title: '我的知识库' },
+  '/public-knowledge': { title: '公开知识库' },
+  '/messages': { title: '消息通知' },
+  '/profile': { title: '个人资料' },
+  '/settings': { title: '系统设置' },
+  '/admin/users': { title: '用户管理' },
+  '/admin/knowledge': { title: '全局知识库' },
 }
 
 const activeMenu = computed(() => {
@@ -174,7 +173,6 @@ const activeMenu = computed(() => {
 })
 
 const pageTitle = computed(() => routeInfo[activeMenu.value]?.title || route.meta.title || '仪表盘')
-const pageSubtitle = computed(() => routeInfo[activeMenu.value]?.subtitle || '欢迎回来，开始你的下一步工作。')
 
 const avatarText = computed(() => {
   const name = authStore.user?.userName || authStore.user?.userAccount || '?'
@@ -393,15 +391,6 @@ onUnmounted(() => {
   line-height: 1.2;
   color: #0f172a;
   letter-spacing: -0.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.title-block p {
-  margin-top: 4px;
-  color: var(--text-muted);
-  font-size: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

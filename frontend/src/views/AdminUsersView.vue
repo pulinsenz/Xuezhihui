@@ -4,8 +4,7 @@
       <div>
         <p class="page-kicker">系统管控</p>
         <h2>用户管理</h2>
-        <p class="page-subtitle">查看全量注册用户、分配管理员权限与维护账户生命周期</p>
-      </div>
+              </div>
     </div>
 
     <section class="admin-panel">
@@ -200,12 +199,6 @@ onMounted(loadUsers)
   font-size: 22px;
   font-weight: 700;
   color: #0f172a;
-}
-
-.page-subtitle {
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 12px;
 }
 
 .admin-panel {
