@@ -37,7 +37,7 @@ const handleSuccess = () => {
   align-items: center;
   justify-content: center;
   padding: 32px 20px;
-  background: #f6f8fa;
+  background: var(--bg);
 }
 
 .login-shell {
@@ -66,7 +66,7 @@ const handleSuccess = () => {
   margin: 0;
   font-size: var(--text-title);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .login-brand p {
@@ -79,13 +79,13 @@ const handleSuccess = () => {
   width: 100%;
   padding: 28px 32px 24px;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-card);
 }
 
 .login-foot {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--t4);
 }
 </style>

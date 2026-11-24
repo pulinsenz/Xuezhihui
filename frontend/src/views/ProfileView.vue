@@ -393,19 +393,19 @@ onMounted(() => {
 .hero-title-block h2 {
   margin: 4px 0 0;
   font-size: 22px;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .hero-kicker {
   font-size: 12px;
   font-weight: 600;
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .hero-subtitle {
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .hero-actions {
@@ -424,9 +424,9 @@ onMounted(() => {
 .summary-card,
 .panel {
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 24px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  box-shadow: var(--shadow-card);
 }
 
 .summary-card {
@@ -450,12 +450,12 @@ onMounted(() => {
 .panel-head h3 {
   margin: 0;
   font-size: 16px;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .panel-head span {
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .avatar-block {
@@ -471,7 +471,7 @@ onMounted(() => {
 }
 
 .avatar {
-  background: #0f766e;
+  background: var(--brand);
   color: #fff;
   font-weight: 700;
   font-size: 34px;
@@ -504,20 +504,20 @@ onMounted(() => {
 .avatar-meta strong {
   display: block;
   font-size: 16px;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .avatar-meta span {
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .avatar-meta p {
   margin-top: 12px;
   max-width: 420px;
-  color: #475569;
+  color: var(--t2);
   line-height: 1.7;
 }
 
@@ -529,21 +529,21 @@ onMounted(() => {
 
 .status-pill {
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: var(--r2);
   background: rgba(248, 250, 252, 0.92);
 }
 
 .status-pill span {
   display: block;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .status-pill strong {
   display: block;
   margin-top: 6px;
   font-size: 14px;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .profile-form {
@@ -570,7 +570,7 @@ onMounted(() => {
   justify-content: space-between;
   gap: 16px;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: var(--r2);
   background: rgba(248, 250, 252, 0.92);
 }
 
@@ -581,7 +581,7 @@ onMounted(() => {
 .setting-copy strong {
   display: block;
   font-size: 14px;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .avatar-tools {
@@ -596,12 +596,12 @@ onMounted(() => {
   gap: 14px;
   margin-top: 18px;
   padding: 14px 16px;
-  border-radius: 18px;
+  border-radius: var(--r2);
   background: rgba(248, 250, 252, 0.92);
 }
 
 .avatar-large {
-  background: #0f766e;
+  background: var(--brand);
   color: #fff;
   font-weight: 700;
 }
@@ -613,14 +613,14 @@ onMounted(() => {
 .avatar-preview-copy strong {
   display: block;
   font-size: 14px;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .avatar-preview-copy span {
   display: block;
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
   word-break: break-all;
 }
 

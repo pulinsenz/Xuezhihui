@@ -86,9 +86,9 @@
     </section>
 
     <el-dialog v-model="roleDialogVisible" :title="roleDialogTitle" width="420px" class="custom-dialog">
-      <p style="color: #475569; line-height: 1.6; margin: 12px 0;">
-        确定将用户「<strong style="color: #0f172a;">{{ roleTarget?.userAccount }}</strong>」设为
-        <strong style="color: #0f766e;">{{ roleTarget?.userRole === 'admin' ? '普通用户' : '管理员' }}</strong>吗？
+      <p style="color: var(--t2); line-height: 1.6; margin: 12px 0;">
+        确定将用户「<strong style="color: var(--t1);">{{ roleTarget?.userAccount }}</strong>」设为
+        <strong style="color: var(--brand);">{{ roleTarget?.userRole === 'admin' ? '普通用户' : '管理员' }}</strong>吗？
       </p>
       <template #footer>
         <el-button @click="roleDialogVisible = false">取消</el-button>
@@ -190,7 +190,7 @@ onMounted(loadUsers)
 
 .page-kicker {
   font-size: 12px;
-  color: #0f766e;
+  color: var(--brand);
   font-weight: 600;
 }
 
@@ -198,14 +198,14 @@ onMounted(loadUsers)
   margin: 4px 0 0;
   font-size: 22px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .admin-panel {
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-card);
   padding: 24px;
 }
 
@@ -229,7 +229,7 @@ onMounted(loadUsers)
 .user-account-text {
   font-size: var(--text-heading);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .pagination {

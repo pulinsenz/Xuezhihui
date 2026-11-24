@@ -817,7 +817,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 16px;
   padding: 18px 24px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-card);
 }
 
 .header-left {
@@ -829,7 +829,7 @@ onBeforeUnmount(() => {
 
 .back-btn {
   border-color: rgba(226, 232, 240, 0.9);
-  color: #64748b;
+  color: var(--t3);
   flex-shrink: 0;
 }
 
@@ -860,7 +860,7 @@ onBeforeUnmount(() => {
   font-size: 22px;
   font-weight: 700;
   color: #fff;
-  background: #0f766e;
+  background: var(--brand);
 }
 
 .head-text-block {
@@ -877,7 +877,7 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .meta-row {
@@ -886,12 +886,12 @@ onBeforeUnmount(() => {
   gap: 8px;
   margin-top: 6px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
   flex-wrap: wrap;
 }
 
 .author-avatar {
-  background: #64748b;
+  background: var(--t3);
   color: #fff;
   font-size: 10px;
   flex-shrink: 0;
@@ -929,11 +929,11 @@ onBeforeUnmount(() => {
   padding: 12px 18px;
   background: rgba(240, 253, 250, 0.8);
   border: 1px solid rgba(153, 246, 228, 0.8);
-  border-radius: 14px;
+  border-radius: var(--r2);
 }
 
 .desc-icon {
-  color: #0f766e;
+  color: var(--brand);
   font-size: 16px;
   display: flex;
 }
@@ -949,7 +949,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 16px;
   padding: 20px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-card);
 }
 
 .docs-toolbar {
@@ -977,7 +977,7 @@ onBeforeUnmount(() => {
 .filter-label {
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .batch-toolbar {
@@ -996,7 +996,7 @@ onBeforeUnmount(() => {
   height: 28px;
   border-radius: 8px;
   background: rgba(20, 184, 166, 0.1);
-  color: #0f766e;
+  color: var(--brand);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1031,10 +1031,10 @@ onBeforeUnmount(() => {
   gap: 6px;
   border: 1px dashed rgba(203, 213, 225, 0.8);
   border-radius: 12px;
-  color: #64748b;
+  color: var(--t3);
   font-size: 12px;
   cursor: pointer;
-  background: #f8fafc;
+  background: var(--bg);
 }
 
 .perm-block {
@@ -1044,7 +1044,7 @@ onBeforeUnmount(() => {
 .perm-tip {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .invite-row {
@@ -1075,7 +1075,7 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 12px;
   padding: 12px 16px;
-  background: #f8fafc;
+  background: var(--bg);
 }
 
 .chunk-head {
@@ -1085,7 +1085,7 @@ onBeforeUnmount(() => {
 .chunk-badge {
   font-size: 12px;
   font-weight: 700;
-  color: #0f766e;
+  color: var(--brand);
   background: rgba(20, 184, 166, 0.12);
   padding: 2px 8px;
   border-radius: 6px;
@@ -1097,7 +1097,7 @@ onBeforeUnmount(() => {
   word-break: break-word;
   font-size: 14px;
   line-height: 1.6;
-  color: #334155;
+  color: var(--t2);
 }
 
 .doc-table :deep(.el-button) {

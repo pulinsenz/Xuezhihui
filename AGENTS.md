@@ -23,6 +23,10 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHpAxiDOKsjYU9GpH+3N4L5XTPsnTCrWvr8bSZTHqzf8
 - 服务器端 `~/.ssh/authorized_keys` 存有此公钥，故可免密登录。
 - 本机无 `~/.ssh/config`，无其他密钥。
 
+## 前端设计 token（2026-11-24 uiup 提案落地）
+
+改前端样式前先读 `frontend/src/style.css` 的 `:root`：品牌色只有 teal 一个（`--brand/--brand-hover/--brand-pressed`，浅底 `--tint`），中性 5 档 `--t1..--t4/--line`，画布 `--bg` 卡面 `--card`，圆角 `--r1 16 / --r2 12 / --r3 8`，卡片阴影 `--shadow-card`（双层柔和，浮层才用 `--shadow-pop`）。新样式必须从这些变量取值，不写裸 hex/任意圆角；字号只用 16/14/12 + 大数字 28（`--text-num`）。
+
 ## 本地开发注意事项（2026-11-19 实测）
 
 |坑|事实|对策|

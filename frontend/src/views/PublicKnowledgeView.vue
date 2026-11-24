@@ -177,7 +177,7 @@ onMounted(loadList)
   overflow: hidden;
   margin-bottom: 20px;
   cursor: pointer;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-card);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
@@ -221,7 +221,7 @@ onMounted(loadList)
   font-size: 40px;
   font-weight: 700;
   color: #ffffff;
-  background: #0f766e;
+  background: var(--brand);
 }
 
 .kb-body {
@@ -241,7 +241,7 @@ onMounted(loadList)
 .kb-name {
   font-size: 14px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -256,7 +256,7 @@ onMounted(loadList)
 }
 
 .author-avatar {
-  background: #64748b;
+  background: var(--t3);
   color: #fff;
   font-size: 12px;
   flex-shrink: 0;
@@ -264,7 +264,7 @@ onMounted(loadList)
 
 .author-name {
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -274,7 +274,7 @@ onMounted(loadList)
   margin-top: 8px;
   min-height: 36px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
   line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -296,7 +296,7 @@ onMounted(loadList)
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #94a3b8;
+  color: var(--t4);
   font-size: 12px;
 }
 
@@ -309,7 +309,7 @@ onMounted(loadList)
 .doc-badge {
   font-size: 12px;
   font-weight: 600;
-  color: #0f766e;
+  color: var(--brand);
   background: rgba(15, 118, 110, 0.08);
   padding: 2px 8px;
   border-radius: 6px;

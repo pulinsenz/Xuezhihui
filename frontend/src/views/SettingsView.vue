@@ -1,6 +1,7 @@
 ﻿<template>
   <div class="settings-page">
     <!-- 标题由顶栏承载；开关旁不再放状态 tag：开关本身就是状态，且 warning 黄色属于语义色挪用（uiup 组 17/19） -->
+    <p class="group-title">文档入库</p>
     <section class="settings-card">
       <div class="setting-item">
         <div class="setting-main">
@@ -21,7 +22,10 @@
           />
         </div>
       </div>
+    </section>
 
+    <p class="group-title">对话来源展示</p>
+    <section class="settings-card">
       <div class="setting-item">
         <div class="setting-main">
           <div class="setting-title-row">
@@ -93,14 +97,22 @@ const handleCollapseChange = async (val) => {
 .settings-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 10px;
   max-width: 960px;
+}
+
+/* 组 19：组标题 + 组间留白（10px 页内间距 + 标题自带下距）大于组内留白 */
+.group-title {
+  font-size: var(--text-muted);
+  font-weight: 600;
+  color: var(--t3);
+  letter-spacing: 0.03em;
+  margin: 10px 2px 0;
 }
 
 .settings-card {
   display: flex;
   flex-direction: column;
-  gap: 16px;
 }
 
 .setting-item {
@@ -108,16 +120,15 @@ const handleCollapseChange = async (val) => {
   align-items: flex-start;
   justify-content: space-between;
   gap: 20px;
-  padding: 24px;
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 20px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-  transition: border-color 0.2s ease;
+  padding: 20px 24px;
+  background: var(--card);
+  border-radius: var(--r1);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.2s ease-out;
 }
 
 .setting-item:hover {
-  border-color: rgba(20, 184, 166, 0.28);
+  box-shadow: var(--shadow-card-hover);
 }
 
 .setting-main {
@@ -132,9 +143,9 @@ const handleCollapseChange = async (val) => {
 }
 
 .setting-title {
-  font-size: 16px;
+  font-size: var(--text-heading);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .setting-control {

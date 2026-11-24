@@ -336,20 +336,20 @@ onBeforeUnmount(() => {
   margin: 0;
   font-size: 22px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .meta-row {
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .admin-panel {
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-card);
   padding: 24px;
 }
 
@@ -373,7 +373,7 @@ onBeforeUnmount(() => {
 .batch-hint {
   font-size: 12px;
   font-weight: 500;
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .table-card {
@@ -393,13 +393,13 @@ onBeforeUnmount(() => {
 }
 
 .file-icon {
-  color: #0f766e;
+  color: var(--brand);
   font-size: 16px;
 }
 
 .file-name-text {
   font-weight: 600;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .pagination {

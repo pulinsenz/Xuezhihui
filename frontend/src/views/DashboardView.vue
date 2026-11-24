@@ -1,22 +1,22 @@
 <template>
   <div class="dashboard-page" v-loading="loading">
-    <section class="hero-bar">
-      <!-- 页面标题已由顶栏承载，此处只保留动作按钮，避免同屏双标题（去AI味：删重复装饰） -->
-      <div class="hero-actions">
-        <el-button type="primary" :icon="ChatDotRound" @click="openRoute('/chat')">开始对话</el-button>
-        <el-button :icon="Folder" @click="openRoute('/knowledge')">我的知识库</el-button>
+    <!-- 欢迎卡：问候语按 5 个时段各配 2 条随机取一，名字读登录用户昵称 -->
+    <section class="welcome">
+      <div class="welcome-main">
+        <p class="welcome-title">亲爱的<i>「{{ welcomeName }}」</i>，欢迎使用学智汇</p>
+        <p class="welcome-line">{{ greetingLine }}</p>
+      </div>
+      <div class="welcome-date">
+        <strong>{{ dateText }}</strong>
+        <small>{{ weekText }}</small>
       </div>
     </section>
 
     <section class="stats-grid">
       <article v-for="card in statCards" :key="card.label" class="stat-card">
-        <div class="stat-icon" :class="card.tone">
-          <el-icon><component :is="card.icon" /></el-icon>
-        </div>
-        <div class="stat-copy">
-          <div class="stat-label">{{ card.label }}</div>
-          <div class="stat-value">{{ card.value }}</div>
-        </div>
+        <span class="stat-ghost"><el-icon><component :is="card.icon" /></el-icon></span>
+        <div class="stat-label">{{ card.label }}</div>
+        <div class="stat-value">{{ card.value }}</div>
       </article>
     </section>
 
@@ -24,108 +24,80 @@
       <article class="panel">
         <div class="panel-head">
           <h3>快捷入口</h3>
-          <span>常用操作</span>
         </div>
-        <div class="shortcut-grid">
+        <div class="shortcut-list">
           <button
             v-for="action in quickActions"
             :key="action.label"
             class="shortcut"
             @click="action.run()"
           >
-            <el-icon><component :is="action.icon" /></el-icon>
-            <span>{{ action.label }}</span>
+            <span class="shortcut-icon"><el-icon><component :is="action.icon" /></el-icon></span>
+            <span class="shortcut-label">{{ action.label }}</span>
+            <el-icon class="row-arrow"><ArrowRight /></el-icon>
           </button>
-        </div>
-
-        <div class="setting-strip">
-          <div>
-            <span>默认入库</span>
-            <strong>{{ settings.defaultVectorize === 1 ? '开启' : '关闭' }}</strong>
-          </div>
-          <div>
-            <span>引用折叠</span>
-            <strong>{{ settings.collapseRefs === 1 ? '收起' : '展开' }}</strong>
-          </div>
         </div>
       </article>
 
       <article class="panel">
         <div class="panel-head">
           <h3>最近会话</h3>
-          <span>{{ recentSessions.length }} 条</span>
+          <el-link
+            v-if="recentSessions.length"
+            class="panel-link"
+            :underline="false"
+            @click="openRoute('/chat')"
+          >
+            查看全部<el-icon><ArrowRight /></el-icon>
+          </el-link>
         </div>
-        <div v-if="recentSessions.length" class="session-list">
+        <div v-if="recentSessions.length" class="row-list">
           <button
             v-for="session in recentSessions"
             :key="session.session_id"
-            class="session-row"
+            class="row"
             @click="openSession(session.session_id)"
           >
-            <div class="session-main">
-              <div class="session-title">{{ session.title || '未命名会话' }}</div>
-              <div class="session-meta">
-                {{ formatTime(session.update_time) }} · {{ session.message_count }} 条消息
-              </div>
-            </div>
-            <el-icon><ArrowRight /></el-icon>
+            <span class="row-main">
+              <span class="row-title">{{ session.title || '未命名会话' }}</span>
+              <span class="row-meta">{{ formatTime(session.update_time) }} · {{ session.message_count }} 条消息</span>
+            </span>
+            <el-icon class="row-arrow"><ArrowRight /></el-icon>
           </button>
         </div>
-        <el-empty v-else :description="authStore.isLogin ? '暂无会话' : '登录后可查看会话'" />
+        <el-empty v-else :image-size="72" :description="authStore.isLogin ? '暂无会话' : '登录后可查看会话'" />
       </article>
     </section>
 
-    <section class="panel-grid">
-      <article class="panel">
-        <div class="panel-head">
-          <h3>知识概览</h3>
-          <span>{{ knowledgeCount }} 个</span>
+    <article class="panel">
+      <div class="panel-head">
+        <h3>知识概览</h3>
+        <el-link class="panel-link" :underline="false" @click="openRoute('/knowledge')">
+          管理知识库<el-icon><ArrowRight /></el-icon>
+        </el-link>
+      </div>
+      <div v-if="knowledgePreview.length" class="row-list">
+        <div
+          v-for="item in knowledgePreview"
+          :key="item.id"
+          class="row kb-row"
+          @click="openRoute('/knowledge')"
+        >
+          <span class="row-title">{{ item.name }}</span>
+          <span class="tag-role" :class="item.roleClass">{{ item.roleLabel }}</span>
+          <span class="kb-docs">{{ item.docCount || 0 }} 个文档</span>
+          <el-icon class="row-arrow"><ArrowRight /></el-icon>
         </div>
-        <div v-if="knowledgePreview.length" class="knowledge-list">
-          <div v-for="item in knowledgePreview" :key="item.id" class="knowledge-row">
-            <div class="knowledge-main">
-              <div class="knowledge-title">{{ item.name }}</div>
-              <div class="knowledge-meta">{{ item.role }} · {{ item.docCount }} 个文档</div>
-            </div>
-            <el-tag size="small" effect="plain" :type="item.roleType">{{ item.roleLabel }}</el-tag>
-          </div>
-        </div>
-        <el-empty v-else :description="authStore.isLogin ? '还没有知识库' : '登录后可查看知识库'" />
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <h3>系统状态</h3>
-          <span>偏好设置</span>
-        </div>
-        <div class="status-grid">
-          <div class="status-pill">
-            <span>当前身份</span>
-            <strong>{{ statusLabel }}</strong>
-          </div>
-          <div class="status-pill">
-            <span>会话</span>
-            <strong>{{ sessionCount }}</strong>
-          </div>
-          <div class="status-pill">
-            <span>未读邀请</span>
-            <strong>{{ messageStore.unreadCount }}</strong>
-          </div>
-          <div class="status-pill">
-            <span>协作中</span>
-            <strong>{{ memberCount }}</strong>
-          </div>
-        </div>
-      </article>
-    </section>
+      </div>
+      <el-empty v-else :image-size="72" :description="authStore.isLogin ? '还没有知识库' : '登录后可查看知识库'" />
+    </article>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { ArrowRight, Bell, ChatDotRound, Collection, Folder, Setting, User } from '@element-plus/icons-vue'
-import { getSettings } from '../api/settings'
+import { ArrowRight, Bell, ChatDotRound, Collection, Folder } from '@element-plus/icons-vue'
 import { listMyKnowledge } from '../api/knowledge'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
@@ -138,21 +110,18 @@ const messageStore = useMessageStore()
 
 const loading = ref(false)
 const knowledgeList = ref([])
-const settings = reactive({ defaultVectorize: 1, collapseRefs: 1 })
 
 const loadOverview = async () => {
   if (!authStore.isLogin) {
     knowledgeList.value = []
     chat.sessions = []
     messageStore.clear()
-    settings.defaultVectorize = 1
-    settings.collapseRefs = 1
     return
   }
 
   loading.value = true
   try {
-    await Promise.allSettled([chat.loadSessions(), messageStore.loadInvitations(), loadKnowledge(), loadSystemSettings()])
+    await Promise.allSettled([chat.loadSessions(), messageStore.loadInvitations(), loadKnowledge()])
   } finally {
     loading.value = false
   }
@@ -163,17 +132,6 @@ const loadKnowledge = async () => {
     knowledgeList.value = await listMyKnowledge()
   } catch {
     knowledgeList.value = []
-  }
-}
-
-const loadSystemSettings = async () => {
-  try {
-    const data = await getSettings()
-    settings.defaultVectorize = data.defaultVectorize ?? 1
-    settings.collapseRefs = data.collapseRefs ?? 1
-  } catch {
-    settings.defaultVectorize = 1
-    settings.collapseRefs = 1
   }
 }
 
@@ -193,55 +151,51 @@ const recentSessions = computed(() => chat.sessions.slice(0, 5))
 const knowledgePreview = computed(() =>
   knowledgeList.value.slice(0, 4).map((item) => ({
     ...item,
-    role: item.isOwner ? '自建' : item.isMember ? '协作' : '收藏',
     roleLabel: item.isOwner ? '自建' : item.isMember ? '协作' : '收藏',
-    roleType: item.isOwner ? 'success' : item.isMember ? 'primary' : 'warning',
+    // 角色标签只有两档色：自建=品牌浅底，协作/收藏=中性灰（组 6：强调色只留一个）
+    roleClass: item.isOwner ? 'is-brand' : 'is-gray',
   })),
 )
 
 const statCards = computed(() => [
-  {
-    label: '知识库',
-    value: knowledgeCount.value,
-    icon: Folder,
-    tone: 'mint',
-  },
-  {
-    label: '会话',
-    value: sessionCount.value,
-    icon: ChatDotRound,
-    tone: 'blue',
-  },
-  {
-    label: '未读邀请',
-    value: messageStore.unreadCount,
-    icon: Bell,
-    tone: 'violet',
-  },
-  {
-    label: '协作中',
-    value: memberCount.value,
-    icon: Collection,
-    tone: 'amber',
-  },
+  { label: '知识库', value: knowledgeCount.value, icon: Folder },
+  { label: '会话', value: sessionCount.value, icon: ChatDotRound },
+  { label: '未读邀请', value: messageStore.unreadCount, icon: Bell },
+  { label: '协作中', value: memberCount.value, icon: Collection },
 ])
 
-const statusLabel = computed(() => {
-  if (!authStore.isLogin) return '访客'
-  return authStore.isAdmin ? '管理员' : '成员'
-})
+// ── 欢迎卡：时段问候（5 档 × 2 条随机）+ 昵称 + 日期 ──
+const GREETING_BUCKETS = [
+  { from: 5, to: 9, lines: ['早上好，新的一天从一次高效检索开始。', '清晨好，今天的知识库已经就绪。'] },
+  { from: 9, to: 12, lines: ['上午精力正好，适合啃下最难的文档。', '上午好，把最重要的问题先问了。'] },
+  { from: 12, to: 18, lines: ['午后好，稍作休息后继续探索吧。', '下午好，把这段下午留给深度思考。'] },
+  { from: 18, to: 24, lines: ['晚上好，今天也辛苦了。', '夜色正好，来复盘一下今天的收获。'] },
+  { from: 0, to: 5, lines: ['夜深了，注意休息，学智汇陪你慢慢来。', '凌晨安静，适合留一段独处的思考。'] },
+]
+
+const greetingLine = ref('')
+const welcomeName = computed(
+  () => authStore.user?.userName?.trim() || authStore.user?.userAccount || '朋友',
+)
+const now = new Date()
+const dateText = `${now.getMonth() + 1}月${now.getDate()}日`
+const weekText = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'][now.getDay()]
+
+const setGreeting = () => {
+  const hour = new Date().getHours()
+  const bucket = GREETING_BUCKETS.find((item) => hour >= item.from && hour < item.to)
+  greetingLine.value = bucket.lines[Math.floor(Math.random() * bucket.lines.length)]
+}
+setGreeting()
 
 const quickActions = computed(() => [
-  { label: '对话', icon: ChatDotRound, run: () => openRoute('/chat') },
-  { label: '知识库', icon: Folder, run: () => openRoute('/knowledge') },
-  { label: '公开知识库', icon: Collection, run: () => openRoute('/public-knowledge') },
-  { label: '消息', icon: Bell, run: () => openRoute('/messages') },
-  { label: '设置', icon: Setting, run: () => openRoute('/settings') },
-  { label: '个人资料', icon: User, run: () => openRoute('/profile') },
+  { label: '发起 AI 对话', icon: ChatDotRound, run: () => openRoute('/chat') },
+  { label: '新建知识库', icon: Folder, run: () => openRoute({ path: '/knowledge', query: { new: 1 } }) },
+  { label: '浏览公开知识库', icon: Collection, run: () => openRoute('/public-knowledge') },
 ])
 
-const openRoute = (path) => {
-  router.push(path)
+const openRoute = (target) => {
+  router.push(target)
 }
 
 const openSession = async (sessionId) => {
@@ -265,89 +219,119 @@ const formatTime = (epochSec) => {
 .dashboard-page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
 }
 
-.hero-bar {
+/* 欢迎卡 */
+.welcome {
   display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 4px 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--tint);
+  border-radius: var(--r1);
+  padding: 16px 20px;
 }
 
-.hero-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
+.welcome-title {
+  font-size: var(--text-heading);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--t1);
 }
 
+.welcome-title i {
+  font-style: normal;
+  color: var(--brand);
+}
+
+.welcome-line {
+  margin-top: 4px;
+  font-size: var(--text-body);
+  color: var(--t2);
+}
+
+.welcome-date {
+  text-align: right;
+  flex: none;
+}
+
+.welcome-date strong {
+  display: block;
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--t1);
+  font-variant-numeric: tabular-nums;
+}
+
+.welcome-date small {
+  font-size: var(--text-muted);
+  color: var(--t3);
+}
+
+/* 统计卡：数字优先 */
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 16px;
-}
-
-.stat-card,
-.panel {
-  background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 24px;
-  box-shadow: var(--shadow-card);
+  gap: 14px;
 }
 
 .stat-card {
-  min-height: 146px;
-  display: flex;
-  gap: 14px;
-  padding: 22px;
+  position: relative;
+  background: var(--card);
+  border-radius: var(--r1);
+  box-shadow: var(--shadow-card);
+  padding: 16px 18px;
+  transition: box-shadow 0.2s ease-out, transform 0.2s ease-out;
 }
 
-.stat-icon {
-  width: 56px;
-  height: 56px;
-  border-radius: 18px;
+.stat-card:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+.stat-ghost {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--tint);
+  color: var(--brand);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  font-size: 22px;
-}
-
-.stat-icon.mint,
-.stat-icon.blue,
-.stat-icon.violet,
-.stat-icon.amber {
-  background: rgba(20, 184, 166, 0.14);
-  color: #0f766e;
-}
-
-.stat-copy {
-  min-width: 0;
+  font-size: 17px;
 }
 
 .stat-label {
-  font-size: 14px;
-  color: #64748b;
+  font-size: var(--text-muted);
+  color: var(--t3);
 }
 
 .stat-value {
   margin-top: 4px;
-  font-size: 30px;
+  font-size: var(--text-num);
   font-weight: 700;
-  color: #0f172a;
-  /* 变化数字用等宽数字排版，数值刷新时不左右抖动（uiup 组 7） */
+  letter-spacing: -0.02em;
+  color: var(--t1);
   font-variant-numeric: tabular-nums;
 }
 
+/* 区块 */
 .panel-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: 5fr 7fr;
+  gap: 14px;
 }
 
 .panel {
-  min-height: 268px;
-  padding: 20px;
+  background: var(--card);
+  border-radius: var(--r1);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+  padding: 16px;
 }
 
 .panel-head {
@@ -355,156 +339,180 @@ const formatTime = (epochSec) => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .panel-head h3 {
-  font-size: 16px;
-  color: #0f172a;
+  font-size: var(--text-body);
+  font-weight: 600;
+  color: var(--t1);
 }
 
-.panel-head span {
-  font-size: 12px;
-  color: #64748b;
-}
-
-.shortcut-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.shortcut {
-  min-height: 78px;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 18px;
-  background: #fff;
-  color: #0f172a;
-  font-size: 14px;
-  display: flex;
+.panel-link {
+  font-size: var(--text-muted);
+  color: var(--brand);
+  font-weight: 600;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  gap: 2px;
   cursor: pointer;
-  transition: border-color 0.18s ease, background-color 0.18s ease;
 }
 
-.shortcut:hover {
-  border-color: rgba(20, 184, 166, 0.32);
-  background: #f6f8fa;
-}
-
-.shortcut .el-icon {
-  font-size: 16px;
-  color: #0f766e;
-}
-
-.shortcut span {
-  font-size: 14px;
-  line-height: 1.2;
-}
-
-.setting-strip {
-  margin-top: 16px;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.setting-strip > div,
-.status-pill {
-  padding: 14px 16px;
-  border-radius: 18px;
-  background: #f8fafc;
-}
-
-.setting-strip span,
-.status-pill span {
-  display: block;
+.panel-link .el-icon {
   font-size: 12px;
-  color: #64748b;
 }
 
-.setting-strip strong,
-.status-pill strong {
-  display: block;
-  margin-top: 6px;
-  font-size: 14px;
-  color: #0f172a;
+.panel-link:hover {
+  color: var(--brand-hover);
 }
 
-.session-list,
-.knowledge-list {
+/* 行列表：分隔线画在行与行之间，hover 浅底 */
+.row-list {
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 
-.session-row,
-.knowledge-row {
+.row {
   width: 100%;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border: 0;
-  border-radius: 18px;
-  background: #f8fafc;
+  gap: 10px;
+  padding: 10px 6px;
+  border-radius: var(--r3);
   cursor: pointer;
   text-align: left;
-  transition: background-color 0.18s ease;
+  transition: background-color 0.15s ease-out;
 }
 
-.session-row:hover,
-.knowledge-row:hover {
-  background: rgba(20, 184, 166, 0.08);
+.row + .row {
+  border-top: 1px solid var(--line);
 }
 
-.session-main,
-.knowledge-main {
+.row:hover {
+  background: var(--bg);
+}
+
+.row-main {
+  flex: 1;
   min-width: 0;
 }
 
-.session-title,
-.knowledge-title {
-  font-size: 14px;
+.row-title {
+  display: block;
+  font-size: var(--text-body);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--t1);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.session-meta,
-.knowledge-meta {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #64748b;
+.row-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-muted);
+  color: var(--t3);
 }
 
-.status-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+.row-arrow {
+  color: var(--t4);
+  font-size: 14px;
+  flex: none;
+}
+
+/* 快捷入口磁贴 */
+.shortcut-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.shortcut {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  padding: 9px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 0.15s ease-out;
+}
+
+.shortcut:hover {
+  background: var(--bg);
+}
+
+.shortcut-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r3);
+  background: var(--tint);
+  color: var(--brand);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  flex: none;
+}
+
+.shortcut-label {
+  font-size: var(--text-body);
+  font-weight: 500;
+  color: var(--t1);
+}
+
+/* 知识概览行：名称 / 角色标签 / 文档数 / 箭头 */
+.kb-row {
+  grid-template-columns: minmax(0, 1fr) auto auto 16px;
+}
+
+.tag-role {
+  font-size: var(--text-muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.tag-role.is-brand {
+  background: var(--tint);
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.tag-role.is-gray {
+  background: rgba(15, 23, 42, 0.05);
+  color: var(--t3);
+}
+
+.kb-docs {
+  font-size: var(--text-muted);
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 @media (max-width: 1280px) {
-  .stats-grid,
-  .panel-grid {
+  .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .panel-grid {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 768px) {
-  .hero-bar,
-  .panel-grid,
   .stats-grid {
     grid-template-columns: 1fr;
-    display: grid;
   }
 
-  .shortcut-grid,
-  .status-grid,
-  .setting-strip {
-    grid-template-columns: 1fr;
+  .welcome {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .welcome-date {
+    text-align: left;
   }
 }
 </style>

@@ -143,7 +143,7 @@
 
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, Plus, Star, View } from '@element-plus/icons-vue'
 import {
@@ -156,6 +156,7 @@ import {
 } from '../api/knowledge'
 
 const router = useRouter()
+const route = useRoute()
 const list = ref([])
 const loading = ref(false)
 
@@ -264,7 +265,14 @@ const handleDelete = async (kb) => {
 
 const goDetail = (id) => router.push(`/knowledge/${id}`)
 
-onMounted(loadList)
+// 仪表盘"新建知识库"磁贴经 ?new=1 直达：自动弹新建框并清掉 query，刷新后不重复弹
+onMounted(() => {
+  loadList()
+  if (route.query.new) {
+    openCreateDialog()
+    router.replace({ path: '/knowledge' })
+  }
+})
 </script>
 
 <style scoped>
@@ -294,7 +302,7 @@ onMounted(loadList)
   position: relative;
   background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 20px;
+  border-radius: var(--r1);
   overflow: hidden;
   margin-bottom: 20px;
   cursor: pointer;
@@ -337,7 +345,7 @@ onMounted(loadList)
   font-size: 40px;
   font-weight: 700;
   color: #ffffff;
-  background: #0f766e;
+  background: var(--brand);
 }
 
 .kb-body {
@@ -357,7 +365,7 @@ onMounted(loadList)
 .kb-name {
   font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -372,7 +380,7 @@ onMounted(loadList)
 }
 
 .author-avatar {
-  background: #64748b;
+  background: var(--t3);
   color: #fff;
   font-size: 12px;
   flex-shrink: 0;
@@ -380,7 +388,7 @@ onMounted(loadList)
 
 .author-name {
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -390,7 +398,7 @@ onMounted(loadList)
   margin-top: 8px;
   min-height: 36px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
   line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -412,7 +420,7 @@ onMounted(loadList)
   display: flex;
   align-items: center;
   gap: 12px;
-  color: #94a3b8;
+  color: var(--t4);
   font-size: 12px;
 }
 
@@ -425,7 +433,7 @@ onMounted(loadList)
 .doc-badge {
   font-size: 12px;
   font-weight: 600;
-  color: #0f766e;
+  color: var(--brand);
   background: rgba(20, 184, 166, 0.1);
   padding: 2px 8px;
   border-radius: 6px;
@@ -457,16 +465,16 @@ onMounted(loadList)
   gap: 6px;
   border: 1px dashed rgba(203, 213, 225, 0.8);
   border-radius: 12px;
-  color: #64748b;
+  color: var(--t3);
   font-size: 12px;
   cursor: pointer;
-  background: #f8fafc;
+  background: var(--bg);
   transition: all 0.2s ease;
 }
 
 .cover-placeholder:hover {
   border-color: #14b8a6;
-  color: #0f766e;
+  color: var(--brand);
   background: rgba(20, 184, 166, 0.04);
 }
 
@@ -479,6 +487,6 @@ onMounted(loadList)
 
 .visibility-tip {
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 </style>

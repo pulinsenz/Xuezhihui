@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>学智汇 · 样式布局优化提案</title>
+<style>
+:root{
+  --brand:#0F766E; --brand-h:#0D5F58; --brand-p:#0B4F49;
+  --tint:rgba(15,118,110,.08); --tint2:rgba(15,118,110,.14);
+  --bg:#F5F7F7; --card:#FFFFFF;
+  --t1:#0F172A; --t2:#334155; --t3:#64748B; --t4:#94A3B8;
+  --line:rgba(15,23,42,.07);
+  --sh:0 1px 2px rgba(16,24,40,.04),0 4px 16px rgba(16,24,40,.05);
+  --sh-h:0 2px 4px rgba(16,24,40,.05),0 10px 28px rgba(16,24,40,.09);
+  --r1:16px; --r2:12px; --r3:8px;
+  --font:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei","Helvetica Neue",sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:transparent;font-family:var(--font);color:var(--t1);font-size:14px;line-height:1.5}
+.wrap{max-width:1020px;margin:0 auto;padding:0 16px 24px}
+svg.ic{width:18px;height:18px;flex:none}
+
+/* ── 页头 ── */
+.head{padding:20px 4px 8px}
+.head h1{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.head p{margin-top:6px;color:var(--t3);font-size:13px;max-width:72ch}
+
+/* ── 分区标签 ── */
+.block{margin-top:20px}
+.block-tag{font-size:13px;font-weight:700;color:var(--t2);margin:0 2px 8px;display:flex;align-items:center;gap:8px}
+.block-tag::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* ── 设备框 ── */
+.frame{background:#E8EEEE;border-radius:var(--r1);padding:10px}
+.app{background:var(--bg);border-radius:10px;overflow:hidden;box-shadow:var(--sh);display:flex;min-height:430px}
+
+/* ── 侧栏 ── */
+.side{width:186px;flex:none;background:var(--card);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:12px 8px 10px}
+.brand{display:flex;align-items:center;gap:9px;padding:2px 8px 12px}
+.logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#14B8A6,#0F766E);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.brand b{font-size:14px;font-weight:700}
+.m-group{font-size:11px;font-weight:600;color:var(--t4);letter-spacing:.04em;padding:10px 10px 4px}
+.m-item{display:flex;align-items:center;gap:9px;height:34px;padding:0 10px;border-radius:8px;color:var(--t2);font-size:13px;cursor:pointer;position:relative;transition:background .15s ease-out,color .15s ease-out}
+.m-item .ic{color:var(--t4);width:16px;height:16px;transition:color .15s ease-out}
+.m-item:hover{background:var(--tint)}
+.m-item.on{background:var(--tint);color:var(--brand);font-weight:600}
+.m-item.on .ic{color:var(--brand)}
+.m-item.on::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:2px;background:var(--brand)}
+
+/* ── 顶栏 ── */
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{height:54px;flex:none;background:var(--card);border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 18px}
+.topbar h2{font-size:16px;font-weight:700;letter-spacing:-.01em}
+.tools{display:flex;align-items:center;gap:10px}
+.icon-btn{width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--t3);cursor:pointer;transition:background .15s ease-out,color .15s ease-out}
+.icon-btn:hover{background:var(--tint);color:var(--brand)}
+.chip{display:flex;align-items:center;gap:8px;padding:3px 10px 3px 4px;border:1px solid var(--line);border-radius:999px;cursor:pointer;transition:border-color .15s ease-out}
+.chip:hover{border-color:var(--brand)}
+.ava{width:26px;height:26px;border-radius:999px;background:var(--brand);color:#fff;font-size:12px;font-weight:600;display:flex;align-items:center;justify-content:center}
+.chip b{font-size:13px;font-weight:600}
+.chip small{font-size:11px;color:var(--t3)}
+
+/* ── 页面区 ── */
+.page{flex:1;padding:14px 16px 16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.btn{height:32px;padding:0 14px;border-radius:8px;border:none;font-size:13px;font-weight:600;font-family:inherit;display:inline-flex;align-items:center;gap:6px;cursor:pointer;transition:background .15s ease-out,transform .1s ease-out,box-shadow .15s ease-out}
+.btn .ic{width:15px;height:15px}
+.btn-p{background:var(--brand);color:#fff}
+.btn-p:hover{background:var(--brand-h)}
+.btn-p:active{background:var(--brand-p);transform:translateY(1px)}
+
+.welcome{display:flex;align-items:center;justify-content:space-between;gap:16px;background:var(--tint);border-radius:var(--r1);padding:16px 20px}
+.welcome .w-main b{display:block;font-size:16px;font-weight:700;letter-spacing:-.01em}
+.welcome .w-main b i{font-style:normal;color:var(--brand)}
+.welcome .w-main p{margin-top:4px;font-size:13px;color:var(--t2)}
+.w-date{text-align:right;flex:none}
+.w-date b{display:block;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.w-date small{font-size:12px;color:var(--t3)}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.stat{position:relative;background:var(--card);border-radius:var(--r1);box-shadow:var(--sh);padding:14px 16px;transition:box-shadow .2s ease-out,transform .2s ease-out}
+.stat:hover{box-shadow:var(--sh-h);transform:translateY(-2px)}
+.stat .ghost{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:10px;background:var(--tint);color:var(--brand);display:flex;align-items:center;justify-content:center}
+.stat .ghost .ic{width:17px;height:17px}
+.stat b{font-size:12px;font-weight:500;color:var(--t3)}
+.stat .num{font-size:28px;font-weight:700;letter-spacing:-.02em;margin-top:2px;font-variant-numeric:tabular-nums}
+
+.cols{display:grid;grid-template-columns:5fr 7fr;gap:12px}
+.card{background:var(--card);border-radius:var(--r1);box-shadow:var(--sh);min-width:0}
+.card-h{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--line)}
+.card-h b{font-size:14px;font-weight:600}
+.link{font-size:12px;font-weight:600;color:var(--brand);cursor:pointer;display:inline-flex;align-items:center;gap:3px}
+.link .ic{width:13px;height:13px}
+.link:hover{color:var(--brand-h);text-decoration:underline;text-underline-offset:3px}
+
+.tile{display:flex;align-items:center;gap:10px;margin:6px 8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .15s ease-out}
+.tile:hover{background:var(--bg)}
+.tile .ghost{width:30px;height:30px;border-radius:8px;background:var(--tint);color:var(--brand);display:flex;align-items:center;justify-content:center}
+.tile .ghost .ic{width:15px;height:15px}
+.tile span{font-size:13px;font-weight:500}
+
+.row{display:flex;align-items:center;gap:10px;padding:9px 16px;cursor:pointer;transition:background .15s ease-out}
+.row:hover{background:var(--bg)}
+.row + .row{border-top:1px solid var(--line)}
+.row .dot{width:8px;height:8px;border-radius:999px;background:#14B8A6;flex:none}
+.row .dot.off{background:#CBD5E1}
+.row-main{flex:1;min-width:0}
+.row-main b{display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row-main small{font-size:12px;color:var(--t3)}
+.row .chev{color:var(--t4)}
+
+.kb-head{display:flex;align-items:center;justify-content:space-between}
+.kb-row{display:grid;grid-template-columns:minmax(0,1fr) 58px 62px 88px 18px;gap:10px;align-items:center;padding:10px 16px;cursor:pointer;transition:background .15s ease-out}
+.kb-row:hover{background:var(--bg)}
+.kb-row + .kb-row{border-top:1px solid var(--line)}
+.kb-row b{font-size:13px;font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.kb-row .c{font-size:12px;color:var(--t3);font-variant-numeric:tabular-nums}
+.kb-row .c.num{text-align:right}
+.tag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;text-align:center}
+.tag.brand{background:var(--tint);color:var(--brand)}
+.tag.gray{background:rgba(15,23,42,.05);color:var(--t3)}
+
+/* ── 设置页 ── */
+.set{max-width:560px}
+.g-title{font-size:12px;font-weight:600;color:var(--t3);letter-spacing:.03em;margin:6px 2px 8px}
+.set-card{background:var(--card);border-radius:var(--r1);box-shadow:var(--sh)}
+.set-row{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 20px}
+.set-row + .set-row{border-top:1px solid var(--line)}
+.set-row b{font-size:14px;font-weight:600}
+.sw{width:40px;height:22px;border-radius:999px;background:#CBD5E1;position:relative;flex:none;cursor:pointer;transition:background .2s ease-out}
+.sw::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:999px;background:#fff;box-shadow:0 1px 2px rgba(16,24,40,.2);transition:left .2s ease-out}
+.sw.on{background:var(--brand)}
+.sw.on::after{left:20px}
+
+/* ── 说明 ── */
+.notes{margin:10px 2px 0;list-style:none}
+.notes li{position:relative;padding-left:18px;font-size:13px;color:var(--t2);margin-top:5px}
+.notes li::before{content:"";position:absolute;left:2px;top:8px;width:6px;height:6px;border-radius:999px;background:var(--brand);opacity:.55}
+.notes b{font-weight:600}
+
+/* ── token 区 ── */
+.tk-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.tk-card{background:var(--card);border-radius:var(--r1);box-shadow:var(--sh);padding:16px}
+.tk-card h3{font-size:14px;font-weight:600;margin-bottom:12px}
+.sw-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
+.swatch i{display:block;height:34px;border-radius:8px;border:1px solid var(--line)}
+.swatch span{display:block;font-size:11px;color:var(--t3);margin-top:5px;white-space:nowrap}
+.type-demo div{padding:3px 0;border-bottom:1px dashed var(--line)}
+.type-demo div:last-child{border:none}
+.t-num{font-size:28px;font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.2}
+.t-h{font-size:16px;font-weight:600}
+.t-b{font-size:14px}
+.t-m{font-size:12px;color:var(--t3)}
+.radii{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.radii i{display:block;width:48px;height:40px;background:var(--tint);border:1px solid var(--brand)}
+.radii .rl{font-size:12px;color:var(--t3);white-space:nowrap;align-self:center;margin-right:6px}
+.sp-bars{display:flex;align-items:flex-end;gap:10px;height:46px}
+.sp-bars i{display:block;background:var(--brand);opacity:.75;border-radius:3px}
+.sp-bars span{font-size:11px;color:var(--t3);display:block;margin-top:4px}
+.st-row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.st-col{text-align:center}
+.st-col small{display:block;font-size:11px;color:var(--t3);margin-top:6px}
+.btn.dis{background:#E4E9E9;color:var(--t4);cursor:not-allowed}
+.btn.focus{box-shadow:0 0 0 2px var(--card),0 0 0 4px var(--brand)}
+.spin{width:13px;height:13px;border-radius:999px;border:2px solid rgba(255,255,255,.35);border-top-color:#fff;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ── 页脚 ── */
+.foot{margin-top:20px;padding:14px 16px;background:var(--card);border-radius:var(--r1);box-shadow:var(--sh);font-size:13px;color:var(--t2)}
+.foot b{font-weight:600}
+.foot code{font-family:ui-monospace,Consolas,monospace;font-size:12px;background:rgba(15,23,42,.05);padding:1px 5px;border-radius:5px}
+</style>
+</head>
+<body>
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.7V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9.7"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-8.5 8.3 8.9 8.9 0 0 1-3.2-.6L4 20.5l1.4-4A8.1 8.1 0 0 1 4 11.5 8.4 8.4 0 0 1 12.5 3 8.4 8.4 0 0 1 21 11.5z"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2.3 2.5H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m15.2 8.8-1.8 4.6-4.6 1.8 1.8-4.6z"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8.5a6 6 0 0 1 12 0c0 6 1.8 6.6 1.8 8H4.2c0-1.4 1.8-2 1.8-8"/><path d="M10 20a2.2 2.2 0 0 0 4 0"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2.2"/><circle cx="9" cy="17" r="2.2"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.6"/><path d="M5.5 20a6.8 6.8 0 0 1 13 0"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19.5a5.8 5.8 0 0 1 11 0"/><path d="M15.5 5.7a3.2 3.2 0 0 1 0 5.6M17.5 14.3a5.8 5.8 0 0 1 3 5.2"/></symbol>
+  <symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 16.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></symbol>
+</svg>
+
+<div class="wrap">
+
+  <header class="head">
+    <h1>学智汇 · 样式布局优化提案</h1>
+    <p>按 uiup 规则对现有界面做一轮系统化精修：统一设计 token（色/字/圆角/间距/阴影）、顶部加时段问候欢迎卡、统计卡改为数字优先、删除与统计卡重复的“系统状态”卡、快捷入口从 6 个收敛到 3 个、设置页按“组标题 + 名称左控件右”排版。以下为静态稿，确认方向后再落到 Vue 代码。</p>
+  </header>
+
+  <!-- ① 仪表盘 -->
+  <section class="block">
+    <div class="block-tag">① 仪表盘 · 改版稿</div>
+    <div class="frame">
+      <div class="app">
+        <aside class="side">
+          <div class="brand"><span class="logo">学</span><div><b>学智汇</b></div></div>
+          <div class="m-item"><svg class="ic"><use href="#i-home"/></svg>仪表盘</div>
+          <div class="m-item on"><svg class="ic"><use href="#i-chat"/></svg>AI 对话</div>
+          <div class="m-item"><svg class="ic"><use href="#i-folder"/></svg>我的知识库</div>
+          <div class="m-item"><svg class="ic"><use href="#i-compass"/></svg>公开知识库</div>
+          <div class="m-item"><svg class="ic"><use href="#i-bell"/></svg>消息通知</div>
+          <div class="m-item"><svg class="ic"><use href="#i-gear"/></svg>系统设置</div>
+          <div class="m-group">平台管理</div>
+          <div class="m-item"><svg class="ic"><use href="#i-user"/></svg>用户管理</div>
+          <div class="m-item"><svg class="ic"><use href="#i-users"/></svg>全局知识库</div>
+        </aside>
+        <div class="main">
+          <div class="topbar">
+            <h2>仪表盘</h2>
+            <div class="tools">
+              <div class="icon-btn"><svg class="ic"><use href="#i-bell"/></svg></div>
+              <div class="chip"><span class="ava">U</span><div><b>UI走查样本</b> <small>成员</small></div></div>
+            </div>
+          </div>
+          <div class="page">
+            <div class="welcome">
+              <div class="w-main">
+                <b>亲爱的<i>「UI走查样本」</i>，欢迎使用学智汇</b>
+                <p id="w-sub">上午精力正好，适合啃下最难的文档。</p>
+              </div>
+              <div class="w-date"><b>11月24日</b><small>星期二</small></div>
+            </div>
+            <div class="stats">
+              <div class="stat"><span class="ghost"><svg class="ic"><use href="#i-folder"/></svg></span><b>知识库</b><div class="num">12</div></div>
+              <div class="stat"><span class="ghost"><svg class="ic"><use href="#i-chat"/></svg></span><b>会话</b><div class="num">48</div></div>
+              <div class="stat"><span class="ghost"><svg class="ic"><use href="#i-bell"/></svg></span><b>未读邀请</b><div class="num">3</div></div>
+              <div class="stat"><span class="ghost"><svg class="ic"><use href="#i-users"/></svg></span><b>协作中</b><div class="num">6</div></div>
+            </div>
+            <div class="cols">
+              <div class="card">
+                <div class="card-h"><b>快捷入口</b></div>
+                <div class="tile"><span class="ghost"><svg class="ic"><use href="#i-spark"/></svg></span><span>发起 AI 对话</span></div>
+                <div class="tile"><span class="ghost"><svg class="ic"><use href="#i-folder"/></svg></span><span>新建知识库</span></div>
+                <div class="tile"><span class="ghost"><svg class="ic"><use href="#i-compass"/></svg></span><span>浏览公开知识库</span></div>
+              </div>
+              <div class="card">
+                <div class="card-h"><b>最近会话</b><span class="link">查看全部<svg class="ic"><use href="#i-chev"/></svg></span></div>
+                <div class="row"><span class="dot"></span><div class="row-main"><b>RAG 检索策略对比实验</b><small>测试知识库 · 今天 10:24</small></div><svg class="ic chev"><use href="#i-chev"/></svg></div>
+                <div class="row"><span class="dot"></span><div class="row-main"><b>产品文档问答整理</b><small>帮助中心 · 昨天 18:02</small></div><svg class="ic chev"><use href="#i-chev"/></svg></div>
+                <div class="row"><span class="dot off"></span><div class="row-main"><b>论文摘要批量生成</b><small>毕设资料 · 11-21</small></div><svg class="ic chev"><use href="#i-chev"/></svg></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-h kb-head"><b>知识概览</b><span class="link">管理知识库<svg class="ic"><use href="#i-chev"/></svg></span></div>
+              <div class="kb-row"><b>毕设资料</b><span class="tag brand">自建</span><span class="c num">28 篇</span><span class="c">更新于 11-23</span><svg class="ic chev"><use href="#i-chev"/></svg></div>
+              <div class="kb-row"><b>帮助中心</b><span class="tag brand">自建</span><span class="c num">64 篇</span><span class="c">更新于 11-22</span><svg class="ic chev"><use href="#i-chev"/></svg></div>
+              <div class="kb-row"><b>团队规范合集</b><span class="tag gray">协作</span><span class="c num">132 篇</span><span class="c">更新于 11-20</span><svg class="ic chev"><use href="#i-chev"/></svg></div>
+              <div class="kb-row"><b>行业白皮书</b><span class="tag gray">收藏</span><span class="c num">17 篇</span><span class="c">更新于 11-18</span><svg class="ic chev"><use href="#i-chev"/></svg></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>删除“系统状态”卡</b>：身份/会话/邀请/协作四项与统计卡完全重复，一屏只讲一遍。</li>
+      <li><b>顶部欢迎卡</b>：替代原操作按钮行的位置——问候语按 5 个时段（清晨 / 上午 / 午后 / 傍晚 / 深夜）各配 2 条，进页面随机取一条；名字读登录用户昵称，品牌青只强调名字。</li>
+      <li><b>统计卡数字优先</b>：28px 等宽数字（tabular-nums）+ 12px 标签 + 右上角浅色图标底，去掉小字提示；悬停整体上浮 2px 加深阴影。</li>
+      <li><b>快捷入口 6 → 3</b>：消息/设置/个人资料在侧栏与顶栏常驻，不重复铺入口；两个偏好 pill 属于设置页，从仪表盘移除（一卡一重点）。</li>
+      <li><b>去掉页面级操作按钮行</b>：发起对话/建知识库由侧栏与快捷入口承载，仪表盘不再放按钮行——数据页只管展示，动作各归其位。</li>
+      <li><b>阴影分层代替描边</b>：卡片去硬边框，用双层柔和阴影浮起；列表行分隔线只画在行与行之间，不穿卡片边缘。</li>
+      <li><b>入口悬停即时反馈</b>：菜单/行/磁贴 hover 150ms 浅色底过渡，动效全部 ease-out、可打断。</li>
+    </ul>
+  </section>
+
+  <!-- ② 设置页 -->
+  <section class="block">
+    <div class="block-tag">② 系统设置 · 改版稿</div>
+    <div class="frame">
+      <div class="app" style="min-height:300px">
+        <aside class="side">
+          <div class="brand"><span class="logo">学</span><div><b>学智汇</b></div></div>
+          <div class="m-item"><svg class="ic"><use href="#i-home"/></svg>仪表盘</div>
+          <div class="m-item"><svg class="ic"><use href="#i-chat"/></svg>AI 对话</div>
+          <div class="m-item"><svg class="ic"><use href="#i-folder"/></svg>我的知识库</div>
+          <div class="m-item"><svg class="ic"><use href="#i-compass"/></svg>公开知识库</div>
+          <div class="m-item"><svg class="ic"><use href="#i-bell"/></svg>消息通知</div>
+          <div class="m-item on"><svg class="ic"><use href="#i-gear"/></svg>系统设置</div>
+        </aside>
+        <div class="main">
+          <div class="topbar">
+            <h2>系统设置</h2>
+            <div class="tools">
+              <div class="icon-btn"><svg class="ic"><use href="#i-bell"/></svg></div>
+              <div class="chip"><span class="ava">U</span><div><b>UI走查样本</b> <small>成员</small></div></div>
+            </div>
+          </div>
+          <div class="page set">
+            <div class="g-title">文档入库</div>
+            <div class="set-card">
+              <div class="set-row"><b>知识库上传文档时默认入库</b><span class="sw on"></span></div>
+            </div>
+            <div class="g-title" style="margin-top:18px">对话来源展示</div>
+            <div class="set-card">
+              <div class="set-row"><b>参考文献默认折叠</b><span class="sw on"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <ul class="notes">
+      <li><b>组 19 排版</b>：设置项按域分组（文档入库 / 对话来源展示），组标题 + 组间留白大于组内留白；名称左、控件右，一行一项。</li>
+      <li><b>开关即时生效</b>：拨动即调接口、失败回滚，页面没有“保存”按钮——生效时机一眼可懂。</li>
+      <li>卡片只负责承载开关行，不再有说明小字与状态角标（上一轮已删，本稿固化该形态）。</li>
+    </ul>
+  </section>
+
+  <!-- ③ 设计 token -->
+  <section class="block">
+    <div class="block-tag">③ 设计 Token 速览（落码依据）</div>
+    <div class="tk-grid">
+      <div class="tk-card">
+        <h3>色彩 · 品牌青 1 个强调色 + 中性 5 档（组 6/17）</h3>
+        <div class="sw-grid">
+          <div class="swatch"><i style="background:#0F766E"></i><span>主色 0F766E</span></div>
+          <div class="swatch"><i style="background:#0D5F58"></i><span>悬停 0D5F58</span></div>
+          <div class="swatch"><i style="background:rgba(15,118,110,.08)"></i><span>浅底 8%</span></div>
+          <div class="swatch"><i style="background:#F5F7F7"></i><span>画布 F5F7F7</span></div>
+          <div class="swatch"><i style="background:#FFFFFF"></i><span>卡面 FFFFFF</span></div>
+          <div class="swatch"><i style="background:#0F172A"></i><span>标题 0F172A</span></div>
+          <div class="swatch"><i style="background:#334155"></i><span>正文 334155</span></div>
+          <div class="swatch"><i style="background:#64748B"></i><span>辅助 64748B</span></div>
+          <div class="swatch"><i style="background:#94A3B8"></i><span>弱化 94A3B8</span></div>
+          <div class="swatch"><i style="background:rgba(15,23,42,.07)"></i><span>分隔线 7%</span></div>
+        </div>
+      </div>
+      <div class="tk-card">
+        <h3>字号 · 只留 4 档（组 6/15）</h3>
+        <div class="type-demo">
+          <div><span class="t-num">28</span>&nbsp;&nbsp;<span style="font-size:12px;color:var(--t3)">大数字 · 700 · tabular-nums</span></div>
+          <div><span class="t-h">16 标题</span>&nbsp;&nbsp;<span style="font-size:12px;color:var(--t3)">600 · 负字距 -0.01em</span></div>
+          <div><span class="t-b">14 正文</span>&nbsp;&nbsp;<span style="font-size:12px;color:var(--t3)">400 · 行高 1.5</span></div>
+          <div><span class="t-m">12 辅助 / 标签 · 400-500</span></div>
+        </div>
+        <h3 style="margin-top:16px">圆角 · 同心体系（组 7）</h3>
+        <div class="radii">
+          <i style="border-radius:16px"></i><span class="rl">卡片 16</span>
+          <i style="border-radius:12px"></i><span class="rl">内块 12</span>
+          <i style="border-radius:8px"></i><span class="rl">控件 8</span>
+          <i style="border-radius:999px;width:64px;height:24px"></i><span class="rl">标签 999</span>
+        </div>
+      </div>
+      <div class="tk-card">
+        <h3>间距 · 4px 起步的刻度（组 16）</h3>
+        <div class="sp-bars">
+          <div><i style="width:4px;height:16px"></i><span>4</span></div>
+          <div><i style="width:8px;height:24px"></i><span>8</span></div>
+          <div><i style="width:12px;height:30px"></i><span>12</span></div>
+          <div><i style="width:16px;height:36px"></i><span>16</span></div>
+          <div><i style="width:20px;height:40px"></i><span>20</span></div>
+          <div><i style="width:24px;height:44px"></i><span>24</span></div>
+        </div>
+        <p style="font-size:12px;color:var(--t3);margin-top:10px">组内 8 / 卡内 16 / 区块 24，组内间距恒小于组间间距。</p>
+      </div>
+      <div class="tk-card">
+        <h3>按钮六态 · 主按钮示例（组 1）</h3>
+        <div class="st-row">
+          <div class="st-col"><button class="btn btn-p">保存设置</button><small>默认</small></div>
+          <div class="st-col"><button class="btn btn-p" style="background:var(--brand-h)">保存设置</button><small>悬停 · 加深</small></div>
+          <div class="st-col"><button class="btn btn-p" style="background:var(--brand-p);transform:translateY(1px)">保存设置</button><small>按下 · 下沉</small></div>
+          <div class="st-col"><button class="btn dis">保存设置</button><small>禁用 · 灰</small></div>
+          <div class="st-col"><button class="btn btn-p"><span class="spin"></span>保存中</button><small>加载 · 转圈禁点</small></div>
+          <div class="st-col"><button class="btn btn-p focus">保存设置</button><small>聚焦 · 可见环</small></div>
+        </div>
+        <p style="font-size:12px;color:var(--t3);margin-top:12px">悬停延迟 150ms 防误闪；按下/聚焦即时（≤150ms）；文案动词+宾语（“保存设置”，不用“确定”）。</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <b>落地范围（确认后执行）</b>：新增 <code>frontend/src/styles/tokens.css</code> 集中管理上述变量 → 改 <code>MainLayout.vue</code>（侧栏/顶栏）→ <code>DashboardView.vue</code>（统计卡、删系统状态卡、快捷入口收敛）→ <code>SettingsView.vue</code>（组标题）→ 其余页面统一换 token。改完跑测试 + 本地截图对比，再按现有流程提交部署。
+  </footer>
+
+</div>
+
+<script>
+// 时段问候池：5 档 × 2 条，进页面随机取一条（真实实现放 DashboardView，读 authStore 昵称）
+(function () {
+  var el = document.getElementById('w-sub');
+  if (!el) return;
+  var h = new Date().getHours(), pool;
+  if (h < 5)       pool = ['夜深了，注意休息，学智汇陪你慢慢来。', '凌晨安静，适合留一段独处的思考。'];
+  else if (h < 9)  pool = ['早上好，新的一天从一次高效检索开始。', '清晨好，今天的知识库已经就绪。'];
+  else if (h < 12) pool = ['上午精力正好，适合啃下最难的文档。', '上午好，把最重要的问题先问了。'];
+  else if (h < 14) pool = ['午后好，稍作休息后继续探索吧。', '中午好，碎片时间也能涨知识。'];
+  else if (h < 18) pool = ['下午好，知识库随时待命。', '下午好，把这段下午留给深度思考。'];
+  else             pool = ['晚上好，今天也辛苦了。', '夜色正好，来复盘一下今天的收获。'];
+  el.textContent = pool[Math.floor(Math.random() * pool.length)];
+})();
+</script>
+</body>
+</html>

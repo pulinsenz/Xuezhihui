@@ -319,9 +319,9 @@ onUnmounted(() => {
 .conversation {
   min-height: 0;
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
-  border-radius: 24px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  box-shadow: var(--shadow-card);
 }
 
 .thread-list {
@@ -344,7 +344,7 @@ onUnmounted(() => {
   gap: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .unread-pill {
@@ -380,17 +380,17 @@ onUnmounted(() => {
 
 .thread-item.active {
   background: rgba(20, 184, 166, 0.08);
-  border-left: 3px solid #0f766e;
+  border-left: 3px solid var(--brand);
 }
 
 .thread-item.unread .thread-name {
-  color: #0f766e;
+  color: var(--brand);
   font-weight: 700;
 }
 
 .thread-avatar {
   flex: 0 0 auto;
-  background: #0f766e;
+  background: var(--brand);
   color: #fff;
   font-weight: 700;
 }
@@ -411,7 +411,7 @@ onUnmounted(() => {
 .thread-name {
   font-size: 14px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--t1);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -420,19 +420,19 @@ onUnmounted(() => {
 
 .thread-peer {
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
   font-weight: 500;
 }
 
 .thread-time {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--t4);
 }
 
 .thread-snippet {
   margin-top: 6px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
   line-height: 1.5;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -455,7 +455,7 @@ onUnmounted(() => {
 }
 
 .conversation-avatar {
-  background: #0f766e;
+  background: var(--brand);
   color: #fff;
   font-weight: 700;
 }
@@ -475,13 +475,13 @@ onUnmounted(() => {
 .conversation-title {
   font-size: 16px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .conversation-subtitle {
   margin-top: 4px;
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .status-dot-text {
@@ -510,7 +510,7 @@ onUnmounted(() => {
   min-height: 0;
   padding: 24px 22px;
   overflow-y: auto;
-  background: #f6f8fa;
+  background: var(--bg);
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -528,7 +528,7 @@ onUnmounted(() => {
 }
 
 .bubble-avatar {
-  background: #0f766e;
+  background: var(--brand);
   color: #fff;
   font-weight: 700;
   flex-shrink: 0;
@@ -544,9 +544,9 @@ onUnmounted(() => {
 .bubble {
   padding: 16px 20px;
   background: #fff;
-  border: 1px solid rgba(148, 163, 184, 0.2);
-  border-radius: 20px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  box-shadow: var(--shadow-card);
 }
 
 .bubble-row.incoming .bubble {
@@ -563,7 +563,7 @@ onUnmounted(() => {
   margin-bottom: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .bubble-text {
@@ -584,7 +584,7 @@ onUnmounted(() => {
 
 .bubble-footer {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--t4);
   padding: 0 4px;
 }
 
@@ -604,7 +604,7 @@ onUnmounted(() => {
   background: rgba(241, 245, 249, 0.85);
   border: 1px solid rgba(148, 163, 184, 0.16);
   font-size: 12px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .thread-empty,

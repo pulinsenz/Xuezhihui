@@ -154,7 +154,7 @@ onMounted(loadData)
 
 .page-kicker {
   font-size: 12px;
-  color: #0f766e;
+  color: var(--brand);
   font-weight: 600;
 }
 
@@ -162,14 +162,14 @@ onMounted(loadData)
   margin: 4px 0 0;
   font-size: 22px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .admin-panel {
   background: #ffffff;
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid var(--line);
   border-radius: 16px;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-shadow: var(--shadow-card);
   padding: 24px;
 }
 
@@ -193,7 +193,7 @@ onMounted(loadData)
 .kb-name-text {
   font-size: var(--text-heading);
   font-weight: 600;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .pagination {

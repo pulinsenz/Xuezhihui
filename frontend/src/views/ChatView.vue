@@ -747,7 +747,7 @@ watch(
   margin: 0;
   font-size: var(--text-heading);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .kb-select {
@@ -785,7 +785,7 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background: #f8fafc;
+  background: var(--bg);
   overflow-y: auto;
 }
 
@@ -802,7 +802,7 @@ watch(
   padding: 4px 8px 0;
   font-size: 12px;
   font-weight: 600;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .session-list {
@@ -825,7 +825,7 @@ watch(
 
 .session-item:hover {
   background: #ffffff;
-  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  box-shadow: var(--shadow-card);
 }
 
 .session-item.active {
@@ -835,12 +835,12 @@ watch(
 
 .session-lead-icon {
   font-size: 16px;
-  color: #94a3b8;
+  color: var(--t4);
   flex-shrink: 0;
 }
 
 .session-item.active .session-lead-icon {
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .session-info {
@@ -859,13 +859,13 @@ watch(
 }
 
 .session-item.active .session-title {
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .session-sub {
   margin-top: 3px;
   font-size: var(--text-muted);
-  color: #94a3b8;
+  color: var(--t4);
 }
 
 /* 行内操作按钮：视觉图标 15px，热区 28px，留出间距防误触 */
@@ -906,7 +906,7 @@ watch(
 }
 
 .session-edit:hover {
-  color: #0f766e;
+  color: var(--brand);
   background: #f1f5f9;
 }
 
@@ -918,7 +918,7 @@ watch(
 .panel-tip {
   padding: 30px 12px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--t4);
   text-align: center;
   line-height: 1.6;
 }
@@ -961,19 +961,19 @@ watch(
   align-items: center;
   justify-content: center;
   font-size: 30px;
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .chat-welcome h3 {
   font-size: var(--text-heading);
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
   margin-bottom: 8px;
 }
 
 .chat-welcome p {
   font-size: 14px;
-  color: #64748b;
+  color: var(--t3);
   line-height: 1.6;
   margin-bottom: 24px;
 }
@@ -986,11 +986,11 @@ watch(
 
 .suggest-chip {
   padding: 10px 16px;
-  background: #f8fafc;
+  background: var(--bg);
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-radius: 12px;
   font-size: var(--text-body);
-  color: #334155;
+  color: var(--t2);
   cursor: pointer;
   text-align: left;
   transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
@@ -999,7 +999,7 @@ watch(
 .suggest-chip:hover {
   background: #f0fdfa;
   border-color: rgba(20, 184, 166, 0.4);
-  color: #0f766e;
+  color: var(--brand);
 }
 
 /* 消息流气泡 */
@@ -1019,13 +1019,13 @@ watch(
 }
 
 .msg-avatar.user {
-  background: #0f766e;
+  background: var(--brand);
   color: #fff;
   font-weight: 600;
 }
 
 .msg-avatar.assistant {
-  background: #475569;
+  background: var(--t2);
   color: #fff;
   font-size: 18px;
 }
@@ -1052,20 +1052,20 @@ watch(
 
 .msg-bubble {
   padding: 14px 18px;
-  border-radius: 18px;
+  border-radius: var(--r2);
   font-size: var(--text-body);
   line-height: 1.7;
   word-break: break-word;
 }
 
 .msg-bubble.user {
-  background: #0f766e;
+  background: var(--brand);
   color: #ffffff;
   border-top-right-radius: 4px;
 }
 
 .msg-bubble.assistant {
-  background: #f8fafc;
+  background: var(--bg);
   color: #1e293b;
   border: 1px solid rgba(226, 232, 240, 0.8);
   border-top-left-radius: 4px;
@@ -1077,7 +1077,7 @@ watch(
   padding: 0 4px;
   border-radius: 4px;
   background: rgba(20, 184, 166, 0.12);
-  color: #0f766e;
+  color: var(--brand);
   font-weight: 600;
   font-size: 12px;
 }
@@ -1121,7 +1121,7 @@ watch(
   margin: 12px 0 8px;
   font-size: 15px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
   line-height: 1.5;
 }
 
@@ -1157,7 +1157,7 @@ watch(
 
 .msg-text :deep(th),
 .msg-text :deep(td) {
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--line);
   padding: 5px 12px;
   text-align: left;
 }
@@ -1165,15 +1165,15 @@ watch(
 .msg-text :deep(th) {
   background: #f1f5f9;
   font-weight: 600;
-  color: #334155;
+  color: var(--t2);
   white-space: nowrap;
 }
 
 .msg-text :deep(pre) {
   margin: 10px 0;
   padding: 10px 14px;
-  background: #0f172a;
-  color: #e2e8f0;
+  background: var(--t1);
+  color: var(--line);
   border-radius: 10px;
   overflow-x: auto;
   font-size: 12.5px;
@@ -1187,7 +1187,7 @@ watch(
 
 .msg-text :deep(:not(pre) > code) {
   background: rgba(20, 184, 166, 0.1);
-  color: #0f766e;
+  color: var(--brand);
   border-radius: 4px;
   padding: 1px 5px;
 }
@@ -1196,11 +1196,11 @@ watch(
   margin: 8px 0;
   padding: 2px 0 2px 12px;
   border-left: 3px solid #cbd5e1;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .msg-text :deep(a) {
-  color: #0f766e;
+  color: var(--brand);
   font-weight: 500;
 }
 
@@ -1211,7 +1211,7 @@ watch(
 
 .msg-text :deep(hr) {
   border: 0;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--line);
   margin: 12px 0;
 }
 
@@ -1248,7 +1248,7 @@ watch(
   cursor: pointer;
   user-select: none;
   font-weight: 600;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .thinking-label {
@@ -1261,7 +1261,7 @@ watch(
   margin: 8px 0 0;
   padding-left: 18px;
   line-height: 1.8;
-  color: #64748b;
+  color: var(--t3);
 }
 
 /* 参考文献 */
@@ -1275,7 +1275,7 @@ watch(
   display: flex;
   align-items: center;
   justify-content: space-between;
-  color: #334155;
+  color: var(--t2);
   font-weight: 600;
   font-size: var(--text-muted);
   cursor: pointer;
@@ -1286,12 +1286,12 @@ watch(
   display: flex;
   align-items: center;
   gap: 6px;
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .refs-arrow {
   font-size: var(--text-muted);
-  color: #94a3b8;
+  color: var(--t4);
 }
 
 .refs-list-box {
@@ -1318,7 +1318,7 @@ watch(
 
 .refs-num {
   font-weight: 700;
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .refs-doc {
@@ -1327,7 +1327,7 @@ watch(
 }
 
 .refs-text {
-  color: #64748b;
+  color: var(--t3);
   line-height: 1.6;
 }
 
@@ -1352,7 +1352,7 @@ watch(
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #64748b;
+  color: var(--t3);
 }
 
 .thinking-dots {
@@ -1384,9 +1384,9 @@ watch(
   padding: 3px 12px;
   border: 1px solid rgba(226, 232, 240, 0.9);
   border-radius: 999px;
-  background: #f8fafc;
+  background: var(--bg);
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--t4);
 }
 
 .failed-note {
@@ -1426,14 +1426,14 @@ watch(
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: #94a3b8;
+  color: var(--t4);
   font-size: 12px;
   cursor: pointer;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
 .act-btn:hover {
-  color: #0f766e;
+  color: var(--brand);
   background: rgba(20, 184, 166, 0.09);
 }
 
@@ -1467,7 +1467,7 @@ watch(
   border: 1px solid #e8eef1;
   border-radius: 999px;
   background: #ffffff;
-  color: #334155;
+  color: var(--t2);
   font-size: var(--text-muted);
   cursor: pointer;
   box-shadow: var(--shadow-pop);
@@ -1476,7 +1476,7 @@ watch(
 }
 
 .jump-latest:hover {
-  color: #0f766e;
+  color: var(--brand);
   border-color: rgba(20, 184, 166, 0.4);
 }
 
@@ -1489,7 +1489,7 @@ watch(
 
 .input-card {
   border: 1px solid #cbd5e1;
-  border-radius: 14px;
+  border-radius: var(--r2);
   corner-shape: squircle;
   padding: 10px 14px;
   background: #ffffff;
@@ -1497,7 +1497,7 @@ watch(
 }
 
 .input-card:focus-within {
-  border-color: #0f766e;
+  border-color: var(--brand);
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
 
@@ -1520,7 +1520,7 @@ watch(
 
 .input-hints {
   font-size: var(--text-muted);
-  color: #94a3b8;
+  color: var(--t4);
 }
 
 .send-btn {

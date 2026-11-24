@@ -5,7 +5,6 @@
         <img class="brand-logo" :src="logo" alt="学智汇" />
         <div v-if="!collapsed" class="brand-copy">
           <div class="brand-name">学智汇</div>
-          <div class="brand-sub">AI RAG 工作台</div>
         </div>
       </div>
 
@@ -252,26 +251,25 @@ onUnmounted(() => {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
-  background: #ffffff;
-  border-right: 1px solid #e2e8f0;
+  background: var(--card);
+  border-right: 1px solid var(--line);
   transition: width 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 1px 0 2px rgba(15, 23, 42, 0.05);
   z-index: 10;
 }
 
 .sidebar-brand {
-  min-height: 80px;
+  min-height: 64px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 16px 18px;
-  border-bottom: 1px solid rgba(226, 232, 240, 0.6);
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
 }
 
 .brand-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
   object-fit: cover;
   flex-shrink: 0;
 }
@@ -281,21 +279,10 @@ onUnmounted(() => {
 }
 
 .brand-name {
-  font-size: var(--text-heading);
+  font-size: 15px;
   font-weight: 700;
-  color: #0f172a;
+  color: var(--t1);
   letter-spacing: -0.01em;
-}
-
-.brand-sub {
-  margin-top: 2px;
-  font-size: var(--text-muted);
-  font-weight: 500;
-  color: #0d9488;
-  background: rgba(20, 184, 166, 0.1);
-  padding: 1px 6px;
-  border-radius: 6px;
-  display: inline-block;
 }
 
 .side-menu {
@@ -306,36 +293,49 @@ onUnmounted(() => {
   background: transparent;
   padding: 8px 0 64px;
   --el-menu-bg-color: transparent;
-  --el-menu-hover-bg-color: rgba(20, 184, 166, 0.06);
-  --el-menu-active-color: #0f766e;
-  --el-menu-text-color: #475569;
+  --el-menu-hover-bg-color: var(--tint);
+  --el-menu-active-color: var(--brand);
+  --el-menu-text-color: var(--t2);
 }
 
 .side-menu :deep(.el-menu-item) {
-  margin: 4px 10px;
-  border-radius: 12px;
-  height: 46px;
+  position: relative;
+  margin: 3px 8px;
+  border-radius: 10px;
+  height: 38px;
   font-weight: 500;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition: background-color 0.15s ease-out, color 0.15s ease-out;
 }
 
 .side-menu :deep(.el-menu-item.is-active) {
-  background: rgba(20, 184, 166, 0.12);
-  color: #0f766e;
+  background: var(--tint);
+  color: var(--brand);
   font-weight: 600;
+}
+
+/* 激活项左侧指示条：高亮位置一眼可辨（同组内切换由 View Transitions 负责平滑滑动） */
+.side-menu :deep(.el-menu-item.is-active)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--brand);
 }
 
 .side-menu :deep(.el-menu-item:hover) {
-  color: #0f766e;
+  color: var(--brand);
 }
 
 .menu-divider-label {
-  padding: 14px 20px 6px;
-  font-size: var(--text-muted);
+  padding: 14px 18px 4px;
+  font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: #94a3b8;
+  color: var(--t4);
 }
 
 .menu-badge {
@@ -347,19 +347,19 @@ onUnmounted(() => {
 /* 锚定左侧：展开(260px)/收起(80px)切换时按钮坐标不变 */
 .collapse-btn {
   position: absolute;
-  left: 24px;
-  bottom: 16px;
+  left: 20px;
+  bottom: 14px;
   z-index: 20;
-  background: #ffffff;
-  border-color: rgba(226, 232, 240, 0.9);
-  color: #64748b;
-  transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+  background: var(--card);
+  border-color: var(--line);
+  color: var(--t3);
+  transition: color 0.15s ease-out, border-color 0.15s ease-out, background 0.15s ease-out;
 }
 
 .collapse-btn:hover {
-  color: #0f766e;
-  border-color: #14b8a6;
-  background: rgba(20, 184, 166, 0.08);
+  color: var(--brand);
+  border-color: var(--brand);
+  background: var(--tint);
 }
 
 .content-shell {
@@ -371,10 +371,10 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  height: 80px;
-  padding: 16px 28px;
-  background: #ffffff;
-  border-bottom: 1px solid #e2e8f0;
+  height: 60px;
+  padding: 0 20px;
+  background: var(--card);
+  border-bottom: 1px solid var(--line);
   position: sticky;
   top: 0;
   z-index: 9;
@@ -386,11 +386,11 @@ onUnmounted(() => {
 
 .title-block h1 {
   margin: 0;
-  font-size: var(--text-title);
+  font-size: var(--text-heading);
   font-weight: 700;
   line-height: 1.2;
-  color: #0f172a;
-  letter-spacing: -0.02em;
+  color: var(--t1);
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -399,42 +399,42 @@ onUnmounted(() => {
 .topbar-tools {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: nowrap;
   justify-content: flex-end;
   flex-shrink: 0;
 }
 
 .icon-button {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  color: #475569;
-  transition: all 0.2s ease;
+  border: 1px solid var(--line);
+  color: var(--t3);
+  transition: all 0.15s ease-out;
 }
 
 .icon-button:hover {
-  color: #0f766e;
-  border-color: #14b8a6;
-  background: rgba(20, 184, 166, 0.08);
+  color: var(--brand);
+  border-color: var(--brand);
+  background: var(--tint);
 }
 
 .user-chip {
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 12px 4px 4px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  padding: 3px 10px 3px 4px;
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: #ffffff;
+  background: var(--card);
   cursor: pointer;
-  transition: border-color 0.2s ease;
+  transition: border-color 0.15s ease-out;
 }
 
 .user-chip:hover {
-  border-color: #14b8a6;
+  border-color: var(--brand);
 }
 
 .avatar {
-  background: #0f766e;
+  background: var(--brand);
   color: #fff;
   font-weight: 600;
 }
@@ -446,26 +446,26 @@ onUnmounted(() => {
 }
 
 .user-copy strong {
-  font-size: var(--text-body);
+  font-size: 13px;
   font-weight: 600;
-  color: #0f172a;
+  color: var(--t1);
 }
 
 .user-copy small {
   margin-top: 2px;
   font-size: var(--text-muted);
-  color: var(--text-muted);
+  color: var(--t3);
 }
 
 .chevron {
-  color: #94a3b8;
+  color: var(--t4);
   font-size: 12px;
   transition: transform 0.2s ease;
 }
 
 .page-body {
   min-width: 0;
-  padding: 24px 28px 36px;
+  padding: 20px 24px 32px;
 }
 
 @media (max-width: 1024px) {
