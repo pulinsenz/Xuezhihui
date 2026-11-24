@@ -1,11 +1,7 @@
 ﻿<template>
   <div class="messages-page">
     <div class="page-head">
-      <div>
-        <p class="page-kicker">协同互动</p>
-        <h2>消息与知识协作</h2>
-        <p class="page-subtitle">知识库邀请会在这里以会话形式呈现，接受后即可共同编辑与管理文档</p>
-      </div>
+      <!-- 标题由顶栏承载，此处只保留刷新（去AI味：删同屏重复标题） -->
       <el-button :icon="Refresh" :loading="messageStore.loading" @click="reload">刷新</el-button>
     </div>
 
@@ -307,28 +303,8 @@ onUnmounted(() => {
 .page-head {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-end;
   padding: 4px 2px;
-}
-
-.page-kicker {
-  font-size: 12px;
-  color: #0f766e;
-  font-weight: 600;
-}
-
-.page-head h2 {
-  margin: 4px 0 0;
-  font-size: 22px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.page-subtitle {
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 12px;
 }
 
 .message-shell {

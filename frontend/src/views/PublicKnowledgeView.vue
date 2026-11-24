@@ -1,10 +1,7 @@
 ﻿<template>
   <div class="public-kb-page">
     <div class="page-header">
-      <div>
-        <h2>公开知识库</h2>
-        <p class="sub">发现平台社区精选知识库，支持一键收藏或克隆为你的个人副本。</p>
-      </div>
+      <!-- 标题由顶栏承载，此处只保留搜索与刷新工具（去AI味：删同屏重复标题） -->
       <div class="header-tools">
         <el-input
           v-model="keyword"
@@ -155,20 +152,7 @@ onMounted(loadList)
 .page-header {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.page-header h2 {
-  font-size: 22px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.sub {
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 12px;
+  justify-content: flex-end;
 }
 
 .header-tools {

@@ -207,7 +207,7 @@
               type="textarea"
               :rows="3"
               resize="none"
-              placeholder="输入你的问题，按 Enter 发送，Shift + Enter 换行..."
+              placeholder="输入你的问题..."
               :disabled="chat.sending"
               class="custom-textarea"
               @keydown.enter.exact.prevent="onEnterKey"

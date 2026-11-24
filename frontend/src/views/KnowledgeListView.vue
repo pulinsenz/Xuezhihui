@@ -1,18 +1,21 @@
 ﻿<template>
   <div class="kb-list-page">
     <div class="page-header">
-      <div>
-        <h2>我的知识库</h2>
-        <p class="sub">搭建你的专属文档与课程知识库；自建、协作中与收藏的知识库均在此集中管理。</p>
-      </div>
-      <el-button type="primary" :icon="Plus" class="create-btn" @click="openCreateDialog">
+      <!-- 标题由顶栏承载；空态时隐藏右上按钮，避免与空态"立即创建"同屏双主按钮（uiup 组 14） -->
+      <el-button
+        v-if="loading || list.length > 0"
+        type="primary"
+        :icon="Plus"
+        class="create-btn"
+        @click="openCreateDialog"
+      >
         新建知识库
       </el-button>
     </div>
 
     <el-empty
       v-if="!loading && list.length === 0"
-      description="还没有知识库，点击右上角开启你的第一个知识库吧"
+      description="还没有知识库，点击下方开启你的第一个知识库吧"
     >
       <el-button type="primary" :icon="Plus" @click="openCreateDialog">立即创建</el-button>
     </el-empty>
@@ -274,20 +277,7 @@ onMounted(loadList)
 .page-header {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.page-header h2 {
-  font-size: 22px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.sub {
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 12px;
+  justify-content: flex-end;
 }
 
 .create-btn {

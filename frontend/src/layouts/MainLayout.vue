@@ -162,6 +162,9 @@ const activeMenu = computed(() => {
   const path = route.path
   if (path.startsWith('/admin/knowledge')) return '/admin/knowledge'
   if (path.startsWith('/admin')) return '/admin/users'
+  // /profile 不在侧栏菜单里：返回空串让菜单无高亮项，标题走 route.meta.title（此前回落到 /dashboard，
+  // 导致个人资料页顶栏显示"仪表盘"、侧栏高亮错位）
+  if (path.startsWith('/profile')) return ''
   if (path.startsWith('/knowledge')) return '/knowledge'
   if (path.startsWith('/messages')) return '/messages'
   if (path.startsWith('/public-knowledge')) return '/public-knowledge'

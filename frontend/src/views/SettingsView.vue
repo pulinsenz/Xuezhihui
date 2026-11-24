@@ -1,21 +1,11 @@
 ﻿<template>
   <div class="settings-page">
-    <section class="hero-bar">
-      <div>
-        <p class="hero-kicker">系统偏好</p>
-        <h2>个性化与工作区设置</h2>
-        <p class="hero-subtitle">自定义文档入库流程与 AI 对话引用展示规则</p>
-      </div>
-    </section>
-
+    <!-- 标题由顶栏承载；开关旁不再放状态 tag：开关本身就是状态，且 warning 黄色属于语义色挪用（uiup 组 17/19） -->
     <section class="settings-card">
       <div class="setting-item">
         <div class="setting-main">
           <div class="setting-title-row">
             <span class="setting-title">知识库上传文档时默认入库</span>
-            <el-tag :type="defaultVectorize === 1 ? 'success' : 'info'" size="small" effect="plain">
-              {{ defaultVectorize === 1 ? '自动向量化' : '手动入库' }}
-            </el-tag>
           </div>
           <p class="setting-desc">
             开启后新上传的文档将自动切块入库并建立向量索引，立即可供 AI 对话检索；关闭后仅保存文档元数据，可随时在文档列表按需入库。
@@ -39,9 +29,6 @@
         <div class="setting-main">
           <div class="setting-title-row">
             <span class="setting-title">参考文献默认折叠</span>
-            <el-tag :type="collapseRefs === 1 ? 'warning' : 'success'" size="small" effect="plain">
-              {{ collapseRefs === 1 ? '默认收起' : '默认展开' }}
-            </el-tag>
           </div>
           <p class="setting-desc">
             开启后 AI 对话回复底部的知识库检索切片和参考来源将默认收起，保持版面清爽利落；关闭后将直接平铺展示所有溯源来源。
@@ -114,29 +101,6 @@ const handleCollapseChange = async (val) => {
   flex-direction: column;
   gap: 20px;
   max-width: 960px;
-}
-
-.hero-bar {
-  padding: 4px 2px;
-}
-
-.hero-kicker {
-  font-size: 12px;
-  color: #0f766e;
-  font-weight: 600;
-}
-
-.hero-bar h2 {
-  margin: 4px 0 0;
-  font-size: 22px;
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.hero-subtitle {
-  margin-top: 6px;
-  color: #64748b;
-  font-size: 12px;
 }
 
 .settings-card {

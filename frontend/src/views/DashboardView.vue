@@ -1,12 +1,7 @@
 <template>
   <div class="dashboard-page" v-loading="loading">
     <section class="hero-bar">
-      <div>
-        <p class="hero-kicker">{{ authStore.isLogin ? '欢迎回来' : '先从这里开始' }}</p>
-        <p class="hero-subtitle">
-          {{ authStore.isLogin ? '查看知识库、会话和协作提醒。' : '登录后可以查看知识库、会话和协作消息。' }}
-        </p>
-      </div>
+      <!-- 页面标题已由顶栏承载，此处只保留动作按钮，避免同屏双标题（去AI味：删重复装饰） -->
       <div class="hero-actions">
         <el-button type="primary" :icon="ChatDotRound" @click="openRoute('/chat')">开始对话</el-button>
         <el-button :icon="Folder" @click="openRoute('/knowledge')">我的知识库</el-button>
@@ -283,21 +278,8 @@ const formatTime = (epochSec) => {
 .hero-bar {
   display: flex;
   align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
+  justify-content: flex-end;
   padding: 4px 2px;
-}
-
-.hero-kicker {
-  font-size: 12px;
-  color: #0f766e;
-  font-weight: 600;
-}
-
-.hero-subtitle {
-  margin-top: 4px;
-  color: #64748b;
-  font-size: 14px;
 }
 
 .hero-actions {
@@ -360,6 +342,8 @@ const formatTime = (epochSec) => {
   font-size: 30px;
   font-weight: 700;
   color: #0f172a;
+  /* 变化数字用等宽数字排版，数值刷新时不左右抖动（uiup 组 7） */
+  font-variant-numeric: tabular-nums;
 }
 
 .stat-hint {

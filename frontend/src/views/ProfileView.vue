@@ -116,7 +116,7 @@
               <strong>默认入库</strong>
               <p>上传文档后自动进入向量化流程。</p>
             </div>
-            <el-tag effect="plain" :type="settings.defaultVectorize ? 'success' : 'info'">
+            <el-tag effect="plain">
               {{ settings.defaultVectorize ? '开启' : '关闭' }}
             </el-tag>
           </div>
@@ -126,7 +126,8 @@
               <strong>引用折叠</strong>
               <p>控制对话引用是否默认收起。</p>
             </div>
-            <el-tag effect="plain" :type="settings.collapseRefs ? 'warning' : 'success'">
+            <!-- 偏好状态非警告，不用 warning 黄（uiup 组 17：功能色语义专用） -->
+            <el-tag effect="plain">
               {{ settings.collapseRefs ? '收起' : '展开' }}
             </el-tag>
           </div>
