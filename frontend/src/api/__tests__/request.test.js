@@ -61,7 +61,8 @@ describe('axios 请求封装', () => {
     it('code!=0 reject 并提示错误', async () => {
       await expect(onFulfilled({ data: { code: 40001, message: '账号已存在' } })).rejects.toThrow('账号已存在')
       const { ElMessage } = await import('element-plus')
-      expect(ElMessage.error).toHaveBeenCalledWith('账号已存在')
+      // grouping: true 由 EP 合并相同内容的并发提示（仪表盘多请求同时失败只弹一条）
+      expect(ElMessage.error).toHaveBeenCalledWith({ message: '账号已存在', grouping: true })
     })
 
     it('40100 清除登录态并派发 auth:expired 事件', async () => {
@@ -122,8 +123,10 @@ describe('axios 请求封装', () => {
       expect(ElMessage.error).toHaveBeenCalledTimes(2)
     })
 
-    it('HTTP 层错误（网络异常）提示并 reject', async () => {
+    it('HTTP 层错误（网络异常）提示并 reject，带 grouping 去重展示', async () => {
       await expect(onRejected(new Error('Network Error'))).rejects.toThrow('Network Error')
+      const { ElMessage } = await import('element-plus')
+      expect(ElMessage.error).toHaveBeenCalledWith({ message: 'Network Error', grouping: true })
     })
   })
 

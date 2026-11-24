@@ -51,12 +51,13 @@ request.interceptors.response.use(
         window.dispatchEvent(new Event('auth:expired'))
       }
     } else {
-      ElMessage.error(res.message || '请求失败')
+      // grouping：仪表盘会并发多个请求，失败时相同内容的提示合并为一条（EP 内建去重展示）
+      ElMessage.error({ message: res.message || '请求失败', grouping: true })
     }
     return Promise.reject(new Error(res.message || '请求失败'))
   },
   (error) => {
-    ElMessage.error(error.response?.data?.message || error.message || '网络异常')
+    ElMessage.error({ message: error.response?.data?.message || error.message || '网络异常', grouping: true })
     return Promise.reject(error)
   }
 )
