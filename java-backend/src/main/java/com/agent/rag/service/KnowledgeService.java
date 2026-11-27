@@ -3,9 +3,11 @@ package com.agent.rag.service;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.KnowledgeUpdateRequest;
 import com.agent.rag.dto.req.MemberInviteRequest;
+import com.agent.rag.dto.req.RetrievalTestRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeInvitationVO;
 import com.agent.rag.dto.resp.MemberVO;
+import com.agent.rag.dto.resp.RetrievalTestVO;
 import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
@@ -131,6 +133,8 @@ public interface KnowledgeService {
      * 文档切片详情（文本列表），未入库返回空列表；可查看者均可访问
      */
     List<String> listDocChunks(Long knowledgeId, Long docId);
+
+    RetrievalTestVO testRetrieval(Long knowledgeId, RetrievalTestRequest request);
 
     /**
      * 收藏知识库（仅他人公开库），收藏后出现在自己的知识库列表

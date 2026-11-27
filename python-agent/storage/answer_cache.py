@@ -21,9 +21,10 @@ from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("answer_cache")
 
-EXACT_PREFIX = "xzh:anscache:exact:"
-SEM_ENTRY_PREFIX = "xzh:anscache:sem:"
-SEM_INDEX_PREFIX = "xzh:anscache:semidx:"
+# 缓存中的旧引用缺少切片标识，升级键前缀让它们按原 TTL 淘汰。
+EXACT_PREFIX = "xzh:anscache:v2:exact:"
+SEM_ENTRY_PREFIX = "xzh:anscache:v2:sem:"
+SEM_INDEX_PREFIX = "xzh:anscache:v2:semidx:"
 VERSION_PREFIX = "xzh:anscache:ver:"
 STATS_KEY = "xzh:anscache:stats"
 

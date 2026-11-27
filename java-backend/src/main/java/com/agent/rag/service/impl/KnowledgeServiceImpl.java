@@ -11,9 +11,11 @@ import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.req.KnowledgeUpdateRequest;
 import com.agent.rag.dto.req.MemberInviteRequest;
+import com.agent.rag.dto.req.RetrievalTestRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeInvitationVO;
 import com.agent.rag.dto.resp.MemberVO;
+import com.agent.rag.dto.resp.RetrievalTestVO;
 import com.agent.rag.dto.resp.UserStatsVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.entity.Knowledge;
@@ -248,6 +250,68 @@ public class KnowledgeServiceImpl implements KnowledgeService {
             log.error("切片查询异常: knowledgeId={}, docId={}", knowledgeId, docId, e);
             throw new BusinessException(ErrorCode.OPERATION_ERROR, "切片服务不可用，请稍后重试");
         }
+    }
+
+    @Override
+    public RetrievalTestVO testRetrieval(Long knowledgeId, RetrievalTestRequest request) {
+        getViewableKnowledge(knowledgeId);
+        String query = request.query() == null ? "" : request.query().strip();
+        if (query.isBlank() || query.codePointCount(0, query.length()) > 500) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "请输入 1–500 字的检索问题");
+        }
+
+        Result<RetrievalTestVO> response;
+        try {
+            response = pythonAgentClient.testRetrieval(knowledgeId.toString(), new RetrievalTestRequest(query));
+        } catch (RuntimeException e) {
+            log.warn("检索测试请求失败: knowledgeId={}, error={}", knowledgeId, e.getClass().getSimpleName());
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "检索服务不可用，请稍后重试");
+        }
+        if (response == null || response.getCode() != 0 || response.getData() == null
+                || response.getData().getHits() == null) {
+            log.warn("检索测试响应异常: knowledgeId={}", knowledgeId);
+            throw new BusinessException(ErrorCode.OPERATION_ERROR, "检索服务不可用，请稍后重试");
+        }
+
+        RetrievalTestVO result = response.getData();
+        Map<String, String> sourceNames = retrievalSourceNames(knowledgeId, result.getHits());
+        List<RetrievalTestVO.Hit> visibleHits = new ArrayList<>();
+        for (RetrievalTestVO.Hit hit : result.getHits()) {
+            if (sourceNames.containsKey(hit.getDocId())) {
+                hit.setDocName(sourceNames.get(hit.getDocId()));
+                visibleHits.add(hit);
+            }
+        }
+        result.setHits(visibleHits);
+        return result;
+    }
+
+    private Map<String, String> retrievalSourceNames(Long knowledgeId, List<RetrievalTestVO.Hit> hits) {
+        List<String> docIds = new ArrayList<>();
+        List<String> wikiIds = new ArrayList<>();
+        for (RetrievalTestVO.Hit hit : hits) {
+            String docId = hit.getDocId();
+            if (docId == null) continue;
+            if (docId.startsWith("wiki-")) wikiIds.add(docId);
+            else docIds.add(docId);
+        }
+        // 向量删除可异步失败，返回原文前按业务库确认来源仍可访问。
+        Map<String, String> names = new HashMap<>();
+        if (!docIds.isEmpty()) {
+            knowledgeDocMapper.selectList(new LambdaQueryWrapper<KnowledgeDoc>()
+                            .select(KnowledgeDoc::getId, KnowledgeDoc::getName)
+                            .eq(KnowledgeDoc::getKnowledgeId, knowledgeId)
+                            .in(KnowledgeDoc::getId, docIds))
+                    .forEach(doc -> names.put(doc.getId().toString(), doc.getName()));
+        }
+        if (!wikiIds.isEmpty()) {
+            wikiPageMapper.selectList(new LambdaQueryWrapper<WikiPage>()
+                            .select(WikiPage::getVectorDocId, WikiPage::getTitle)
+                            .eq(WikiPage::getKnowledgeId, knowledgeId)
+                            .in(WikiPage::getVectorDocId, wikiIds))
+                    .forEach(page -> names.put(page.getVectorDocId(), page.getTitle()));
+        }
+        return names;
     }
 
     @Override

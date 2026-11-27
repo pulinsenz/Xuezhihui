@@ -5,6 +5,7 @@
 import threading
 from abc import ABC, abstractmethod
 from typing import List, Optional
+from uuid import uuid4
 
 from utils.logger_util import get_logger, agent_event
 
@@ -29,15 +30,15 @@ class VectorStore(ABC):
     @abstractmethod
     def search(self, query: str, knowledge_id: Optional[str] = None, top_k: int = 5,
                doc_id_prefix: Optional[str] = None) -> List[dict]:
-        """向量检索，返回 [{"text", "score"}]；doc_id_prefix 非空时仅检索该前缀的文档（Wiki 专用）"""
+        """向量检索，返回含 chunk_id、doc_id、text、score 的命中。"""
 
     @abstractmethod
     def get_chunks(self, knowledge_id: str, doc_id: str) -> List[str]:
         """查询文档切片文本列表（按入库顺序），无则返回空列表"""
 
     @abstractmethod
-    def get_all_chunks(self, knowledge_id: str) -> List[str]:
-        """查询知识库全部分块文本（BM25 回灌数据源），无则返回空列表"""
+    def get_all_chunks(self, knowledge_id: str) -> List[dict]:
+        """返回 BM25 回灌所需的 chunk_id、doc_id 和 text。"""
 
 
 class LocalVectorStore(VectorStore):
@@ -45,24 +46,25 @@ class LocalVectorStore(VectorStore):
 
     def __init__(self, embedding):
         self.embedding = embedding
-        self._vectors: List[dict] = []  # [{knowledge_id, doc_id, text, vec}]
+        self._vectors: List[dict] = []
         self._lock = threading.Lock()
 
     def add_document(self, knowledge_id, doc_id, text, chunks):
         if not chunks:
             return 0
-        with self._lock:
-            # 全量替换同 doc 的旧向量（幂等，重新入库）
-            self._vectors = [v for v in self._vectors if v["doc_id"] != doc_id]
         vecs = self.embedding.embed_documents(chunks)
+        rows = [
+            {
+                "chunk_id": uuid4().hex,
+                "knowledge_id": str(knowledge_id),
+                "doc_id": str(doc_id),
+                "text": chunk,
+                "vec": vec,
+            }
+            for chunk, vec in zip(chunks, vecs)
+        ]
         with self._lock:
-            for chunk, vec in zip(chunks, vecs):
-                self._vectors.append({
-                    "knowledge_id": str(knowledge_id),
-                    "doc_id": str(doc_id),
-                    "text": chunk,
-                    "vec": vec,
-                })
+            self._vectors = [v for v in self._vectors if v["doc_id"] != str(doc_id)] + rows
         agent_event(logger, "vector_added", knowledge_id=knowledge_id, doc_id=doc_id, chunks=len(chunks))
         return len(chunks)
 
@@ -91,7 +93,7 @@ class LocalVectorStore(VectorStore):
         scored = []
         for v in candidates:
             score = _cosine(q_vec, v["vec"])
-            scored.append({"text": v["text"], "score": score, "doc_id": v["doc_id"]})
+            scored.append({**self._chunk_metadata(v), "score": score})
         scored.sort(key=lambda x: -x["score"])
         return scored[:top_k]
 
@@ -102,9 +104,13 @@ class LocalVectorStore(VectorStore):
                     if v["knowledge_id"] == str(knowledge_id) and v["doc_id"] == str(doc_id)]
 
     def get_all_chunks(self, knowledge_id):
-        """查询知识库全部分块文本（BM25 回灌数据源）"""
         with self._lock:
-            return [v["text"] for v in self._vectors if v["knowledge_id"] == str(knowledge_id)]
+            return [self._chunk_metadata(v) for v in self._vectors
+                    if v["knowledge_id"] == str(knowledge_id)]
+
+    @staticmethod
+    def _chunk_metadata(row):
+        return {key: row[key] for key in ("chunk_id", "doc_id", "text")}
 
 
 def _cosine(a, b):

@@ -1,6 +1,10 @@
 """混合检索器单元测试（使用 FakeVectorStore，不加载 embedding）"""
+from unittest.mock import Mock
+
 from rag.chunker import Chunker
 from rag.retriever import HybridRetriever
+from storage.milvus_store import MilvusStore
+from storage.vector_store import LocalVectorStore
 from tests.conftest import FakeVectorStore
 
 
@@ -18,6 +22,60 @@ def test_retrieve_returns_scored_docs():
     assert len(docs) >= 1
     for d in docs:
         assert "text" in d and "score" in d
+
+
+class ConstantEmbedding:
+    def embed_documents(self, chunks):
+        return [[1.0] for _ in chunks]
+
+    def embed_query(self, query):
+        return [1.0]
+
+
+def test_bm25_only_hit_keeps_chunk_and_document_ids(monkeypatch):
+    store = LocalVectorStore(ConstantEmbedding())
+    retriever = HybridRetriever(store)
+    retriever.add_document("kb", "scholarship", "scholarship eligibility")
+    retriever.add_document("kb", "course", "course registration")
+    retriever.add_document("kb", "library", "library hours")
+    monkeypatch.setattr(store, "search", lambda *args, **kwargs: [])
+
+    hit, = retriever.retrieve("scholarship", "kb")
+    assert hit["doc_id"] == "scholarship"
+    assert hit["chunk_id"]
+
+
+def test_same_text_from_different_documents_keeps_both_sources():
+    store = LocalVectorStore(ConstantEmbedding())
+    retriever = HybridRetriever(store)
+    for doc_id in ("current", "archived"):
+        retriever.add_document("kb", doc_id, "scholarship eligibility")
+
+    hits = retriever.retrieve("scholarship", "kb")
+    assert {hit["doc_id"] for hit in hits} == {"current", "archived"}
+    assert len({hit["chunk_id"] for hit in hits}) == 2
+
+
+def test_milvus_fuses_both_paths_using_the_existing_row_primary_key():
+    store = MilvusStore.__new__(MilvusStore)
+    store.collection = "existing_chunks"
+    store.embedding = ConstantEmbedding()
+    row_id = 9007199254740993
+    store.client = Mock()
+    store.client.query.return_value = [
+        {"id": row_id, "doc_id": "10", "text": "scholarship eligibility"},
+        {"id": 22, "doc_id": "20", "text": "course registration"},
+        {"id": 33, "doc_id": "30", "text": "library hours"},
+    ]
+    store.client.search.return_value = [[
+        {"id": row_id, "distance": 0.8, "entity": {"doc_id": "10", "text": "scholarship eligibility"}},
+    ]]
+
+    hit, = HybridRetriever(store).retrieve("scholarship", "kb")
+
+    assert hit["doc_id"] == "10"
+    assert hit["chunk_id"] == str(row_id)
+    assert hit["vector_rank"] == hit["bm25_rank"] == 1
 
 
 def test_retrieve_knowledge_scoped():

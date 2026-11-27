@@ -65,7 +65,6 @@ class Reranker:
             logits = self._model(**feats).logits.squeeze(-1)
         scores = self._torch.sigmoid(logits).tolist()
         ranked = sorted(zip(docs, scores), key=lambda x: -x[1])
-        # 保留 doc_id：来源文档需透传到前端展示，缺失会丢引用
-        result = [{"text": d["text"], "score": float(s), "doc_id": d.get("doc_id")} for d, s in ranked]
+        result = [{**doc, "score": float(score), "rerank_score": float(score)} for doc, score in ranked]
         agent_event(logger, "rerank_done", hits=len(result))
         return result[:top_k] if top_k else result

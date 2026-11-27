@@ -1,5 +1,6 @@
 """按已识别范围取证，目录与历史证据不进入相似度检索。"""
 from agent.nodes.evidence import historical_evidence, numbered_context, outline_evidence
+from rag.retriever import retrieve_ranked
 from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("retrieve")
@@ -19,9 +20,7 @@ def retrieve_agent(state):
         if not state.get("knowledge_id"):
             return base
         query = state.get("rewritten_query") or plan.get("resolved_query") or state["query"]
-        docs = state["retriever"].retrieve(query, state["knowledge_id"], top_k=10)
-        reranker = state.get("reranker")
-        docs = reranker.rerank(query, docs, top_k=5) if reranker and docs else docs[:5]
+        docs = retrieve_ranked(state["retriever"], state.get("reranker"), query, state["knowledge_id"])
         agent_event(logger, "retrieved", knowledge_id=state["knowledge_id"], hits=len(docs),
                     retry=retry_count, query=query[:30])
         return {**base, "sources": docs, "retrieval_context": numbered_context(docs)}

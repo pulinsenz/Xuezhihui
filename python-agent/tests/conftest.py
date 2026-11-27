@@ -55,13 +55,17 @@ class FakeVectorStore:
         def _match(doc_id):
             return not doc_id_prefix or str(doc_id).startswith(doc_id_prefix)
         if knowledge_id is not None:
-            chunks = [c for did, v in self.data.get(str(knowledge_id), {}).items() if _match(did) for c in v]
+            chunks = self.get_all_chunks(knowledge_id)
         else:
-            chunks = [c for vv in self.data.values() for did, v in vv.items() if _match(did) for c in v]
-        return [{"text": c, "score": 0.5} for c in chunks[:top_k]]
+            chunks = [chunk for kb in self.data for chunk in self.get_all_chunks(kb)]
+        return [{**chunk, "score": 0.5} for chunk in chunks if _match(chunk["doc_id"])][:top_k]
 
     def get_chunks(self, knowledge_id, doc_id):
         return list(self.data.get(str(knowledge_id), {}).get(str(doc_id), []))
 
     def get_all_chunks(self, knowledge_id):
-        return [c for v in self.data.get(str(knowledge_id), {}).values() for c in v]
+        return [
+            {"chunk_id": f"{knowledge_id}:{doc_id}:{index}", "doc_id": doc_id, "text": text}
+            for doc_id, chunks in self.data.get(str(knowledge_id), {}).items()
+            for index, text in enumerate(chunks)
+        ]

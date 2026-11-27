@@ -69,6 +69,9 @@ export const downloadDocFile = (id, docId) => request.get(`/knowledge/${id}/docs
 /** 文档切片详情（文本列表），用于「向量详情」 */
 export const getDocChunks = (id, docId) => request.get(`/knowledge/${id}/docs/${docId}/chunks`)
 
+export const testKnowledgeRetrieval = (id, query) =>
+  request.post(`/knowledge/${id}/retrieval-test`, { query })
+
 /** 恢复用户自己删除的文档（管理员删除的拒绝），返回 taskId 供轮询 */
 export const restoreDoc = (id, docId) => request.post(`/knowledge/${id}/docs/${docId}/restore`)
 

@@ -3,7 +3,9 @@ package com.agent.rag.client;
 import com.agent.rag.common.Result;
 import com.agent.rag.dto.req.ChatRequest;
 import com.agent.rag.dto.req.DeleteVectorRequest;
+import com.agent.rag.dto.req.RetrievalTestRequest;
 import com.agent.rag.dto.resp.ChatResponse;
+import com.agent.rag.dto.resp.RetrievalTestVO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -41,4 +43,8 @@ public interface PythonAgentClient {
     @GetMapping("/api/knowledge/chunks")
     Result<List<String>> docChunks(@RequestParam("knowledge_id") String knowledgeId,
                                    @RequestParam("doc_id") String docId);
+
+    @PostMapping("/api/knowledge/retrieval-test")
+    Result<RetrievalTestVO> testRetrieval(@RequestParam("knowledge_id") String knowledgeId,
+                                          @RequestBody RetrievalTestRequest request);
 }

@@ -8,10 +8,12 @@ import com.agent.rag.dto.req.BatchDocRequest;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.KnowledgeUpdateRequest;
 import com.agent.rag.dto.req.MemberInviteRequest;
+import com.agent.rag.dto.req.RetrievalTestRequest;
 import com.agent.rag.dto.resp.KnowledgeDocVO;
 import com.agent.rag.dto.resp.KnowledgeInvitationVO;
 import com.agent.rag.dto.resp.KnowledgeVO;
 import com.agent.rag.dto.resp.MemberVO;
+import com.agent.rag.dto.resp.RetrievalTestVO;
 import com.agent.rag.entity.KnowledgeDoc;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.service.KnowledgeService;
@@ -319,6 +321,12 @@ public class KnowledgeController {
     @GetMapping("/{id}/docs/{docId}/chunks")
     public Result<List<String>> docChunks(@PathVariable Long id, @PathVariable Long docId) {
         return Result.success(knowledgeService.listDocChunks(id, docId));
+    }
+
+    @PostMapping("/{id}/retrieval-test")
+    public Result<RetrievalTestVO> testRetrieval(@PathVariable Long id,
+                                                 @RequestBody RetrievalTestRequest request) {
+        return Result.success(knowledgeService.testRetrieval(id, request));
     }
 
     /**

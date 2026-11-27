@@ -2,16 +2,21 @@ package com.agent.rag.service;
 
 import com.agent.rag.client.PythonAgentClient;
 import com.agent.rag.common.ErrorCode;
+import com.agent.rag.common.Result;
 import com.agent.rag.common.VectorStatus;
+import com.agent.rag.controller.KnowledgeController;
 import com.agent.rag.dto.req.DeleteVectorRequest;
 import com.agent.rag.dto.req.KnowledgeCreateRequest;
 import com.agent.rag.dto.req.MemberInviteRequest;
+import com.agent.rag.dto.req.RetrievalTestRequest;
 import com.agent.rag.dto.resp.KnowledgeVO;
+import com.agent.rag.dto.resp.RetrievalTestVO;
 import com.agent.rag.entity.Knowledge;
 import com.agent.rag.entity.KnowledgeDoc;
 import com.agent.rag.entity.KnowledgeInvitation;
 import com.agent.rag.entity.KnowledgeMember;
 import com.agent.rag.entity.User;
+import com.agent.rag.entity.WikiPage;
 import com.agent.rag.exception.BusinessException;
 import com.agent.rag.mapper.ForbiddenFileHashMapper;
 import com.agent.rag.mapper.KnowledgeDocMapper;
@@ -20,9 +25,14 @@ import com.agent.rag.mapper.KnowledgeInvitationMapper;
 import com.agent.rag.mapper.KnowledgeMapper;
 import com.agent.rag.mapper.KnowledgeMemberMapper;
 import com.agent.rag.mapper.UserMapper;
+import com.agent.rag.mapper.WikiPageMapper;
 import com.agent.rag.service.impl.KnowledgeServiceImpl;
 import com.agent.rag.storage.FileStorageService;
 import com.agent.rag.util.UserContext;
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,8 +40,10 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.MediaType;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.util.List;
 import java.util.Map;
@@ -44,6 +56,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /**
  * KnowledgeService 单元测试（Mockito mock 依赖，不连数据库）
@@ -57,6 +72,8 @@ class KnowledgeServiceTest {
     private KnowledgeMapper knowledgeMapper;
     @Mock
     private KnowledgeDocMapper knowledgeDocMapper;
+    @Mock
+    private WikiPageMapper wikiPageMapper;
     @Mock
     private KnowledgeFavoriteMapper knowledgeFavoriteMapper;
     @Mock
@@ -81,6 +98,7 @@ class KnowledgeServiceTest {
         knowledgeService = new KnowledgeServiceImpl();
         ReflectionTestUtils.setField(knowledgeService, "knowledgeMapper", knowledgeMapper);
         ReflectionTestUtils.setField(knowledgeService, "knowledgeDocMapper", knowledgeDocMapper);
+        ReflectionTestUtils.setField(knowledgeService, "wikiPageMapper", wikiPageMapper);
         ReflectionTestUtils.setField(knowledgeService, "knowledgeFavoriteMapper", knowledgeFavoriteMapper);
         ReflectionTestUtils.setField(knowledgeService, "knowledgeMemberMapper", knowledgeMemberMapper);
         ReflectionTestUtils.setField(knowledgeService, "knowledgeInvitationMapper", knowledgeInvitationMapper);
@@ -105,6 +123,59 @@ class KnowledgeServiceTest {
         k.setId(id);
         k.setUserId(1L);
         return k;
+    }
+
+    @Test
+    void retrievalTestShowsRankAndSourceNameButOmitsMissingDocuments() throws Exception {
+        MapperBuilderAssistant assistant = new MapperBuilderAssistant(new MybatisConfiguration(), "");
+        TableInfoHelper.initTableInfo(assistant, KnowledgeDoc.class);
+        TableInfoHelper.initTableInfo(assistant, WikiPage.class);
+        when(knowledgeMapper.selectById(10L)).thenReturn(ownedKnowledge(10L));
+        RetrievalTestVO agentResult = new ObjectMapper().readValue("""
+                {"elapsed_ms":7.5,"hits":[
+                  {"doc_id":"12","chunk_id":"9007199254740993","text":"奖学金要求",
+                   "bm25_rank":1,"fusion_score":0.0164},
+                  {"doc_id":"99","chunk_id":"9007199254740994","text":"已移除的文档内容"},
+                  {"doc_id":"wiki-summary","chunk_id":"9007199254740995","text":"Wiki 摘要"}
+                ]}
+                """, RetrievalTestVO.class);
+        when(pythonAgentClient.testRetrieval("10", new RetrievalTestRequest("奖学金")))
+                .thenReturn(Result.success(agentResult));
+        KnowledgeDoc doc = new KnowledgeDoc();
+        doc.setId(12L);
+        doc.setName("奖学金细则.pdf");
+        when(knowledgeDocMapper.selectList(any())).thenReturn(List.of(doc));
+        WikiPage wiki = new WikiPage();
+        wiki.setVectorDocId("wiki-summary");
+        wiki.setTitle("奖学金概览");
+        when(wikiPageMapper.selectList(any())).thenReturn(List.of(wiki));
+        KnowledgeController controller = new KnowledgeController();
+        ReflectionTestUtils.setField(controller, "knowledgeService", knowledgeService);
+
+        MockMvcBuilders.standaloneSetup(controller).build()
+                .perform(post("/knowledge/10/retrieval-test")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"query\":\"  奖学金  \"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.elapsedMs").value(7.5))
+                .andExpect(jsonPath("$.data.hits.length()").value(2))
+                .andExpect(jsonPath("$.data.hits[0].docName").value("奖学金细则.pdf"))
+                .andExpect(jsonPath("$.data.hits[0].chunkId").value("9007199254740993"))
+                .andExpect(jsonPath("$.data.hits[0].bm25Rank").value(1))
+                .andExpect(jsonPath("$.data.hits[1].docName").value("奖学金概览"));
+    }
+
+    @Test
+    void retrievalTestRejectsPrivateKnowledgeBeforeInvokingAgent() {
+        Knowledge privateKnowledge = ownedKnowledge(10L);
+        privateKnowledge.setUserId(2L);
+        privateKnowledge.setIsPublic(0);
+        when(knowledgeMapper.selectById(10L)).thenReturn(privateKnowledge);
+
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> knowledgeService.testRetrieval(10L, new RetrievalTestRequest("奖学金")));
+        assertEquals(ErrorCode.NO_AUTH.getCode(), e.getCode());
+        verify(pythonAgentClient, never()).testRetrieval(any(), any());
     }
 
     // ---------- 创建 ----------

@@ -11,13 +11,15 @@ import tempfile
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Optional
+from time import perf_counter
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, StringConstraints
 
 from agent import runtime
 from config import settings
+from rag.retriever import retrieve_ranked
 from utils.logger_util import get_logger, agent_event
 
 logger = get_logger("knowledge_api")
@@ -51,6 +53,10 @@ class VectorizeRequest(BaseModel):
 class DeleteRequest(BaseModel):
     knowledge_id: str
     doc_id: Optional[str] = None
+
+
+class RetrievalTestRequest(BaseModel):
+    query: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=500)]
 
 
 def _load_file(file_url: str, name: str) -> str:
@@ -199,3 +205,13 @@ def chunks(knowledge_id: str, doc_id: str):
     """查询文档切片文本列表（「向量详情」，Java 代理调用）"""
     texts = runtime.retriever.get_chunks(knowledge_id, doc_id)
     return {"code": 0, "message": "ok", "data": texts}
+
+
+@router.post("/retrieval-test")
+def retrieval_test(knowledge_id: str, req: RetrievalTestRequest):
+    started = perf_counter()
+    hits = retrieve_ranked(runtime.retriever, runtime.reranker, req.query, knowledge_id)
+    return {"code": 0, "message": "ok", "data": {
+        "hits": hits,
+        "elapsed_ms": round((perf_counter() - started) * 1000, 1),
+    }}

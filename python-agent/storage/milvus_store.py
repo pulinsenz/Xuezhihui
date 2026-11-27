@@ -82,8 +82,8 @@ class MilvusStore(VectorStore):
             filter=expr, metric_type="COSINE",
         )
         hits = results[0] if results else []
-        return [{"text": h["entity"]["text"], "score": float(h["distance"]),
-                 "doc_id": h["entity"].get("doc_id")} for h in hits]
+        return [{"chunk_id": str(h["id"]), "text": h["entity"]["text"],
+                 "score": float(h["distance"]), "doc_id": h["entity"]["doc_id"]} for h in hits]
 
     def get_chunks(self, knowledge_id, doc_id):
         """查询文档切片文本（按入库顺序：Milvus auto_id 随插入递增）"""
@@ -97,11 +97,12 @@ class MilvusStore(VectorStore):
         return [r["text"] for r in results]
 
     def get_all_chunks(self, knowledge_id):
-        """查询知识库全部分块文本（BM25 回灌数据源；顺序无关）"""
+        """复用已有主键，让 BM25 与向量命中指向同一入库行。"""
         results = self.client.query(
             self.collection,
             filter=f'knowledge_id == "{_expr_value(knowledge_id)}"',
-            output_fields=["text"],
+            output_fields=["id", "doc_id", "text"],
             limit=10000,
         )
-        return [r["text"] for r in results]
+        return [{"chunk_id": str(r["id"]), "doc_id": r["doc_id"], "text": r["text"]}
+                for r in results]
