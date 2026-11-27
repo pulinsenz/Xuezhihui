@@ -1,17 +1,18 @@
 <template>
   <div class="wiki-page">
-    <div class="header-card">
+    <header class="header-card">
       <div class="header-left">
-        <el-button :icon="ArrowLeft" circle class="back-btn" @click="goBack" />
+        <el-button v-if="!props.knowledgeId" :icon="ArrowLeft" circle class="back-btn" aria-label="返回知识库" @click="goBack" />
         <div class="head-info">
           <div class="title-row">
             <h2>AI Wiki · {{ knowledge?.name || "知识库" }}</h2>
-            <el-tag size="small" type="warning" effect="dark">LLM 生成</el-tag>
-            <el-tag v-if="knowledge?.isPublic === 1" size="small" type="success" effect="plain">公开</el-tag>
+            <span class="status-pill pill-ai">LLM 深度生成</span>
+            <span v-if="knowledge?.isPublic === 1" class="status-pill pill-public">公开</span>
           </div>
           <div class="meta-row">
-            <span class="stat"><el-icon><Document /></el-icon>{{ pages.length }} 个页面</span>
-            <span class="meta-tip">由知识库文档经 LLM 大纲规划 + 逐页撰写生成，并已回灌向量库供问答检索</span>
+            <span class="stat"><el-icon><Document /></el-icon>{{ pages.length }} 个章节页面</span>
+            <span class="dot-sep">·</span>
+            <span class="meta-tip">由多篇知识库源文档经规划与逐页精修生成，已同步回灌向量库</span>
           </div>
         </div>
       </div>
@@ -20,10 +21,11 @@
         <template v-if="canManage">
           <el-button
             type="primary"
+            class="generate-btn"
             :icon="MagicStick"
             :loading="generating"
             @click="handleGenerate"
-          >{{ pages.length ? "重新生成" : "生成 Wiki" }}</el-button>
+          >{{ pages.length ? "重新生成 Wiki" : "生成 AI Wiki" }}</el-button>
           <el-button
             v-if="pages.length"
             type="danger"
@@ -34,41 +36,53 @@
           >删除 Wiki</el-button>
         </template>
       </div>
-    </div>
+    </header>
 
+    <!-- 主阅读与大纲区域：弹性双栏，大缩放下高度自适应 -->
     <div v-loading="loading" class="wiki-main-card">
       <template v-if="pages.length">
-        <aside class="page-list">
-          <div
+        <aside class="page-list custom-scroll">
+          <div class="outline-head">
+            <span>章节目录 ({{ pages.length }})</span>
+          </div>
+          <button
             v-for="page in pages"
             :key="page.id"
+            type="button"
             class="page-item"
             :class="{ active: String(currentId) === String(page.id) }"
-            tabindex="0"
+            :aria-current="String(currentId) === String(page.id) ? 'true' : undefined"
             @click="selectPage(page.id)"
-            @keydown.enter.prevent="selectPage(page.id)"
           >
             <span class="page-order">{{ page.sortOrder }}</span>
-            <span class="page-title">{{ page.title }}</span>
+            <span class="page-title" :title="page.title">{{ page.title }}</span>
             <el-tag v-if="page.status === 'FAILED'" size="small" type="danger">失败</el-tag>
-          </div>
+          </button>
         </aside>
-        <main class="page-content">
+
+        <section class="page-content custom-scroll" aria-label="Wiki 正文">
           <template v-if="current">
             <div class="content-header">
-              <h3>{{ current.title }}</h3>
+              <div class="title-wrap">
+                <span class="chapter-badge">Chapter {{ current.sortOrder }}</span>
+                <h3>{{ current.title }}</h3>
+              </div>
               <el-button
                 v-if="canManage && current.status !== 'FAILED'"
                 size="small"
                 :icon="Edit"
+                class="edit-btn"
                 @click="openEditDialog"
-              >编辑</el-button>
+              >编辑本页</el-button>
             </div>
+
             <p v-if="current.summary" class="content-summary">{{ current.summary }}</p>
+
             <div v-if="sourceNames.length" class="content-sources">
               <el-icon><Collection /></el-icon>
-              <span>来源：{{ sourceNames.join("、") }}</span>
+              <span>知识参考来源：{{ sourceNames.join("、") }}</span>
             </div>
+
             <el-alert
               v-if="current.status === 'FAILED'"
               type="warning"
@@ -77,20 +91,21 @@
             />
             <div v-else class="md-body" v-html="rendered" />
           </template>
-        </main>
+        </section>
       </template>
-      <el-empty v-else-if="!loading" description="尚未生成 Wiki">
+
+      <el-empty v-else-if="!loading" description="尚未生成 Wiki 知识大纲" class="wiki-empty">
         <template v-if="canManage">
-          <el-button type="primary" :icon="MagicStick" :loading="generating" @click="handleGenerate">
-            基于知识库文档生成
+          <el-button type="primary" class="generate-btn" :icon="MagicStick" :loading="generating" @click="handleGenerate">
+            基于知识库文档生成 Wiki
           </el-button>
         </template>
-        <p v-else class="empty-tip">知识库作者尚未生成 Wiki</p>
+        <p v-else class="empty-tip">知识库作者尚未生成 Wiki，请稍后访问</p>
       </el-empty>
     </div>
 
     <!-- 编辑页面对话框 -->
-    <el-dialog v-model="editDialogVisible" title="编辑 Wiki 页面" width="720px" :close-on-click-modal="false">
+    <el-dialog v-model="editDialogVisible" title="编辑 Wiki 页面" width="min(760px, calc(100vw - 32px))" :close-on-click-modal="false">
       <el-form label-width="64px">
         <el-form-item label="标题">
           <el-input v-model="editForm.title" maxlength="120" />
@@ -106,7 +121,7 @@
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editing" @click="handleSaveEdit">保存</el-button>
+        <el-button type="primary" :loading="editing" class="generate-btn" @click="handleSaveEdit">保存更改</el-button>
       </template>
     </el-dialog>
   </div>
@@ -116,7 +131,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Collection, Delete, Edit, MagicStick, Refresh } from '@element-plus/icons-vue'
+import { ArrowLeft, Collection, Delete, Document, Edit, MagicStick, Refresh } from '@element-plus/icons-vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import {
@@ -132,7 +147,8 @@ import {
 
 const route = useRoute()
 const router = useRouter()
-const knowledgeId = route.params.id
+const props = defineProps({ knowledgeId: String })
+const knowledgeId = props.knowledgeId ?? route.params.id
 
 const knowledge = ref(null)
 const pages = ref([])
@@ -211,12 +227,14 @@ const selectPage = async (pageId) => {
 }
 
 let pollTimer = null
+let disposed = false
 
 const startPolling = (taskId) => {
   generating.value = true
   pollTimer = setInterval(async () => {
     try {
       const task = await getTask(taskId)
+      if (disposed) return
       if (task.status === 'SUCCESS' || task.status === 'FAILED') {
         clearInterval(pollTimer)
         pollTimer = null
@@ -246,8 +264,10 @@ const handleGenerate = async () => {
       return
     }
   }
+  if (disposed) return
   try {
     const taskId = await generateWiki(knowledgeId)
+    if (disposed) return
     ElMessage.success('生成任务已提交，可在本页等待完成（页面数越多耗时越长）')
     startPolling(taskId)
   } catch (e) {
@@ -291,79 +311,140 @@ const handleSaveEdit = async () => {
 
 onMounted(loadAll)
 onBeforeUnmount(() => {
+  disposed = true
   if (pollTimer) clearInterval(pollTimer)
 })
 </script>
 
 <style scoped>
 .wiki-page {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 16px 20px 32px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(12px, 1.5vw, 18px);
 }
 
 .header-card {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  padding: clamp(14px, 1.8vw, 20px);
+  box-shadow: var(--shadow-card);
 }
 
 .header-left {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 14px;
   min-width: 0;
+  flex: 1 1 clamp(280px, 35vw, 560px);
 }
+
+.back-btn {
+  border-color: var(--line);
+  color: var(--t3);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.head-info { min-width: 0; flex: 1; }
 
 .title-row {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .title-row h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--text-heading);
+  font-weight: 700;
+  color: var(--t1);
+}
+
+.status-pill {
+  font-size: var(--text-muted);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+}
+
+.pill-ai {
+  background: color-mix(in srgb, var(--el-color-warning) 12%, transparent);
+  color: var(--el-color-warning-dark-2);
+  border: 1px solid color-mix(in srgb, var(--el-color-warning) 30%, transparent);
+}
+
+.pill-public {
+  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
+  color: var(--el-color-success-dark-2);
 }
 
 .meta-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   margin-top: 6px;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
+  color: var(--t3);
+  font-size: var(--text-muted);
+  flex-wrap: wrap;
 }
 
-.meta-tip {
-  color: var(--el-text-color-placeholder);
-}
+.dot-sep { opacity: 0.6; }
+.meta-tip { color: var(--t4); }
 
 .actions {
   display: flex;
-  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
+.generate-btn {
+  background: var(--brand);
+  border-color: var(--brand);
+  font-weight: 600;
+}
+
+.generate-btn:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+}
+
+/* 核心双栏阅读卡 */
 .wiki-main-card {
-  background: var(--el-bg-color);
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 12px;
-  min-height: 480px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  min-height: min(calc(100dvh - 220px), 720px);
   display: flex;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
 }
 
 .page-list {
-  width: 260px;
+  width: clamp(230px, 19vw, 300px);
   flex-shrink: 0;
-  border-right: 1px solid var(--el-border-color-light);
-  padding: 12px 8px;
+  border-right: 1px solid var(--line);
+  padding: 14px 10px;
   overflow-y: auto;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.outline-head {
+  padding: 4px 8px 8px;
+  font-size: var(--text-muted);
+  font-weight: 600;
+  color: var(--t3);
 }
 
 .page-item {
@@ -371,29 +452,32 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  border-radius: 8px;
+  border-radius: var(--r3);
   cursor: pointer;
-  color: var(--el-text-color-regular);
-  font-size: 14px;
+  color: var(--t2);
+  font-size: var(--text-body);
+  transition: all 0.18s ease;
 }
 
 .page-item:hover {
-  background: var(--el-fill-color-light);
+  background: color-mix(in srgb, var(--t4) 10%, transparent);
 }
 
 .page-item.active {
-  background: var(--el-color-primary-light-9);
-  color: var(--el-color-primary);
+  background: var(--tint);
+  color: var(--brand);
   font-weight: 600;
+  border: 1px solid var(--tint-strong);
 }
 
 .page-order {
-  width: 20px;
-  height: 20px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: var(--el-fill-color);
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
+  background: color-mix(in srgb, var(--t4) 14%, transparent);
+  color: var(--t3);
+  font-size: var(--text-muted);
+  font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -401,8 +485,8 @@ onBeforeUnmount(() => {
 }
 
 .page-item.active .page-order {
-  background: var(--el-color-primary);
-  color: #fff;
+  background: var(--brand);
+  color: var(--card);
 }
 
 .page-title {
@@ -415,7 +499,7 @@ onBeforeUnmount(() => {
 .page-content {
   flex: 1;
   min-width: 0;
-  padding: 20px 28px;
+  padding: clamp(16px, 2.5vw, 36px);
   overflow-y: auto;
 }
 
@@ -424,75 +508,141 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chapter-badge {
+  font-size: var(--text-muted);
+  font-weight: 700;
+  color: var(--brand);
+  background: var(--tint);
+  padding: 2px 8px;
+  border-radius: var(--r3);
 }
 
 .content-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--text-heading);
+  color: var(--t1);
 }
 
 .content-summary {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  margin: 8px 0;
+  color: var(--t3);
+  font-size: var(--text-body);
+  margin: 12px 0;
+  line-height: 1.6;
 }
 
 .content-sources {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  padding: 6px 10px;
-  margin-bottom: 16px;
+  color: var(--t3);
+  font-size: var(--text-muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  padding: 6px 12px;
+  margin-bottom: 20px;
 }
 
 .md-body {
-  line-height: 1.75;
-  font-size: 14px;
+  line-height: 1.8;
+  font-size: var(--text-body);
+  color: var(--t2);
   word-break: break-word;
 }
 
 .md-body :deep(h1),
 .md-body :deep(h2),
 .md-body :deep(h3) {
-  margin: 18px 0 10px;
+  margin: 24px 0 12px;
+  color: var(--t1);
+  font-weight: 700;
+}
+
+.md-body :deep(p) {
+  margin: 0 0 14px;
 }
 
 .md-body :deep(pre) {
-  background: var(--el-fill-color-light);
-  padding: 12px;
-  border-radius: 8px;
+  background: var(--t1);
+  color: var(--bg);
+  padding: 14px 16px;
+  border-radius: var(--r3);
   overflow-x: auto;
+  font-size: var(--text-body);
 }
 
 .md-body :deep(code) {
-  background: var(--el-fill-color);
-  padding: 1px 5px;
-  border-radius: 4px;
-  font-size: 12px;
+  font-family: 'Space Grotesk', Consolas, monospace;
+}
+
+.md-body :deep(:not(pre) > code) {
+  background: var(--tint);
+  color: var(--brand);
+  padding: 2px 6px;
+  border-radius: var(--r3);
+  font-size: var(--text-body);
 }
 
 .md-body :deep(table) {
   border-collapse: collapse;
-  margin: 10px 0;
+  margin: 16px 0;
+  width: 100%;
 }
 
 .md-body :deep(th),
 .md-body :deep(td) {
-  border: 1px solid var(--el-border-color-light);
-  padding: 6px 12px;
+  border: 1px solid var(--line);
+  padding: 8px 14px;
 }
 
-.empty-tip {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
+.md-body :deep(th) {
+  background: var(--bg);
+  font-weight: 600;
 }
 
-.page-item:focus-visible {
-  outline: 2px solid var(--el-color-primary);
-  outline-offset: 2px;
+.wiki-empty {
+  margin: auto;
+  padding: 60px 20px;
+}
+
+.custom-scroll::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--t4) 30%, transparent);
+  border-radius: var(--r-pill);
+}
+.page-item {
+  width: 100%;
+  text-align: start;
+}
+
+@container (max-width: 680px) {
+  .wiki-main-card {
+    flex-direction: column;
+  }
+
+  .page-list {
+    width: 100%;
+    max-height: 240px;
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--line);
+  }
+
+  .page-content {
+    width: 100%;
+  }
 }
 </style>

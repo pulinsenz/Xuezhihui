@@ -1,75 +1,88 @@
-﻿<template>
+<template>
   <div class="admin-page" v-loading="loading">
-    <div class="page-header">
-      <div class="back-title">
-        <el-button :icon="ArrowLeft" circle @click="goBack" class="back-btn" />
-        <div>
+    <div class="page-head">
+      <div class="back-title-wrap">
+        <el-button :icon="ArrowLeft" circle class="back-btn" aria-label="返回知识库列表" @click="goBack" />
+        <div class="head-text-block">
           <div class="title-status-row">
-            <h2>{{ knowledge?.name || '知识库详情' }}</h2>
-            <el-tag :type="knowledge?.isDelete === 1 ? 'danger' : 'success'" size="small" effect="plain">
-              {{ knowledge?.isDelete === 1 ? '已删除' : '正常' }}
+            <h2>{{ knowledge?.name || '知识库文档监管' }}</h2>
+            <el-tag :type="knowledge?.isDelete === 1 ? 'danger' : 'success'" size="small" effect="plain" class="status-pill">
+              {{ knowledge?.isDelete === 1 ? '已标记删除' : '正常运作中' }}
             </el-tag>
           </div>
           <div class="meta-row">
-            <span>所属用户 ID: {{ knowledge?.userId }}</span>
-            <span v-if="knowledge">· 共 {{ knowledge.docCount }} 个文档</span>
+            <span class="meta-item">所属作者 ID: <code>#{{ knowledge?.userId }}</code></span>
+            <span class="dot-sep">·</span>
+            <span class="meta-item">现有文档总数: <strong>{{ knowledge?.docCount || docs.length }} 篇</strong></span>
           </div>
         </div>
       </div>
-      <div class="actions">
+      <div class="head-actions">
         <el-button :icon="Refresh" @click="loadDocs(1)">刷新数据</el-button>
       </div>
     </div>
 
-    <section class="admin-panel">
+    <section class="admin-card">
       <div class="toolbar">
-        <el-input
-          v-model="keyword"
-          placeholder="搜索文档名"
-          clearable
-          style="width: 260px"
-          :prefix-icon="Search"
-          @keyup.enter="loadDocs(1)"
-          @clear="loadDocs(1)"
-        />
-        <el-select v-model="deletedFilter" placeholder="文档状态" style="width: 140px" @change="loadDocs(1)">
-          <el-option label="全部文档" :value="null" />
-          <el-option label="正常文档" :value="0" />
-          <el-option label="已删除" :value="1" />
-        </el-select>
-        <el-button type="primary" :icon="Search" @click="loadDocs(1)">查询</el-button>
+        <div class="toolbar-search-group">
+          <el-input
+            v-model="keyword"
+            placeholder="搜索文档名称..."
+            clearable
+            class="search-input"
+            aria-label="搜索文档"
+            :prefix-icon="Search"
+            @keyup.enter="loadDocs(1)"
+            @clear="loadDocs(1)"
+          />
+          <el-select
+            v-model="deletedFilter"
+            placeholder="文档状态"
+            class="filter-select"
+            @change="loadDocs(1)"
+          >
+            <el-option label="全部文档" :value="null" />
+            <el-option label="正常在库" :value="0" />
+            <el-option label="已删除" :value="1" />
+          </el-select>
+          <el-button type="primary" :icon="Search" class="btn-brand" @click="loadDocs(1)">查询文档</el-button>
+        </div>
+
+        <div v-if="selectedRows.length" class="batch-toolbar">
+          <span class="batch-hint">已选中 {{ selectedRows.length }} 项</span>
+          <el-button size="small" :icon="RefreshLeft" @click="handleBatchRemoveVector">
+            批量移除向量入库
+          </el-button>
+          <el-button size="small" type="danger" plain :icon="Delete" @click="handleBatchDelete">
+            批量物理清除
+          </el-button>
+        </div>
       </div>
 
-      <div class="batch-toolbar" v-if="selectedRows.length">
-        <span class="batch-hint">已选择 {{ selectedRows.length }} 项</span>
-        <el-button size="small" :icon="RefreshLeft" @click="handleBatchRemoveVector">
-          批量移除入库
-        </el-button>
-        <el-button size="small" type="danger" plain :icon="Delete" @click="handleBatchDelete">
-          批量删除
-        </el-button>
-      </div>
-
-      <div class="table-card">
-        <el-table :data="docs" stripe @selection-change="handleSelectionChange">
-          <el-table-column type="selection" width="45" />
-          <el-table-column label="文件名" min-width="240">
+      <div class="table-shell">
+        <el-table :data="docs" stripe class="custom-admin-table" @selection-change="handleSelectionChange">
+          <el-table-column type="selection" width="46" />
+          <el-table-column label="文档名称" min-width="240">
             <template #default="{ row }">
               <div class="file-name-cell">
-                <el-icon class="file-icon"><Document /></el-icon>
-                <span class="file-name-text">{{ row.name }}</span>
+                <div class="file-icon-box">
+                  <el-icon><Document /></el-icon>
+                </div>
+                <el-tooltip :content="row.name" placement="top" :show-after="300">
+                  <span class="file-name-text">{{ row.name }}</span>
+                </el-tooltip>
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="fileType" label="类型" width="90">
+          <el-table-column prop="fileType" label="格式类型" width="95">
             <template #default="{ row }">
               <el-tag size="small" effect="plain">{{ row.fileType || '未知' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="大小" width="100">
+          <el-table-column label="存储大小" width="105">
             <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
           </el-table-column>
-          <el-table-column label="向量化状态" width="120">
+          <el-table-column label="向量化状态" width="130">
             <template #default="{ row }">
               <el-tooltip v-if="row.vectorStatus === 'FAILED'" :content="row.errorMsg || '向量化失败'" placement="top">
                 <el-tag type="danger" size="small" effect="plain">失败</el-tag>
@@ -82,57 +95,65 @@
               <el-tag v-else type="warning" size="small" effect="plain">待处理</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="状态" width="90">
+          <el-table-column label="可用状态" width="100">
             <template #default="{ row }">
-              <el-tag :type="row.isDelete === 1 ? 'danger' : 'success'" size="small" effect="plain">
+              <span class="status-badge" :class="row.isDelete === 1 ? 'is-deleted' : 'is-normal'">
+                <span class="status-dot" />
                 {{ row.isDelete === 1 ? '已删除' : '正常' }}
-              </el-tag>
+              </span>
             </template>
           </el-table-column>
-          <el-table-column prop="createTime" label="上传时间" width="180">
-            <template #default="{ row }">{{ row.createTime?.replace('T', ' ').slice(0, 19) }}</template>
-          </el-table-column>
-          <el-table-column label="操作" width="200" fixed="right">
+          <el-table-column prop="createTime" label="上传时间" width="170">
             <template #default="{ row }">
-              <template v-if="row.isDelete === 1">
-                <el-button size="small" type="success" plain :icon="RefreshLeft" @click="handleRestore(row)">恢复</el-button>
-              </template>
-              <template v-else>
-                <el-button
-                  v-if="row.vectorStatus === 'SUCCESS'"
-                  size="small"
-                  type="warning"
-                  plain
-                  @click="handleRemoveVector(row)"
-                >
-                  移除入库
-                </el-button>
-                <el-button
-                  v-if="row.vectorStatus === 'FAILED' || row.vectorStatus === 'PENDING' || row.vectorStatus === 'REMOVED' || row.vectorStatus === 'SKIPPED'"
-                  size="small"
-                  :icon="RefreshRight"
-                  :loading="busyIds.includes(row.id)"
-                  @click="handleReVectorize(row)"
-                >
-                  {{ row.vectorStatus === 'SKIPPED' ? '强制入库' : '重新入库' }}
-                </el-button>
-                <el-button size="small" type="danger" plain :icon="Delete" @click="handleDelete(row)">删除</el-button>
-              </template>
+              <span class="time-text">{{ row.createTime?.replace('T', ' ').slice(0, 19) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="220">
+            <template #default="{ row }">
+              <div class="row-actions">
+                <template v-if="row.isDelete === 1">
+                  <el-button size="small" type="success" plain :icon="RefreshLeft" @click="handleRestore(row)">恢复入库</el-button>
+                </template>
+                <template v-else>
+                  <el-button
+                    v-if="row.vectorStatus === 'SUCCESS'"
+                    size="small"
+                    type="warning"
+                    plain
+                    @click="handleRemoveVector(row)"
+                  >
+                    移出
+                  </el-button>
+                  <el-button
+                    v-if="row.vectorStatus === 'FAILED' || row.vectorStatus === 'PENDING' || row.vectorStatus === 'REMOVED' || row.vectorStatus === 'SKIPPED'"
+                    size="small"
+                    type="primary"
+                    :icon="RefreshRight"
+                    :loading="busyIds.includes(row.id)"
+                    @click="handleReVectorize(row)"
+                  >
+                    {{ row.vectorStatus === 'SKIPPED' ? '强制入库' : '入库' }}
+                  </el-button>
+                  <el-button size="small" type="danger" link :icon="Delete" @click="handleDelete(row)">删除</el-button>
+                </template>
+              </div>
             </template>
           </el-table-column>
         </el-table>
       </div>
 
-      <el-pagination
-        v-model:current-page="pageNum"
-        v-model:page-size="pageSize"
-        :total="total"
-        :page-sizes="[10, 20, 50]"
-        layout="total, sizes, prev, pager, next"
-        class="pagination"
-        @current-change="loadDocs()"
-        @size-change="loadDocs(1)"
-      />
+      <div class="pagination-bar">
+        <el-pagination
+          v-model:current-page="pageNum"
+          v-model:page-size="pageSize"
+          :total="total"
+          :page-sizes="[10, 20, 50]"
+          layout="total, sizes, prev, pager, next"
+          class="custom-pagination"
+          @current-change="loadDocs()"
+          @size-change="loadDocs(1)"
+        />
+      </div>
     </section>
   </div>
 </template>
@@ -304,86 +325,158 @@ onBeforeUnmount(() => {
 .admin-page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: clamp(14px, 1.6vw, 20px);
+  width: 100%;
 }
 
-.page-header {
+.page-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 4px 2px;
+  flex-wrap: wrap;
 }
 
-.back-title {
+.back-title-wrap {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
 }
 
 .back-btn {
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  background: #ffffff;
+  border-color: var(--line);
+  color: var(--t3);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.head-text-block {
+  min-width: 0;
 }
 
 .title-status-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
 .title-status-row h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--text-heading);
   font-weight: 700;
   color: var(--t1);
 }
 
-.meta-row {
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--t3);
+.status-pill {
+  border-radius: var(--r-pill);
+  font-weight: 600;
 }
 
-.admin-panel {
-  background: #ffffff;
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: var(--text-body);
+  color: var(--t3);
+  flex-wrap: wrap;
+}
+
+.meta-item code {
+  background: var(--bg);
+  padding: 1px 6px;
+  border-radius: var(--r3);
+  color: var(--brand);
+}
+
+.meta-item strong {
+  color: var(--t1);
+}
+
+.dot-sep {
+  opacity: 0.6;
+}
+
+.head-actions {
+  flex-shrink: 0;
+}
+
+.head-actions :deep(.el-button) {
+  border-radius: var(--r3);
+}
+
+.admin-card {
+  background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 16px;
+  border-radius: var(--r1);
   box-shadow: var(--shadow-card);
-  padding: 24px;
+  padding: clamp(14px, 1.8vw, 20px);
 }
 
 .toolbar {
   display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
   margin-bottom: 16px;
   flex-wrap: wrap;
 }
 
+.toolbar-search-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.search-input {
+  width: min(100%, clamp(220px, 20vw, 300px));
+}
+
+.search-input :deep(.el-input__wrapper),
+.filter-select :deep(.el-input__wrapper) {
+  border-radius: var(--r3);
+}
+
+.filter-select {
+  width: clamp(120px, 12vw, 150px);
+}
+
+.btn-brand {
+  background: var(--brand);
+  border-color: var(--brand);
+  border-radius: var(--r3);
+  font-weight: 600;
+}
+
+.btn-brand:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
+}
+
 .batch-toolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  padding: 10px 16px;
-  background: #f1f5f9;
-  border-radius: 12px;
+  gap: 10px;
+  padding: 6px 12px;
+  background: var(--tint);
+  border: 1px solid var(--tint-strong);
+  border-radius: var(--r3);
 }
 
 .batch-hint {
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--text-muted);
+  font-weight: 600;
   color: var(--brand);
 }
 
-.table-card {
-  border-radius: 16px;
+.table-shell {
+  border-radius: var(--r3);
   overflow: hidden;
-  border: 1px solid rgba(148, 163, 184, 0.16);
-}
-
-.table-card :deep(.el-button--small) {
-  min-height: 28px;
+  border: 1px solid var(--line);
 }
 
 .file-name-cell {
@@ -392,18 +485,81 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
-.file-icon {
+.file-icon-box {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--r3);
+  background: var(--tint);
   color: var(--brand);
-  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-body);
+  flex-shrink: 0;
 }
 
 .file-name-text {
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--t1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.pagination {
-  margin-top: 20px;
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-muted);
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-badge.is-normal {
+  color: var(--el-color-success-dark-2);
+}
+.status-badge.is-normal .status-dot {
+  background: var(--el-color-success);
+}
+
+.status-badge.is-deleted {
+  color: var(--el-color-danger);
+}
+.status-badge.is-deleted .status-dot {
+  background: var(--el-color-danger);
+}
+
+.time-text {
+  font-size: var(--text-muted);
+  color: var(--t3);
+  font-variant-numeric: tabular-nums;
+}
+
+.row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.row-actions :deep(.el-button) {
+  min-height: 28px;
+  border-radius: var(--r3);
+}
+
+.pagination-bar {
+  margin-top: 16px;
+  display: flex;
   justify-content: flex-end;
+}
+.custom-pagination {
+  flex-wrap: wrap;
+  row-gap: 8px;
+  white-space: normal;
 }
 </style>

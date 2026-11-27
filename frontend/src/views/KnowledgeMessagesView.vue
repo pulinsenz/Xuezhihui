@@ -1,21 +1,24 @@
-﻿<template>
+<template>
   <div class="messages-page">
-    <div class="page-head">
-      <!-- 标题由顶栏承载，此处只保留刷新（去AI味：删同屏重复标题） -->
-      <el-button :icon="Refresh" :loading="messageStore.loading" @click="reload">刷新</el-button>
-    </div>
+    <header class="page-head">
+      <div class="head-left">
+        <h2 class="page-title">协作消息与邀请</h2>
+      </div>
+      <el-button :icon="Refresh" :loading="messageStore.loading" class="refresh-btn" @click="reload">刷新消息</el-button>
+    </header>
 
+    <!-- 弹性双栏容器：左侧侧栏比例收缩，在 125%~150% 缩放下不挤爆右侧聊天流 -->
     <div class="message-shell">
       <aside class="thread-list">
         <div class="thread-list-head">
           <div class="thread-head-title">
-            <span>协作邀请</span>
-            <el-tag size="small" effect="plain" type="primary">{{ threads.length }}</el-tag>
+            <span>协作邀请列表</span>
+            <el-tag size="small" effect="plain" type="primary" class="count-pill">{{ threads.length }}</el-tag>
           </div>
           <span v-if="messageStore.unreadCount > 0" class="unread-pill">{{ messageStore.unreadCount }} 未读</span>
         </div>
 
-        <div class="thread-items-wrap">
+        <div class="thread-items-wrap custom-scroll">
           <button
             v-for="item in threads"
             :key="item.id"
@@ -24,13 +27,17 @@
             :class="{ active: isActive(item), unread: isUnread(item) }"
             @click="openThread(item)"
           >
-            <el-avatar :size="42" class="thread-avatar" :src="item.knowledgeCover || undefined">
-              {{ avatarText(item.knowledgeName) }}
-            </el-avatar>
+            <div class="avatar-wrap">
+              <el-avatar :size="40" class="thread-avatar" :src="item.knowledgeCover || undefined">
+                {{ avatarText(item.knowledgeName) }}
+              </el-avatar>
+              <span v-if="isUnread(item)" class="dot-unread" />
+            </div>
+
             <div class="thread-body">
               <div class="thread-title">
                 <span class="thread-name">{{ item.knowledgeName || '未命名知识库' }}</span>
-                <el-tag size="small" :type="statusTagType(item.status)" effect="plain">
+                <el-tag size="small" :type="statusTagType(item.status)" effect="plain" class="status-tag">
                   {{ statusLabel(item.status) }}
                 </el-tag>
               </div>
@@ -43,33 +50,35 @@
           </button>
         </div>
 
-        <el-empty v-if="!threads.length" description="暂无邀请消息" class="thread-empty" />
+        <el-empty v-if="!threads.length" description="暂无协作邀请通知" class="thread-empty" />
       </aside>
 
+      <!-- 右侧协作邀请处理对话卡片 -->
       <section class="conversation">
         <template v-if="activeInvitation">
           <div class="conversation-head">
-            <el-avatar :size="46" class="conversation-avatar" :src="activeInvitation.knowledgeCover || undefined">
+            <el-avatar :size="44" class="conversation-avatar" :src="activeInvitation.knowledgeCover || undefined">
               {{ avatarText(activeInvitation.knowledgeName) }}
             </el-avatar>
             <div class="conversation-info">
               <div class="conversation-title">
-                <span>{{ activeInvitation.knowledgeName || '未命名知识库' }}</span>
+                <h3>{{ activeInvitation.knowledgeName || '未命名知识库' }}</h3>
                 <el-tag size="small" :type="statusTagType(activeInvitation.status)" effect="plain">
                   {{ statusLabel(activeInvitation.status) }}
                 </el-tag>
               </div>
               <div class="conversation-subtitle">
-                <span>{{ peerName(activeInvitation) }}</span>
+                <span>邀请人：{{ peerName(activeInvitation) }}</span>
                 <span class="status-dot-text" :class="{ 'is-unread': !activeInvitation.readTime }">
-                  {{ activeInvitation.readTime ? '已读' : '未读' }}
+                  {{ activeInvitation.readTime ? '已查看' : '新未读' }}
                 </span>
               </div>
             </div>
+
             <el-button
               v-if="activeInvitation.status === 'ACCEPTED'"
               type="primary"
-              plain
+              class="enter-kb-btn"
               :icon="Document"
               @click="goKnowledge(activeInvitation.knowledgeId)"
             >
@@ -77,7 +86,7 @@
             </el-button>
           </div>
 
-          <div class="chat-stream">
+          <div class="chat-stream custom-scroll">
             <div class="bubble-row" :class="activeInvitation.direction">
               <el-avatar
                 :size="40"
@@ -92,15 +101,16 @@
                   <div class="bubble-text">{{ activeInvitation.message }}</div>
                 </div>
                 <div class="bubble-footer">
-                  <span>{{ formatTime(activeInvitation.createTime) }}</span>
-                  <span v-if="activeInvitation.handleTime">处理于 {{ formatTime(activeInvitation.handleTime) }}</span>
+                  <span>发起时间：{{ formatTime(activeInvitation.createTime) }}</span>
+                  <span v-if="activeInvitation.handleTime">· 处理时间：{{ formatTime(activeInvitation.handleTime) }}</span>
                 </div>
+
                 <div v-if="activeInvitation.direction === 'incoming' && activeInvitation.status === 'PENDING'" class="bubble-actions">
-                  <el-button type="primary" :icon="Check" :loading="actioning" @click="acceptActive">
+                  <el-button type="primary" :icon="Check" :loading="actioning" class="action-btn-brand" @click="acceptActive">
                     接受邀请
                   </el-button>
-                  <el-button :icon="Close" :loading="actioning" @click="rejectActive">
-                    拒绝
+                  <el-button :icon="Close" :loading="actioning" class="action-btn-reject" @click="rejectActive">
+                    拒绝邀请
                   </el-button>
                 </div>
               </div>
@@ -112,7 +122,7 @@
           </div>
         </template>
 
-        <el-empty v-else description="选择一条邀请查看详情" class="conversation-empty" />
+        <el-empty v-else description="请在左侧选择一条协作邀请查看详情" class="conversation-empty" />
       </section>
     </div>
   </div>
@@ -296,103 +306,144 @@ onUnmounted(() => {
 .messages-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  min-height: calc(100vh - 120px);
+  gap: clamp(12px, 1.5vw, 18px);
+  width: 100%;
+  height: calc(100dvh - 120px);
+  min-height: 520px;
 }
 
 .page-head {
   display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
-  padding: 4px 2px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
+.head-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-title {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 700;
+  color: var(--t1);
+}
+
+.refresh-btn {
+  border-radius: var(--r3);
+}
+
+/* 主双栏外壳 */
 .message-shell {
   flex: 1;
-  min-height: 520px;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
-  gap: 18px;
+  grid-template-columns: clamp(260px, 22vw, 340px) minmax(0, 1fr);
+  gap: clamp(12px, 1.5vw, 18px);
+  overflow: hidden;
 }
 
 .thread-list,
 .conversation {
-  min-height: 0;
-  background: #ffffff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r1);
   box-shadow: var(--shadow-card);
+  min-height: 0;
+  overflow: hidden;
 }
 
 .thread-list {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .thread-list-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 20px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
 }
 
 .thread-head-title {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
+  font-size: var(--text-body);
+  font-weight: 700;
   color: var(--t1);
 }
 
+.count-pill {
+  border: none;
+  background: var(--tint);
+  color: var(--brand);
+}
+
 .unread-pill {
-  font-size: 12px;
+  font-size: var(--text-muted);
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 9999px;
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  border-radius: var(--r-pill);
+  background: color-mix(in srgb, var(--el-color-danger) 10%, transparent);
+  color: var(--el-color-danger);
 }
 
 .thread-items-wrap {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
 }
 
 .thread-item {
   display: flex;
   width: 100%;
-  padding: 16px 18px;
-  gap: 14px;
+  padding: 14px 16px;
+  gap: 12px;
   border: 0;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  border-bottom: 1px solid var(--line);
   background: transparent;
   text-align: left;
   cursor: pointer;
-  transition: background-color 0.18s ease;
+  transition: all 0.18s ease;
 }
 
 .thread-item:hover {
-  background: #f1f5f9;
+  background: var(--bg);
 }
 
 .thread-item.active {
-  background: rgba(20, 184, 166, 0.08);
+  background: var(--tint);
   border-left: 3px solid var(--brand);
 }
 
-.thread-item.unread .thread-name {
-  color: var(--brand);
-  font-weight: 700;
+.avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
 }
 
 .thread-avatar {
-  flex: 0 0 auto;
   background: var(--brand);
-  color: #fff;
+  color: var(--card);
   font-weight: 700;
+}
+
+.dot-unread {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--el-color-danger);
+  border: 2px solid var(--card);
 }
 
 .thread-body {
@@ -409,55 +460,65 @@ onUnmounted(() => {
 }
 
 .thread-name {
-  font-size: 14px;
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--t1);
-  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.thread-item.unread .thread-name {
+  color: var(--brand);
+  font-weight: 700;
+}
+
 .thread-peer {
-  font-size: 12px;
+  font-size: var(--text-muted);
   color: var(--t3);
-  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .thread-time {
-  font-size: 12px;
+  font-size: var(--text-muted);
   color: var(--t4);
+  flex-shrink: 0;
 }
 
 .thread-snippet {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: var(--text-muted);
   color: var(--t3);
-  line-height: 1.5;
+  line-height: 1.4;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
+/* 详情卡片 */
 .conversation {
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 .conversation-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 18px 22px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  flex-wrap: wrap;
 }
 
 .conversation-avatar {
   background: var(--brand);
-  color: #fff;
+  color: var(--card);
   font-weight: 700;
+  flex-shrink: 0;
 }
 
 .conversation-info {
@@ -465,28 +526,32 @@ onUnmounted(() => {
   min-width: 0;
 }
 
-.conversation-title,
-.conversation-subtitle {
+.conversation-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
-.conversation-title {
-  font-size: 16px;
+.conversation-title h3 {
+  margin: 0;
+  font-size: var(--text-heading);
   font-weight: 700;
   color: var(--t1);
 }
 
 .conversation-subtitle {
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 3px;
+  font-size: var(--text-muted);
   color: var(--t3);
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .status-dot-text {
   position: relative;
-  padding-left: 12px;
+  padding-left: 10px;
 }
 
 .status-dot-text::before {
@@ -495,20 +560,27 @@ onUnmounted(() => {
   left: 0;
   top: 50%;
   transform: translateY(-50%);
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: #10b981;
+  background: var(--el-color-success);
 }
 
 .status-dot-text.is-unread::before {
-  background: #ef4444;
+  background: var(--el-color-danger);
+}
+
+.enter-kb-btn {
+  border-radius: var(--r3);
+  background: var(--brand);
+  border-color: var(--brand);
+  font-weight: 600;
 }
 
 .chat-stream {
   flex: 1;
   min-height: 0;
-  padding: 24px 22px;
+  padding: clamp(16px, 2vw, 28px);
   overflow-y: auto;
   background: var(--bg);
   display: flex;
@@ -529,67 +601,72 @@ onUnmounted(() => {
 
 .bubble-avatar {
   background: var(--brand);
-  color: #fff;
+  color: var(--card);
   font-weight: 700;
   flex-shrink: 0;
 }
 
 .bubble-stack {
-  max-width: min(78%, 620px);
+  max-width: min(80%, 640px);
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 .bubble {
-  padding: 16px 20px;
-  background: #fff;
+  padding: 16px 18px;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r1);
   box-shadow: var(--shadow-card);
 }
 
 .bubble-row.incoming .bubble {
-  border-top-left-radius: 6px;
+  border-top-left-radius: 4px;
 }
 
 .bubble-row.outgoing .bubble {
-  border-top-right-radius: 6px;
-  background: rgba(20, 184, 166, 0.08);
-  border-color: rgba(20, 184, 166, 0.25);
+  border-top-right-radius: 4px;
+  background: var(--tint);
+  border-color: var(--tint-strong);
 }
 
 .bubble-title {
-  margin-bottom: 8px;
-  font-size: 12px;
-  font-weight: 600;
+  margin-bottom: 6px;
+  font-size: var(--text-muted);
+  font-weight: 700;
   color: var(--brand);
 }
 
 .bubble-text {
   white-space: pre-wrap;
   word-break: break-word;
-  color: #1e293b;
-  font-size: 14px;
-  line-height: 1.7;
-}
-
-.bubble-footer,
-.bubble-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
+  color: var(--t1);
+  font-size: var(--text-body);
+  line-height: 1.6;
 }
 
 .bubble-footer {
-  font-size: 12px;
+  font-size: var(--text-muted);
   color: var(--t4);
   padding: 0 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .bubble-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.action-btn-brand {
+  background: var(--brand);
+  border-color: var(--brand);
+  font-weight: 600;
 }
 
 .system-note {
@@ -600,25 +677,36 @@ onUnmounted(() => {
 .system-note span {
   display: inline-block;
   padding: 6px 14px;
-  border-radius: 9999px;
-  background: rgba(241, 245, 249, 0.85);
-  border: 1px solid rgba(148, 163, 184, 0.16);
-  font-size: 12px;
+  border-radius: var(--r-pill);
+  background: var(--card);
+  border: 1px solid var(--line);
+  font-size: var(--text-muted);
   color: var(--t3);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--t1) 3%, transparent);
 }
 
 .thread-empty,
 .conversation-empty {
   margin: auto;
-  padding: 40px 0;
+  padding: 40px 16px;
 }
 
-@media (max-width: 1024px) {
+.custom-scroll::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--t4) 30%, transparent);
+  border-radius: var(--r-pill);
+}
+@container (max-width: 680px) {
   .message-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(160px, 35%) minmax(0, 1fr);
   }
-  .thread-list {
-    max-height: 320px;
+
+  .conversation-head {
+    flex-wrap: wrap;
   }
 }
 </style>

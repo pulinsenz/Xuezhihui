@@ -1,27 +1,30 @@
 <template>
   <div class="profile-page" v-loading="loading">
-    <section class="hero-bar">
-      <div class="hero-title-block">
-        <p class="hero-kicker">个人中心</p>
-        <h2>{{ profileName }}</h2>
-        <p class="hero-subtitle">{{ authStore.user?.userAccount }} · {{ roleLabel }}</p>
+    <!-- 头部横幅卡片 -->
+    <header class="profile-hero-card">
+      <div class="hero-left">
+        <h2 class="hero-name">{{ profileName }}</h2>
+        <p class="hero-account">{{ authStore.user?.userAccount }} · {{ currentRoleLabel }}</p>
       </div>
       <div class="hero-actions">
-        <el-tag effect="plain" type="success">{{ authStore.user?.userRole === 'admin' ? '管理员' : '成员' }}</el-tag>
-        <el-tag effect="plain">创建于 {{ createdText }}</el-tag>
+        <el-tag effect="plain" type="success" class="role-tag">{{ currentRoleLabel }}</el-tag>
+        <el-tag effect="plain" class="create-tag">注册于 {{ createdText }}</el-tag>
       </div>
-    </section>
+    </header>
 
+    <!-- 头像与账号概览：采用自适应 2 列，缩放下平滑降为 1 列 -->
     <section class="summary-grid">
-      <article class="summary-card profile-summary">
+      <!-- 个人头像与简介卡片 -->
+      <article class="card-box avatar-summary-card">
         <div class="avatar-block">
           <el-upload
             :show-file-list="false"
             :http-request="handleAvatarUpload"
             accept="image/*"
+            class="avatar-uploader"
           >
-            <div class="avatar-wrap" tabindex="0">
-              <el-avatar :size="92" class="avatar" :src="form.userAvatar || undefined">
+            <div class="avatar-wrap">
+              <el-avatar :size="84" class="main-avatar" :src="form.userAvatar || undefined">
                 {{ avatarText }}
               </el-avatar>
               <div class="avatar-mask">
@@ -32,176 +35,129 @@
           </el-upload>
 
           <div class="avatar-meta">
-            <strong>{{ profileName }}</strong>
-            <span>{{ authStore.user?.userAccount }}</span>
-            <p>{{ form.userProfile || '还没有填写个人简介。' }}</p>
+            <strong class="user-display-name">{{ profileName }}</strong>
+            <span class="user-account-sub">{{ authStore.user?.userAccount }}</span>
+            <p class="user-bio">{{ form.userProfile || '还没有填写个人简介。' }}</p>
+            <el-button v-if="form.userAvatar" :icon="Delete" plain @click="clearAvatar">移除头像</el-button>
           </div>
         </div>
       </article>
 
-      <article class="summary-card status-card">
-        <div class="panel-head">
-          <h3>账号概览</h3>
-          <span>当前状态</span>
+      <!-- 账号状态卡片 -->
+      <article class="card-box status-card">
+        <div class="card-head">
+          <h3>账号状态概览</h3>
         </div>
-        <div class="status-grid">
+        <div class="status-pill-grid">
           <div class="status-pill">
-            <span>账号</span>
-            <strong>{{ authStore.user?.userAccount }}</strong>
+            <span class="pill-label">登录账号</span>
+            <strong class="pill-val">{{ authStore.user?.userAccount }}</strong>
           </div>
           <div class="status-pill">
-            <span>身份</span>
-            <strong>{{ roleLabel }}</strong>
+            <span class="pill-label">系统身份</span>
+            <strong class="pill-val">{{ currentRoleLabel }}</strong>
           </div>
           <div class="status-pill">
-            <span>昵称</span>
-            <strong>{{ profileName }}</strong>
+            <span class="pill-label">当前昵称</span>
+            <strong class="pill-val">{{ profileName }}</strong>
           </div>
           <div class="status-pill">
-            <span>头像</span>
-            <strong>{{ authStore.user?.userAvatar ? '已设置' : '未设置' }}</strong>
+            <span class="pill-label">头像状态</span>
+            <strong class="pill-val">{{ authStore.user?.userAvatar ? '已自定义' : '默认首字' }}</strong>
           </div>
         </div>
+        <dl class="profile-preferences">
+          <dt>默认入库</dt>
+          <dd>{{ settings.defaultVectorize ? '开启' : '关闭' }}</dd>
+          <dt>引用折叠</dt>
+          <dd>{{ settings.collapseRefs ? '收起' : '展开' }}</dd>
+        </dl>
       </article>
     </section>
 
-    <section class="panel-grid">
-      <article class="panel">
-        <div class="panel-head">
-          <h3>基本资料</h3>
-          <span>可直接编辑</span>
+    <!-- 基本资料编辑与本地偏好 -->
+    <section class="forms-grid">
+      <!-- 基础资料表单卡片 -->
+      <article class="card-box">
+        <div class="card-head">
+          <h3>编辑基本资料</h3>
         </div>
 
-        <el-form :model="form" label-position="top" class="profile-form">
-          <el-form-item label="账号">
+        <el-form :model="form" label-position="top" class="custom-form">
+          <el-form-item label="登录账号 (只读)">
             <el-input :model-value="authStore.user?.userAccount" disabled />
           </el-form-item>
-          <el-form-item label="昵称">
+          <el-form-item label="用户昵称" required>
             <el-input
               v-model="form.userName"
               maxlength="30"
               show-word-limit
-              placeholder="请输入昵称"
+              placeholder="请输入您的昵称"
             />
           </el-form-item>
-          <el-form-item label="个人简介">
+          <el-form-item label="个人学术简介">
             <el-input
               v-model="form.userProfile"
               type="textarea"
-              :rows="5"
+              :rows="4"
               maxlength="200"
               show-word-limit
-              placeholder="写点介绍自己的话"
+              placeholder="写写关于您的学术方向或个人介绍..."
             />
           </el-form-item>
         </el-form>
 
-        <div class="panel-actions">
-          <el-button :icon="RefreshLeft" @click="resetForm">重置</el-button>
-          <el-button type="primary" :icon="Check" :loading="saving" @click="handleSave">
+        <div class="form-actions">
+          <el-button :icon="RefreshLeft" @click="resetForm">重置修改</el-button>
+          <el-button type="primary" :icon="Check" :loading="saving" class="btn-brand" @click="handleSave">
             保存资料
           </el-button>
         </div>
       </article>
 
-      <article class="panel">
-        <div class="panel-head">
-          <h3>资料补充</h3>
-          <span>本地偏好</span>
+      <!-- 密码修改安全验证卡片 -->
+      <article class="card-box">
+        <div class="card-head">
+          <h3>修改登录密码</h3>
         </div>
 
-        <div class="setting-list">
-          <div class="setting-row">
-            <div class="setting-copy">
-              <strong>默认入库</strong>
-            </div>
-            <el-tag effect="plain">
-              {{ settings.defaultVectorize ? '开启' : '关闭' }}
-            </el-tag>
-          </div>
-
-          <div class="setting-row">
-            <div class="setting-copy">
-              <strong>引用折叠</strong>
-            </div>
-            <!-- 偏好状态非警告，不用 warning 黄（uiup 组 17：功能色语义专用） -->
-            <el-tag effect="plain">
-              {{ settings.collapseRefs ? '收起' : '展开' }}
-            </el-tag>
-          </div>
-        </div>
-      </article>
-    </section>
-
-    <section class="panel-grid bottom-grid">
-      <article class="panel">
-        <div class="panel-head">
-          <h3>头像管理</h3>
-          <span>上传与清空</span>
-        </div>
-
-        <div class="avatar-tools">
-          <el-upload
-            :show-file-list="false"
-            :http-request="handleAvatarUpload"
-            accept="image/*"
-          >
-            <el-button type="primary" :icon="Upload">上传头像</el-button>
-          </el-upload>
-          <el-button :icon="Delete" :disabled="!form.userAvatar" @click="clearAvatar">清空头像</el-button>
-        </div>
-
-        <div class="avatar-preview">
-          <el-avatar :size="64" class="avatar-large" :src="form.userAvatar || undefined">
-            {{ avatarText }}
-          </el-avatar>
-          <div class="avatar-preview-copy">
-            <strong>预览</strong>
-            <span>{{ form.userAvatar || '未设置头像' }}</span>
-          </div>
-        </div>
-      </article>
-
-      <article class="panel">
-        <div class="panel-head">
-          <h3>修改密码</h3>
-          <span>安全验证</span>
-        </div>
-
-        <el-form :model="passwordForm" label-position="top" class="profile-form">
-          <el-form-item label="原密码">
+        <el-form :model="passwordForm" label-position="top" class="custom-form">
+          <el-form-item label="当前原密码" required>
             <el-input
               v-model="passwordForm.oldPassword"
+              autocomplete="current-password"
               type="password"
               show-password
               :prefix-icon="Lock"
-              placeholder="请输入当前密码"
+              placeholder="请输入当前使用的密码"
             />
           </el-form-item>
-          <el-form-item label="新密码">
+          <el-form-item label="设置新密码" required>
             <el-input
               v-model="passwordForm.newPassword"
+              autocomplete="new-password"
               type="password"
               show-password
               :prefix-icon="Lock"
               placeholder="8-32 位新密码"
             />
           </el-form-item>
-          <el-form-item label="确认新密码">
+          <el-form-item label="确认新密码" required>
             <el-input
               v-model="passwordForm.checkPassword"
+              autocomplete="new-password"
               type="password"
               show-password
               :prefix-icon="Lock"
-              placeholder="再次输入新密码"
+              placeholder="请再次输入新密码"
             />
           </el-form-item>
         </el-form>
 
-        <div class="panel-actions">
-          <el-button :icon="RefreshLeft" @click="resetPasswordForm">重置</el-button>
-          <el-button type="primary" :icon="Lock" :loading="passwordSaving" @click="handleChangePassword">
-            修改密码
+        <div class="form-actions">
+          <el-button :icon="RefreshLeft" @click="resetPasswordForm">清空</el-button>
+          <el-button type="primary" :icon="Lock" :loading="passwordSaving" class="btn-brand" @click="handleChangePassword">
+            更新密码
           </el-button>
         </div>
       </article>
@@ -212,9 +168,10 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Camera, Check, Delete, Lock, RefreshLeft, Upload } from '@element-plus/icons-vue'
+import { Camera, Check, Delete, Lock, RefreshLeft } from '@element-plus/icons-vue'
 import { changePassword, uploadAvatar } from '../api/auth'
 import { useAuthStore } from '../stores/auth'
+import { roleLabel } from '../utils/roles'
 import { getSettings } from '../api/settings'
 
 const authStore = useAuthStore()
@@ -242,7 +199,7 @@ const snapshot = ref({
 })
 
 const profileName = computed(() => form.userName.trim() || authStore.user?.userName || authStore.user?.userAccount || '?')
-const roleLabel = computed(() => (authStore.user?.userRole === 'admin' ? '管理员' : '普通成员'))
+const currentRoleLabel = computed(() => roleLabel(authStore.user?.userRole))
 const avatarText = computed(() => profileName.value.charAt(0).toUpperCase())
 const createdText = computed(() => {
   const value = authStore.user?.createTime
@@ -380,82 +337,71 @@ onMounted(() => {
 .profile-page {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: clamp(14px, 1.6vw, 20px);
+  width: 100%;
 }
 
-.hero-bar {
+.profile-hero-card {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  padding: clamp(16px, 2vw, 24px);
+  box-shadow: var(--shadow-card);
 }
 
-.hero-title-block h2 {
+.hero-name {
   margin: 4px 0 0;
-  font-size: 22px;
+  font-size: var(--text-heading);
+  font-weight: 700;
   color: var(--t1);
 }
 
-.hero-kicker {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--brand);
-}
-
-.hero-subtitle {
-  margin-top: 4px;
-  font-size: 12px;
+.hero-account {
+  margin: 4px 0 0;
+  font-size: var(--text-body);
   color: var(--t3);
 }
 
 .hero-actions {
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .summary-grid,
-.panel-grid {
+.forms-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  gap: clamp(14px, 1.6vw, 20px);
 }
 
-.summary-card,
-.panel {
-  background: #ffffff;
+.card-box {
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--r1);
+  padding: clamp(16px, 1.8vw, 22px);
   box-shadow: var(--shadow-card);
 }
 
-.summary-card {
-  min-height: 196px;
-  padding: 22px;
-}
-
-.panel {
-  min-height: 268px;
-  padding: 20px;
-}
-
-.panel-head {
+.card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 16px;
 }
 
-.panel-head h3 {
+.card-head h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--text-body);
+  font-weight: 700;
   color: var(--t1);
-}
-
-.panel-head span {
-  font-size: 12px;
-  color: var(--t3);
 }
 
 .avatar-block {
@@ -464,17 +410,23 @@ onMounted(() => {
   align-items: center;
 }
 
+.avatar-uploader {
+  flex-shrink: 0;
+}
+
 .avatar-wrap {
   position: relative;
   cursor: pointer;
   line-height: 0;
+  border-radius: 50%;
+  overflow: hidden;
 }
 
-.avatar {
+.main-avatar {
   background: var(--brand);
-  color: #fff;
+  color: var(--card);
   font-weight: 700;
-  font-size: 34px;
+  font-size: var(--text-num);
 }
 
 .avatar-mask {
@@ -486,9 +438,9 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 2px;
-  background: rgba(15, 23, 42, 0.48);
-  color: #fff;
-  font-size: 12px;
+  background: color-mix(in srgb, var(--t1) 55%, transparent);
+  color: var(--card);
+  font-size: var(--text-muted);
   opacity: 0;
   transition: opacity 0.2s ease;
 }
@@ -499,161 +451,97 @@ onMounted(() => {
 
 .avatar-meta {
   min-width: 0;
+  flex: 1;
 }
 
-.avatar-meta strong {
+.user-display-name {
   display: block;
-  font-size: 16px;
+  font-size: var(--text-heading);
+  font-weight: 700;
   color: var(--t1);
 }
 
-.avatar-meta span {
+.user-account-sub {
   display: block;
-  margin-top: 4px;
-  font-size: 12px;
+  margin-top: 3px;
+  font-size: var(--text-muted);
   color: var(--t3);
 }
 
-.avatar-meta p {
-  margin-top: 12px;
-  max-width: 420px;
+.user-bio {
+  margin: 10px 0 0;
+  font-size: var(--text-body);
   color: var(--t2);
-  line-height: 1.7;
+  line-height: 1.5;
 }
 
-.status-grid {
+.status-pill-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
 .status-pill {
-  padding: 14px 16px;
-  border-radius: var(--r2);
-  background: rgba(248, 250, 252, 0.92);
+  padding: 12px 14px;
+  border-radius: var(--r3);
+  background: var(--bg);
+  border: 1px solid var(--line);
 }
 
-.status-pill span {
+.pill-label {
   display: block;
-  font-size: 12px;
+  font-size: var(--text-muted);
   color: var(--t3);
 }
 
-.status-pill strong {
+.pill-val {
   display: block;
-  margin-top: 6px;
-  font-size: 14px;
+  margin-top: 4px;
+  font-size: var(--text-body);
   color: var(--t1);
 }
 
-.profile-form {
-  display: grid;
-  grid-template-columns: 1fr;
+.custom-form {
+  margin-bottom: 8px;
 }
 
-.panel-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 4px;
-}
-
-.setting-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.setting-row {
+.form-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-radius: var(--r2);
-  background: rgba(248, 250, 252, 0.92);
-}
-
-.setting-copy {
-  min-width: 0;
-}
-
-.setting-copy strong {
-  display: block;
-  font-size: 14px;
-  color: var(--t1);
-}
-
-.avatar-tools {
-  display: flex;
+  justify-content: flex-end;
   gap: 10px;
+}
+
+.btn-brand {
+  background: var(--brand);
+  border-color: var(--brand);
+  font-weight: 600;
+}
+
+@container (max-width: 680px) {
+  .summary-grid,
+  .forms-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.profile-preferences {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 16px;
+  margin-top: 16px;
+  color: var(--t3);
+  font-size: var(--text-body);
+}
+
+.profile-preferences dd {
+  color: var(--t2);
+}
+
+.avatar-block {
   flex-wrap: wrap;
 }
 
-.avatar-preview {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-top: 18px;
-  padding: 14px 16px;
-  border-radius: var(--r2);
-  background: rgba(248, 250, 252, 0.92);
-}
-
-.avatar-large {
-  background: var(--brand);
-  color: #fff;
-  font-weight: 700;
-}
-
-.avatar-preview-copy {
-  min-width: 0;
-}
-
-.avatar-preview-copy strong {
-  display: block;
-  font-size: 14px;
-  color: var(--t1);
-}
-
-.avatar-preview-copy span {
-  display: block;
-  margin-top: 4px;
-  font-size: 12px;
-  color: var(--t3);
-  word-break: break-all;
-}
-
-.bottom-grid {
-  align-items: start;
-}
-
-@media (max-width: 1280px) {
-  .summary-grid,
-  .panel-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 768px) {
-  .hero-bar,
-  .avatar-block,
-  .setting-row {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .panel-actions {
-    justify-content: stretch;
-    flex-direction: column;
-  }
-
-  .panel-actions :deep(.el-button) {
-    width: 100%;
-  }
-
-  .status-grid {
-    grid-template-columns: 1fr;
-  }
+.avatar-meta {
+  overflow-wrap: anywhere;
 }
 </style>

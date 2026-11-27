@@ -1,6 +1,6 @@
 ﻿<template>
   <el-container class="app-shell">
-    <el-aside class="sidebar" :width="collapsed ? '80px' : '260px'">
+    <el-aside class="sidebar" :width="collapsed ? '72px' : '200px'">
       <div class="sidebar-brand">
         <img class="brand-logo" :src="logo" alt="学智汇" />
         <div v-if="!collapsed" class="brand-copy">
@@ -30,15 +30,20 @@
           <el-icon><Compass /></el-icon>
           <span>公开知识库</span>
         </el-menu-item>
-        <el-menu-item index="/messages">
-          <el-badge
-            :value="messageStore.unreadCount"
-            :hidden="messageStore.unreadCount === 0"
-            class="menu-badge"
-          >
-            <el-icon><Bell /></el-icon>
-          </el-badge>
+        <el-menu-item index="/wiki" aria-label="AI Wiki">
+          <el-icon><Reading /></el-icon>
+          <template #title>AI Wiki</template>
+        </el-menu-item>
+        <el-menu-item index="/retrieval-test" aria-label="检索测试">
+          <el-icon><Search /></el-icon>
+          <template #title>检索测试</template>
+        </el-menu-item>
+        <el-menu-item index="/messages" :aria-label="messagesLabel">
+          <el-icon><Bell /></el-icon>
           <span>消息通知</span>
+          <span v-if="messageStore.unreadCount > 0" class="menu-count" aria-hidden="true">
+            {{ messageStore.unreadCount > 99 ? '99+' : messageStore.unreadCount }}
+          </span>
         </el-menu-item>
         <el-menu-item index="/settings">
           <el-icon><Setting /></el-icon>
@@ -74,8 +79,8 @@
         </div>
 
         <div class="topbar-tools">
-          <el-badge :value="messageStore.unreadCount" :hidden="messageStore.unreadCount === 0">
-            <el-button class="icon-button" circle :icon="Bell" @click="goMessages" />
+          <el-badge is-dot :hidden="messageStore.unreadCount === 0" class="topbar-badge">
+            <el-button class="icon-button" circle :icon="Bell" :aria-label="messagesLabel" @click="goMessages" />
           </el-badge>
 
           <template v-if="authStore.isLogin">
@@ -86,7 +91,7 @@
                 </el-avatar>
                 <span class="user-copy">
                   <strong>{{ authStore.user?.userName || authStore.user?.userAccount }}</strong>
-                  <small>{{ authStore.isAdmin ? '管理员' : '成员' }}</small>
+                  <small>{{ roleLabel(authStore.user?.userRole) }}</small>
                 </span>
                 <el-icon class="chevron"><ArrowDown /></el-icon>
               </span>
@@ -128,11 +133,14 @@ import {
   Fold,
   Folder,
   House,
+  Reading,
+  Search,
   Setting,
   SwitchButton,
   User,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
+import { roleLabel } from '../utils/roles'
 import { useMessageStore } from '../stores/messages'
 import logo from '../assets/logo.png'
 
@@ -149,6 +157,8 @@ const routeInfo = {
   '/chat': { title: 'AI 对话' },
   '/knowledge': { title: '我的知识库' },
   '/public-knowledge': { title: '公开知识库' },
+  '/wiki': { title: 'AI Wiki' },
+  '/retrieval-test': { title: '检索测试' },
   '/messages': { title: '消息通知' },
   '/profile': { title: '个人资料' },
   '/settings': { title: '系统设置' },
@@ -168,10 +178,15 @@ const activeMenu = computed(() => {
   if (path.startsWith('/public-knowledge')) return '/public-knowledge'
   if (path.startsWith('/settings')) return '/settings'
   if (path.startsWith('/chat')) return '/chat'
+  if (route.name === 'Wiki') return '/wiki'
+  if (route.name === 'RetrievalTest') return '/retrieval-test'
   return '/dashboard'
 })
 
 const pageTitle = computed(() => routeInfo[activeMenu.value]?.title || route.meta.title || '仪表盘')
+const messagesLabel = computed(() => messageStore.unreadCount > 0
+  ? `消息通知，${messageStore.unreadCount} 条未读`
+  : '消息通知')
 
 const avatarText = computed(() => {
   const name = authStore.user?.userName || authStore.user?.userAccount || '?'
@@ -225,6 +240,7 @@ watch(collapsed, (value) => {
 })
 
 onMounted(() => {
+  if (authStore.isLogin) authStore.fetchCurrentUser().catch(() => {})
   refreshTimer = window.setInterval(() => {
     if (authStore.isLogin) {
       messageStore.loadInvitations().catch(() => {})
@@ -301,8 +317,9 @@ onUnmounted(() => {
 .side-menu :deep(.el-menu-item) {
   position: relative;
   margin: 3px 8px;
-  border-radius: 10px;
+  border-radius: var(--r3);
   height: 38px;
+  font-size: var(--text-body);
   font-weight: 500;
   transition: background-color 0.15s ease-out, color 0.15s ease-out;
 }
@@ -330,21 +347,40 @@ onUnmounted(() => {
 }
 
 .menu-divider-label {
-  padding: 14px 18px 4px;
-  font-size: 11px;
+  padding: 14px 20px 4px;
+  font-size: var(--text-muted);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--t4);
 }
 
-.menu-badge {
-  display: inline-flex;
+.side-menu:not(.el-menu--collapse) :deep(.el-menu-item) {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  gap: 8px;
   align-items: center;
-  margin-right: 10px;
+  padding-inline: 12px;
 }
 
-/* 锚定左侧：展开(260px)/收起(80px)切换时按钮坐标不变 */
+.side-menu:not(.el-menu--collapse) :deep(.el-menu-item > .el-icon) {
+  margin: 0;
+  justify-self: center;
+  font-size: 18px;
+}
+
+.menu-count {
+  min-width: 18px;
+  padding-inline: 5px;
+  border-radius: var(--r3);
+  background: var(--tint);
+  color: var(--brand);
+  font-size: var(--text-muted);
+  line-height: 18px;
+  text-align: center;
+}
+
+/* 折叠前后使用同一左侧锚点。 */
 .collapse-btn {
   position: absolute;
   left: 20px;
@@ -463,21 +499,39 @@ onUnmounted(() => {
   transition: transform 0.2s ease;
 }
 
+.topbar-badge :deep(.el-badge__content.is-fixed) {
+  top: 5px;
+  right: 5px;
+  transform: none;
+  background: var(--brand);
+}
+
+.user-copy strong {
+  max-width: 144px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .page-body {
   min-width: 0;
-  padding: 20px 24px 32px;
+  padding: 18px 24px 28px;
+  container-type: inline-size;
 }
 
 @media (max-width: 1024px) {
-  .topbar {
-    align-items: flex-start;
-    flex-direction: column;
-    height: auto;
-    min-height: 80px;
-    padding: 14px 20px;
-  }
-  .page-body {
-    padding: 16px 20px;
-  }
+  .topbar { gap: 8px; padding-inline: 12px; }
+  .page-body { padding: 14px 12px 20px; }
+}
+
+@media (max-width: 640px) {
+  .app-shell { height: auto; min-height: 100dvh; flex-direction: column; }
+  .sidebar { width: 100%; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .sidebar-brand { min-height: 48px; padding-block: 6px; }
+  .side-menu { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px 0; }
+  .menu-divider-label { grid-column: 1 / -1; padding-top: 8px; }
+  .collapse-btn { top: 8px; right: 12px; bottom: auto; left: auto; }
+  .side-menu.el-menu--collapse { display: none; }
+  .user-copy strong { max-width: 88px; }
 }
 </style>

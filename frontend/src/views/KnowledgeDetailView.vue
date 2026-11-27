@@ -1,8 +1,9 @@
 <template>
   <div class="kb-detail-page" v-loading="loading">
-    <div class="header-card">
+    <!-- 头部卡片：采用 flex-wrap 与弹性 clamp -->
+    <header class="detail-header-card">
       <div class="header-left">
-        <el-button :icon="ArrowLeft" circle class="back-btn" @click="goBack" />
+        <el-button :icon="ArrowLeft" circle class="back-btn" aria-label="返回" @click="goBack" />
         <div class="head-info">
           <div class="title-row">
             <div class="head-cover-wrap">
@@ -25,15 +26,18 @@
                 <span class="stat"><el-icon><View /></el-icon>{{ knowledge?.viewCount || 0 }} 浏览</span>
                 <span class="stat"><el-icon><Star /></el-icon>{{ knowledge?.favoriteCount || 0 }} 收藏</span>
                 <span class="dot-divider">·</span>
-                <span class="stat"><el-icon><Document /></el-icon>{{ docs.length }} 个文档</span>
+                <span class="stat"><el-icon><Document /></el-icon>{{ docs.length }} 篇文档</span>
               </div>
+              <p v-if="knowledge?.description" class="head-description">{{ knowledge.description }}</p>
             </div>
           </div>
         </div>
       </div>
 
+      <!-- 操作区：弹性收拢防溢出 -->
       <div class="actions">
         <el-button :icon="Refresh" @click="loadDocs">刷新</el-button>
+        <el-button v-if="knowledge" :icon="Search" @click="showRetrievalTest = true">检索测试</el-button>
         <el-button type="warning" plain :icon="MagicStick" @click="goWiki">AI Wiki</el-button>
         <template v-if="!isOwner && !isMember">
           <el-button
@@ -74,25 +78,35 @@
           <el-button type="danger" plain :icon="Delete" @click="handleDeleteKb">删除知识库</el-button>
         </template>
       </div>
-    </div>
+    </header>
 
-    <div v-if="knowledge?.description" class="desc-strip">
-      <div class="desc-icon"><el-icon><Document /></el-icon></div>
-      <p>{{ knowledge.description }}</p>
-    </div>
+    <KnowledgeQuestions v-if="knowledge" :knowledge-id="knowledgeId" :is-owner="isOwner" />
+    <el-drawer
+      v-if="knowledge"
+      v-model="showRetrievalTest"
+      title="检索测试"
+      size="min(640px, 100vw)"
+      :close-on-click-modal="false"
+    >
+      <KnowledgeRetrievalTest :key="knowledgeId" :knowledge-id="knowledgeId" />
+    </el-drawer>
 
+    <!-- 文档表格容器卡片 -->
     <div class="docs-main-card" v-if="!loading">
+      <div class="card-header-bar">
+        <h3 class="docs-heading">文档列表</h3>
+        <span class="docs-sub-count">共 {{ docs.length }} 篇</span>
+      </div>
+
       <template v-if="canManage">
         <div class="docs-toolbar">
           <div class="filters-group">
-            <div class="filter-item">
-              <span class="filter-label">向量状态:</span>
-              <el-segmented
-                v-model="category"
-                :options="categoryOptions"
-                @change="loadDocs()"
-              />
-            </div>
+            <span class="filter-label">向量状态:</span>
+            <el-segmented
+              v-model="category"
+              :options="categoryOptions"
+              @change="loadDocs()"
+            />
           </div>
 
           <div class="batch-toolbar">
@@ -127,118 +141,104 @@
         :description="canManage ? '暂无文档，点击右上角上传第一篇文档' : '该知识库暂无文档'"
       />
 
-      <el-table
-        v-else
-        :data="docs"
-        stripe
-        class="doc-table"
-        @selection-change="handleSelectionChange"
-      >
-        <el-table-column v-if="canManage" type="selection" width="48" />
-        <el-table-column label="文档名称" min-width="240">
-          <template #default="{ row }">
-            <div class="doc-name-cell">
-              <div class="file-icon-box">
-                <el-icon><Document /></el-icon>
+      <div v-else class="table-wrapper">
+        <el-table
+          :data="docs"
+          stripe
+          class="doc-table"
+          @selection-change="handleSelectionChange"
+        >
+          <el-table-column v-if="canManage" type="selection" width="48" />
+          <el-table-column label="文档名称" min-width="220">
+            <template #default="{ row }">
+              <div class="doc-name-cell">
+                <div class="file-icon-box">
+                  <el-icon><Document /></el-icon>
+                </div>
+                <el-tooltip :content="row.name" placement="top" :show-after="300">
+                  <span class="doc-file-name">{{ row.name }}</span>
+                </el-tooltip>
               </div>
-              <el-tooltip :content="row.name" placement="top" :show-after="300">
-                <span class="doc-file-name">{{ row.name }}</span>
-              </el-tooltip>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="fileType" label="类型" width="90">
-          <template #default="{ row }">
-            <el-tag size="small" effect="plain">{{ row.fileType || '未知' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column label="大小" width="110">
-          <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
-        </el-table-column>
-        <el-table-column label="向量化状态" width="140">
-          <template #default="{ row }">
-            <el-tooltip
-              v-if="row.vectorStatus === 'FAILED'"
-              :content="row.errorMsg || '向量化失败'"
-              placement="top"
-            >
-              <el-tag type="danger" size="small">失败</el-tag>
-            </el-tooltip>
-            <el-tag
-              v-else-if="row.vectorStatus === 'SUCCESS'"
-              type="success"
-              size="small"
-            >已入库</el-tag>
-            <el-tooltip
-              v-else-if="row.vectorStatus === 'SKIPPED'"
-              :content="row.errorMsg || '重复文件'"
-              placement="top"
-            >
-              <el-tag type="info" size="small">重复未入库</el-tag>
-            </el-tooltip>
-            <el-tag
-              v-else-if="row.vectorStatus === 'REMOVED'"
-              type="warning"
-              size="small"
-            >未入库</el-tag>
-            <el-tag v-else type="warning" size="small">待处理</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="createTime" label="上传时间" width="170">
-          <template #default="{ row }">{{
-            row.createTime?.replace('T', ' ').slice(0, 19)
-          }}</template>
-        </el-table-column>
-        <el-table-column label="操作" :width="canManage ? 320 : 180" fixed="right">
-          <template #default="{ row }">
-            <el-button size="small" plain @click="handleViewChunks(row)">切片</el-button>
-            <el-button size="small" @click="handleDownloadDoc(row)">下载</el-button>
-            <template v-if="canManage">
-              <el-button
-                v-if="row.vectorStatus === 'SUCCESS'"
-                size="small"
-                type="warning"
-                plain
-                @click="handleRemoveVector(row)"
-              >
-                移出
-              </el-button>
-              <el-button
-                v-if="row.vectorStatus === 'SKIPPED'"
-                size="small"
-                type="primary"
-                :loading="busyIds.includes(row.id)"
-                @click="handleReVectorize(row)"
-              >
-                强制入库
-              </el-button>
-              <el-button
-                v-if="
-                  row.vectorStatus === 'FAILED' ||
-                  row.vectorStatus === 'PENDING' ||
-                  row.vectorStatus === 'REMOVED'
-                "
-                size="small"
-                type="primary"
-                :loading="busyIds.includes(row.id)"
-                @click="handleReVectorize(row)"
-              >
-                入库
-              </el-button>
-              <el-button
-                size="small"
-                type="danger"
-                link
-                @click="handlePurgeDoc(row)"
-              >删除</el-button>
             </template>
-          </template>
-        </el-table-column>
-      </el-table>
+          </el-table-column>
+          <el-table-column prop="fileType" label="类型" width="85">
+            <template #default="{ row }">
+              <el-tag size="small" effect="plain">{{ row.fileType || '未知' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="大小" width="100">
+            <template #default="{ row }">{{ formatSize(row.fileSize) }}</template>
+          </el-table-column>
+          <el-table-column label="向量化状态" width="130">
+            <template #default="{ row }">
+              <el-tooltip
+                v-if="row.vectorStatus === 'FAILED'"
+                :content="row.errorMsg || '向量化失败'"
+                placement="top"
+              >
+                <el-tag type="danger" size="small">失败</el-tag>
+              </el-tooltip>
+              <el-tag
+                v-else-if="row.vectorStatus === 'SUCCESS'"
+                type="success"
+                size="small"
+              >已入库</el-tag>
+              <el-tooltip
+                v-else-if="row.vectorStatus === 'SKIPPED'"
+                :content="row.errorMsg || '重复文件'"
+                placement="top"
+              >
+                <el-tag type="info" size="small">重复未入库</el-tag>
+              </el-tooltip>
+              <el-tag
+                v-else-if="row.vectorStatus === 'REMOVED'"
+                type="warning"
+                size="small"
+              >未入库</el-tag>
+              <el-tag v-else type="warning" size="small">待处理</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createTime" label="上传时间" width="160">
+            <template #default="{ row }">{{
+              row.createTime?.replace('T', ' ').slice(0, 16)
+            }}</template>
+          </el-table-column>
+          <el-table-column label="操作" :width="canManage ? 300 : 140">
+            <template #default="{ row }">
+              <div class="row-btn-group">
+                <el-button size="small" plain @click="handleViewChunks(row)">切片</el-button>
+                <el-button size="small" @click="handleDownloadDoc(row)">下载</el-button>
+                <template v-if="canManage">
+                  <el-button
+                    v-if="row.vectorStatus === 'SUCCESS'"
+                    size="small"
+                    type="warning"
+                    plain
+                    @click="handleRemoveVector(row)"
+                  >移出</el-button>
+                  <el-button
+                    v-else-if="['SKIPPED', 'FAILED', 'PENDING', 'REMOVED'].includes(row.vectorStatus)"
+                    size="small"
+                    type="primary"
+                    :loading="busyIds.includes(row.id)"
+                    @click="handleReVectorize(row)"
+                  >{{ row.vectorStatus === 'SKIPPED' ? '强制入库' : '入库' }}</el-button>
+                  <el-button
+                    size="small"
+                    type="danger"
+                    link
+                    @click="handlePurgeDoc(row)"
+                  >删除</el-button>
+                </template>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </div>
 
     <!-- 编辑知识库弹窗（仅作者） -->
-    <el-dialog v-model="editDialogVisible" title="编辑知识库" width="460px">
+    <el-dialog v-model="editDialogVisible" :close-on-click-modal="false" title="编辑知识库" width="min(460px, calc(100vw - 32px))">
       <el-form :model="editForm" label-position="top">
         <el-form-item label="知识库名称" required>
           <el-input v-model="editForm.name" maxlength="128" />
@@ -269,9 +269,9 @@
     </el-dialog>
 
     <!-- 协作者管理弹窗（仅作者） -->
-    <el-dialog v-model="memberDialogVisible" title="协作者团队管理" width="540px">
+    <el-dialog v-model="memberDialogVisible" title="协作者团队管理" width="min(540px, calc(100vw - 32px))">
       <div class="invite-row">
-        <el-input v-model="inviteAccount" placeholder="输入被邀请人的账号..." @keyup.enter="handleInvite" />
+        <el-input v-model="inviteAccount" aria-label="被邀请人账号" placeholder="输入被邀请人的账号..." @keyup.enter="handleInvite" />
         <el-button type="primary" :loading="inviting" @click="handleInvite">发送邀请</el-button>
       </div>
       <el-table :data="members" v-loading="membersLoading" size="small">
@@ -299,7 +299,7 @@
     <el-dialog
       v-model="chunkDialogVisible"
       :title="'向量切片详情 - ' + chunkDocName"
-      width="740px"
+      width="min(740px, calc(100vw - 32px))"
       top="6vh"
     >
       <div v-loading="chunkLoading">
@@ -318,6 +318,8 @@
 </template>
 
 <script setup>
+import KnowledgeQuestions from '../components/KnowledgeQuestions.vue'
+import KnowledgeRetrievalTest from '../components/KnowledgeRetrievalTest.vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -332,6 +334,7 @@ import {
   Refresh,
   RefreshLeft,
   RefreshRight,
+  Search,
   Star,
   StarFilled,
   Upload,
@@ -366,6 +369,7 @@ const router = useRouter()
 const knowledgeId = route.params.id
 
 const knowledge = ref(null)
+const showRetrievalTest = ref(false)
 const docs = ref([])
 const loading = ref(false)
 const uploading = ref(false)
@@ -779,10 +783,11 @@ const formatSize = (bytes) => {
 }
 
 const goBack = () => {
-  if (window.history.length > 1) {
+  if (router.options.history.state.back) {
     router.back()
   } else {
-    router.push(isOwner.value || isMember.value ? '/knowledge' : '/public-knowledge')
+    const fromMine = route.query.from === 'mine' || isOwner.value || isMember.value
+    router.push(fromMine ? '/knowledge' : '/public-knowledge')
   }
 }
 
@@ -805,77 +810,63 @@ onBeforeUnmount(() => {
 .kb-detail-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: clamp(12px, 1.5vw, 18px);
+  width: 100%;
 }
 
-.header-card {
+.detail-header-card {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 20px;
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 16px;
-  padding: 18px 24px;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  padding: clamp(14px, 1.8vw, 22px);
   box-shadow: var(--shadow-card);
 }
 
 .header-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 14px;
+  flex: 1 1 clamp(280px, 35vw, 560px);
   min-width: 0;
 }
 
 .back-btn {
-  border-color: rgba(226, 232, 240, 0.9);
+  border-color: var(--line);
   color: var(--t3);
   flex-shrink: 0;
+  margin-top: 2px;
 }
 
-.head-info {
-  min-width: 0;
-}
-
-.title-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-
-.head-cover-wrap {
-  flex-shrink: 0;
-}
+.head-info { min-width: 0; flex: 1; }
+.title-row { display: flex; align-items: flex-start; gap: 14px; }
+.head-cover-wrap { flex-shrink: 0; }
 
 .head-cover {
-  width: 52px;
-  height: 52px;
+  width: 56px;
+  height: 56px;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: var(--r3);
 }
 
 .head-cover-letter {
-  line-height: 52px;
+  line-height: 56px;
   text-align: center;
-  font-size: 22px;
+  font-size: var(--text-heading);
   font-weight: 700;
-  color: #fff;
+  color: var(--card);
   background: var(--brand);
 }
 
-.head-text-block {
-  min-width: 0;
-}
-
-.head-title-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
+.head-text-block { min-width: 0; flex: 1; }
+.head-title-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .head-title-line h2 {
   margin: 0;
-  font-size: 22px;
+  font-size: var(--text-heading);
   font-weight: 700;
   color: var(--t1);
 }
@@ -885,103 +876,95 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   margin-top: 6px;
-  font-size: 12px;
+  font-size: var(--text-muted);
   color: var(--t3);
   flex-wrap: wrap;
 }
 
 .author-avatar {
   background: var(--t3);
-  color: #fff;
-  font-size: 10px;
+  color: var(--card);
+  font-size: var(--text-muted);
   flex-shrink: 0;
 }
 
-.author-name {
-  font-weight: 500;
-}
+.author-name { font-weight: 500; }
+.dot-divider { color: var(--t4); }
+.stat { display: inline-flex; align-items: center; gap: 4px; }
 
-.dot-divider {
-  color: #cbd5e1;
-}
-
-.stat {
-  display: inline-flex;
-  align-items: center;
-  gap: 3px;
+.head-description {
+  margin: 8px 0 0;
+  color: var(--t2);
+  font-size: var(--text-body);
+  line-height: 1.5;
+  word-break: break-word;
 }
 
 .actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .upload-btn {
+  background: var(--brand);
+  border-color: var(--brand);
   font-weight: 600;
 }
 
-.desc-strip {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 18px;
-  background: rgba(240, 253, 250, 0.8);
-  border: 1px solid rgba(153, 246, 228, 0.8);
-  border-radius: var(--r2);
-}
-
-.desc-icon {
-  color: var(--brand);
-  font-size: 16px;
-  display: flex;
-}
-
-.desc-strip p {
-  font-size: 14px;
-  color: #134e4a;
-  line-height: 1.5;
-}
-
 .docs-main-card {
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
-  border-radius: 16px;
-  padding: 20px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  padding: clamp(14px, 1.8vw, 20px);
   box-shadow: var(--shadow-card);
+}
+
+.card-header-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.docs-heading {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 700;
+  color: var(--t1);
+}
+
+.docs-sub-count {
+  font-size: var(--text-muted);
+  color: var(--t4);
 }
 
 .docs-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 16px;
+  gap: 12px;
+  margin-bottom: 14px;
   flex-wrap: wrap;
 }
 
 .filters-group {
   display: flex;
   align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.filter-item {
-  display: flex;
-  align-items: center;
   gap: 8px;
 }
 
 .filter-label {
-  font-size: 12px;
+  font-size: var(--text-muted);
   font-weight: 600;
   color: var(--t3);
 }
 
 .batch-toolbar {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -994,31 +977,39 @@ onBeforeUnmount(() => {
 .file-icon-box {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: rgba(20, 184, 166, 0.1);
+  border-radius: var(--r3);
+  background: var(--tint);
   color: var(--brand);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 14px;
+  font-size: var(--text-body);
 }
 
 .doc-file-name {
-  font-size: var(--text-heading);
+  font-size: var(--text-body);
   font-weight: 600;
-  color: #1e293b;
+  color: var(--t1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.hidden-input {
-  display: none;
+.row-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
 }
+
+.hidden-input { display: none; }
 
 .cover-preview {
   width: 100%;
   height: 120px;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: var(--r3);
   display: block;
 }
 
@@ -1029,10 +1020,10 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px dashed rgba(203, 213, 225, 0.8);
-  border-radius: 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r3);
   color: var(--t3);
-  font-size: 12px;
+  font-size: var(--text-muted);
   cursor: pointer;
   background: var(--bg);
 }
@@ -1043,7 +1034,7 @@ onBeforeUnmount(() => {
 
 .perm-tip {
   margin: 4px 0 0;
-  font-size: 12px;
+  font-size: var(--text-muted);
   color: var(--t3);
 }
 
@@ -1072,8 +1063,8 @@ onBeforeUnmount(() => {
 }
 
 .chunk-item {
-  border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
   padding: 12px 16px;
   background: var(--bg);
 }
@@ -1083,39 +1074,50 @@ onBeforeUnmount(() => {
 }
 
 .chunk-badge {
-  font-size: 12px;
+  font-size: var(--text-muted);
   font-weight: 700;
   color: var(--brand);
-  background: rgba(20, 184, 166, 0.12);
+  background: var(--tint-strong);
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--r3);
 }
 
 .chunk-text {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 14px;
+  font-size: var(--text-body);
   line-height: 1.6;
   color: var(--t2);
 }
-
-.doc-table :deep(.el-button) {
-  min-height: 28px;
+.actions :deep(.el-button + .el-button),
+.batch-toolbar :deep(.el-button + .el-button),
+.row-btn-group :deep(.el-button + .el-button) {
+  margin-inline-start: 0;
 }
 
-.doc-table :deep(.el-button + .el-button) {
-  margin-left: 8px;
+.table-wrapper,
+.filters-group {
+  min-width: 0;
 }
 
-@media (max-width: 768px) {
-  .header-card {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .docs-toolbar {
-    flex-direction: column;
-    align-items: flex-start;
+.filters-group {
+  flex-wrap: wrap;
+}
+
+.filters-group :deep(.el-segmented) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.head-title-line,
+.author-name {
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 540px) {
+  .invite-row {
+    flex-wrap: wrap;
   }
 }
 </style>

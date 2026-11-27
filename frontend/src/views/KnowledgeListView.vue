@@ -1,7 +1,10 @@
-﻿<template>
+<template>
   <div class="kb-list-page">
     <div class="page-header">
-      <!-- 标题由顶栏承载；空态时隐藏右上按钮，避免与空态"立即创建"同屏双主按钮（uiup 组 14） -->
+      <div class="header-left">
+        <h2 class="page-title">我的知识库</h2>
+      </div>
+      <!-- 空态时隐藏右上按钮，避免与空态"立即创建"同屏双主按钮 -->
       <el-button
         v-if="loading || list.length > 0"
         type="primary"
@@ -16,69 +19,72 @@
     <el-empty
       v-if="!loading && list.length === 0"
       description="还没有知识库，点击下方开启你的第一个知识库吧"
+      class="empty-card"
     >
-      <el-button type="primary" :icon="Plus" @click="openCreateDialog">立即创建</el-button>
+      <el-button type="primary" :icon="Plus" class="create-btn" @click="openCreateDialog">立即创建</el-button>
     </el-empty>
 
-    <el-row v-loading="loading" :gutter="20" class="kb-row">
-      <el-col v-for="kb in list" :key="kb.id" :xs="24" :sm="12" :md="8" :lg="6" :xl="6">
-        <div class="kb-card" @click="goDetail(kb.id)">
-          <!-- 身份角标 -->
-          <div class="kb-badge-wrapper">
-            <el-tag v-if="kb.isOwner" type="success" effect="dark" size="small" class="mine-badge">我的</el-tag>
-            <el-tag v-else-if="kb.isMember" type="primary" effect="dark" size="small" class="mine-badge">协作中</el-tag>
-            <el-tag v-else type="warning" effect="dark" size="small" class="mine-badge">已收藏</el-tag>
+    <!-- 弹性自适应 Grid 栅格：彻底消除浏览器缩放下的卡片挤压与不对齐 -->
+    <div v-else v-loading="loading" class="kb-grid">
+      <div
+        v-for="kb in list"
+        :key="kb.id"
+        class="kb-card"
+        tabindex="0"
+        @click="goDetail(kb.id)"
+        @keydown.enter.prevent="goDetail(kb.id)"
+      >
+        <!-- 身份角标 -->
+        <div class="kb-badge-wrapper">
+          <span v-if="kb.isOwner" class="badge-pill badge-owner">我的</span>
+          <span v-else-if="kb.isMember" class="badge-pill badge-collab">协作中</span>
+          <span v-else class="badge-pill badge-fav">已收藏</span>
+        </div>
+
+        <KnowledgeCover :src="kb.cover" :name="kb.name" />
+
+        <div class="kb-body">
+          <div class="kb-head-row">
+            <h3 class="kb-name" :title="kb.name">{{ kb.name }}</h3>
+            <el-tag v-if="kb.isPublic === 1" size="small" type="success" effect="plain" class="status-tag">公开</el-tag>
+            <el-tag v-else size="small" type="info" effect="plain" class="status-tag">私有</el-tag>
           </div>
 
-          <!-- 封面图/渐变首字 -->
-          <div class="cover-box">
-            <img v-if="kb.cover" :src="kb.cover" class="kb-cover-img" alt="封面" />
-            <div v-else class="kb-cover">{{ kb.name.charAt(0) }}</div>
+          <div class="kb-author">
+            <el-avatar :size="20" class="author-avatar">{{ (kb.authorName || '?').charAt(0).toUpperCase() }}</el-avatar>
+            <span class="author-name">{{ kb.authorName || '未知作者' }}</span>
           </div>
 
-          <div class="kb-body">
-            <div class="kb-head-row">
-              <h3 class="kb-name" :title="kb.name">{{ kb.name }}</h3>
-              <el-tag v-if="kb.isPublic === 1" size="small" type="success" effect="plain">公开</el-tag>
-              <el-tag v-else size="small" type="info" effect="plain">私有</el-tag>
-            </div>
+          <p class="kb-desc" :title="kb.description">{{ kb.description || '暂无知识库简介描述' }}</p>
 
-            <div class="kb-author">
-              <el-avatar :size="20" class="author-avatar">{{ (kb.authorName || '?').charAt(0) }}</el-avatar>
-              <span class="author-name">{{ kb.authorName || '未知作者' }}</span>
+          <div class="kb-meta-row">
+            <div class="kb-stats">
+              <span class="stat"><el-icon><View /></el-icon>{{ kb.viewCount || 0 }}</span>
+              <span class="stat"><el-icon><Star /></el-icon>{{ kb.favoriteCount || 0 }}</span>
             </div>
+            <span class="doc-badge">{{ kb.docCount || 0 }} 篇文档</span>
+          </div>
 
-            <p class="kb-desc" :title="kb.description">{{ kb.description || '暂无知识库简介描述' }}</p>
-
-            <div class="kb-meta-row">
-              <div class="kb-stats">
-                <span class="stat"><el-icon><View /></el-icon>{{ kb.viewCount || 0 }}</span>
-                <span class="stat"><el-icon><Star /></el-icon>{{ kb.favoriteCount || 0 }}</span>
-              </div>
-              <span class="doc-badge">{{ kb.docCount || 0 }} 篇文档</span>
-            </div>
-
-            <div class="kb-footer" @click.stop>
-              <template v-if="kb.isOwner">
-                <el-button size="small" plain :icon="Edit" @click="openEditDialog(kb)">编辑</el-button>
-                <el-button size="small" type="danger" link :icon="Delete" @click="handleDelete(kb)">删除</el-button>
-              </template>
-              <el-button v-else-if="kb.isMember" size="small" type="primary" link @click="goDetail(kb.id)">进入管理</el-button>
-              <el-button v-else size="small" type="warning" link @click="handleUnfavorite(kb)">取消收藏</el-button>
-            </div>
+          <div class="kb-footer" @click.stop>
+            <template v-if="kb.isOwner">
+              <el-button size="small" plain :icon="Edit" @click="openEditDialog(kb)">编辑</el-button>
+              <el-button size="small" type="danger" link :icon="Delete" @click="handleDelete(kb)">删除</el-button>
+            </template>
+            <el-button v-else-if="kb.isMember" size="small" type="primary" link @click="goDetail(kb.id)">进入管理</el-button>
+            <el-button v-else size="small" type="warning" link @click="handleUnfavorite(kb)">取消收藏</el-button>
           </div>
         </div>
-      </el-col>
-    </el-row>
+      </div>
+    </div>
 
     <!-- 新建知识库弹窗 -->
-    <el-dialog v-model="createDialogVisible" title="新建知识库" width="460px" class="custom-dialog">
+    <el-dialog v-model="createDialogVisible" title="新建知识库" width="min(480px, calc(100vw - 32px))" class="custom-dialog" :close-on-click-modal="false">
       <el-form :model="createForm" label-position="top">
         <el-form-item label="知识库名称" required>
           <el-input v-model="createForm.name" placeholder="如：计算机体系结构课程资料" maxlength="128" />
         </el-form-item>
         <el-form-item label="封面图片">
-          <el-upload :show-file-list="false" :http-request="handleCreateCoverUpload" accept="image/*">
+          <el-upload :show-file-list="false" :http-request="handleCreateCoverUpload" accept="image/*" class="cover-uploader">
             <img v-if="createForm.cover" :src="createForm.cover" class="cover-preview" alt="封面预览" />
             <div v-else class="cover-placeholder">
               <el-icon><Plus /></el-icon>
@@ -101,18 +107,18 @@
       </el-form>
       <template #footer>
         <el-button @click="createDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="handleCreate">创建知识库</el-button>
+        <el-button type="primary" :loading="creating" class="btn-brand" @click="handleCreate">创建知识库</el-button>
       </template>
     </el-dialog>
 
     <!-- 编辑知识库弹窗（仅作者） -->
-    <el-dialog v-model="editDialogVisible" title="编辑知识库" width="460px" class="custom-dialog">
+    <el-dialog v-model="editDialogVisible" title="编辑知识库" width="min(480px, calc(100vw - 32px))" class="custom-dialog" :close-on-click-modal="false">
       <el-form :model="editForm" label-position="top">
         <el-form-item label="知识库名称" required>
           <el-input v-model="editForm.name" placeholder="如：计算机体系结构课程资料" maxlength="128" />
         </el-form-item>
         <el-form-item label="封面图片">
-          <el-upload :show-file-list="false" :http-request="handleEditCoverUpload" accept="image/*">
+          <el-upload :show-file-list="false" :http-request="handleEditCoverUpload" accept="image/*" class="cover-uploader">
             <img v-if="editForm.cover" :src="editForm.cover" class="cover-preview" alt="封面预览" />
             <div v-else class="cover-placeholder">
               <el-icon><Plus /></el-icon>
@@ -135,7 +141,7 @@
       </el-form>
       <template #footer>
         <el-button @click="editDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="editing" @click="handleEdit">保存变更</el-button>
+        <el-button type="primary" :loading="editing" class="btn-brand" @click="handleEdit">保存变更</el-button>
       </template>
     </el-dialog>
   </div>
@@ -146,6 +152,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, Plus, Star, View } from '@element-plus/icons-vue'
+import KnowledgeCover from '../components/KnowledgeCover.vue'
 import {
   createKnowledge,
   deleteKnowledge,
@@ -279,77 +286,114 @@ onMounted(() => {
 .kb-list-page {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: clamp(14px, 1.6vw, 20px);
+  width: 100%;
 }
 
 .page-header {
   display: flex;
-  align-items: flex-end;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-left {
+  display: flex;
+  flex-direction: column;
+}
+
+.page-title {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 700;
+  color: var(--t1);
 }
 
 .create-btn {
-  border-radius: 12px;
+  border-radius: var(--r3);
+  background: var(--brand);
+  border-color: var(--brand);
   font-weight: 600;
+  min-height: 38px;
+  box-shadow: 0 2px 6px var(--tint-strong);
 }
 
-.kb-row {
-  margin: 0 -10px;
+.create-btn:hover {
+  background: var(--brand-hover);
+  border-color: var(--brand-hover);
 }
 
-/* 知识库卡片 */
+.empty-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r1);
+  padding: 48px 24px;
+}
+
+/* 核心抗缩放自适应网格 */
+.kb-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(260px, 22vw, 320px)), 1fr));
+  gap: clamp(14px, 1.5vw, 20px);
+}
+
 .kb-card {
   position: relative;
-  background: #ffffff;
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  background: var(--card);
+  border: 1px solid var(--line);
   border-radius: var(--r1);
   overflow: hidden;
-  margin-bottom: 20px;
   cursor: pointer;
   box-shadow: var(--shadow-card);
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   display: flex;
   flex-direction: column;
 }
 
 .kb-card:hover {
-  border-color: rgba(20, 184, 166, 0.4);
+  border-color: var(--tint-strong);
+  box-shadow: var(--shadow-card-hover);
+  transform: translateY(-2px);
+}
+
+.kb-card:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .kb-badge-wrapper {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 10px;
+  right: 10px;
   z-index: 2;
 }
 
-.cover-box {
-  height: 140px;
-  width: 100%;
-  overflow: hidden;
-  background: #f1f5f9;
+.badge-pill {
+  font-size: var(--text-muted);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--t1) 12%, transparent);
 }
 
-.kb-cover-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.badge-owner {
+  background: var(--el-color-success);
+  color: var(--card);
 }
 
-.kb-cover {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 40px;
-  font-weight: 700;
-  color: #ffffff;
+.badge-collab {
   background: var(--brand);
+  color: var(--card);
+}
+
+.badge-fav {
+  background: var(--el-color-warning);
+  color: var(--card);
 }
 
 .kb-body {
-  padding: 16px 18px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   flex: 1;
@@ -363,13 +407,18 @@ onMounted(() => {
 }
 
 .kb-name {
-  font-size: 16px;
+  margin: 0;
+  font-size: var(--text-body);
   font-weight: 700;
   color: var(--t1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+
+.status-tag {
+  flex-shrink: 0;
 }
 
 .kb-author {
@@ -381,13 +430,13 @@ onMounted(() => {
 
 .author-avatar {
   background: var(--t3);
-  color: #fff;
-  font-size: 12px;
+  color: var(--card);
+  font-size: var(--text-muted);
   flex-shrink: 0;
 }
 
 .author-name {
-  font-size: 12px;
+  font-size: var(--text-muted);
   color: var(--t3);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -395,9 +444,9 @@ onMounted(() => {
 }
 
 .kb-desc {
-  margin-top: 8px;
+  margin: 8px 0 0;
   min-height: 36px;
-  font-size: 12px;
+  font-size: var(--text-body);
   color: var(--t3);
   line-height: 1.5;
   overflow: hidden;
@@ -410,7 +459,7 @@ onMounted(() => {
 .kb-meta-row {
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid rgba(241, 245, 249, 0.9);
+  border-top: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -421,7 +470,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
   color: var(--t4);
-  font-size: 12px;
+  font-size: var(--text-muted);
 }
 
 .kb-stats .stat {
@@ -431,12 +480,13 @@ onMounted(() => {
 }
 
 .doc-badge {
-  font-size: 12px;
+  font-size: var(--text-muted);
   font-weight: 600;
   color: var(--brand);
-  background: rgba(20, 184, 166, 0.1);
-  padding: 2px 8px;
-  border-radius: 6px;
+  background: var(--tint);
+  border: 1px solid var(--tint-strong);
+  padding: 1px 7px;
+  border-radius: var(--r3);
 }
 
 .kb-footer {
@@ -445,13 +495,24 @@ onMounted(() => {
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kb-footer :deep(.el-button) {
+  margin-inline-start: 0;
+  min-height: 28px;
+  border-radius: var(--r3);
+}
+
+.cover-uploader {
+  width: 100%;
 }
 
 .cover-preview {
   width: 100%;
-  height: 110px;
+  height: 120px;
   object-fit: cover;
-  border-radius: 12px;
+  border-radius: var(--r3);
   display: block;
 }
 
@@ -463,30 +524,35 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  border: 1px dashed rgba(203, 213, 225, 0.8);
-  border-radius: 12px;
+  border: 1px dashed var(--line);
+  border-radius: var(--r3);
   color: var(--t3);
-  font-size: 12px;
+  font-size: var(--text-muted);
   cursor: pointer;
   background: var(--bg);
   transition: all 0.2s ease;
 }
 
 .cover-placeholder:hover {
-  border-color: #14b8a6;
+  border-color: var(--brand);
   color: var(--brand);
-  background: rgba(20, 184, 166, 0.04);
+  background: var(--tint);
 }
 
 .visibility-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .visibility-tip {
-  font-size: 12px;
+  font-size: var(--text-muted);
   color: var(--t3);
+}
+
+.btn-brand {
+  background: var(--brand);
+  border-color: var(--brand);
 }
 </style>

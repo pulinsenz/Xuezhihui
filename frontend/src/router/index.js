@@ -46,6 +46,20 @@ const routes = [
         meta: { title: 'AI Wiki' },
       },
       {
+        path: 'wiki',
+        name: 'Wiki',
+        component: () => import('../views/KnowledgeToolView.vue'),
+        props: { tool: 'wiki' },
+        meta: { title: 'AI Wiki' },
+      },
+      {
+        path: 'retrieval-test',
+        name: 'RetrievalTest',
+        component: () => import('../views/KnowledgeToolView.vue'),
+        props: { tool: 'retrieval' },
+        meta: { title: '检索测试' },
+      },
+      {
         path: 'public-knowledge',
         name: 'PublicKnowledge',
         component: () => import('../views/PublicKnowledgeView.vue'),

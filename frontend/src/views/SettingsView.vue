@@ -1,48 +1,57 @@
-﻿<template>
+<template>
   <div class="settings-page">
-    <!-- 标题由顶栏承载；开关旁不再放状态 tag：开关本身就是状态，且 warning 黄色属于语义色挪用（uiup 组 17/19） -->
-    <p class="group-title">文档入库</p>
-    <section class="settings-card">
-      <div class="setting-item">
-        <div class="setting-main">
-          <div class="setting-title-row">
-            <span class="setting-title">知识库上传文档时默认入库</span>
+    <header class="settings-head">
+      <h2 class="head-title">系统偏好设置</h2>
+    </header>
+
+    <!-- 设置组：文档入库 -->
+    <section class="settings-group">
+      <h3 class="group-title">文档与向量检索配置</h3>
+      <div class="settings-card">
+        <div class="setting-item">
+          <div class="setting-main">
+            <span class="setting-title">知识库上传文档时默认自动向量化入库</span>
+            <p class="setting-desc">开启后，上传 TXT、PDF、Markdown 等文档将自动提交切片并建立向量索引，以便即时参与 RAG 对话问答。</p>
           </div>
-        </div>
-        <div class="setting-control">
-          <el-switch
-            v-model="defaultVectorize"
-            :active-value="1"
-            :inactive-value="0"
-            :loading="saving"
-            inline-prompt
-            active-text="开"
-            inactive-text="关"
-            @change="handleChange"
-          />
+          <div class="setting-control">
+            <el-switch
+              v-model="defaultVectorize"
+              aria-label="上传文档时默认入库"
+              :active-value="1"
+              :inactive-value="0"
+              :loading="saving"
+              inline-prompt
+              active-text="开启"
+              inactive-text="关闭"
+              @change="handleChange"
+            />
+          </div>
         </div>
       </div>
     </section>
 
-    <p class="group-title">对话来源展示</p>
-    <section class="settings-card">
-      <div class="setting-item">
-        <div class="setting-main">
-          <div class="setting-title-row">
-            <span class="setting-title">参考文献默认折叠</span>
+    <!-- 设置组：智能对话界面呈现 -->
+    <section class="settings-group">
+      <h3 class="group-title">智能对话呈现偏好</h3>
+      <div class="settings-card">
+        <div class="setting-item">
+          <div class="setting-main">
+            <span class="setting-title">参考文献与知识溯源默认收起折叠</span>
+            <p class="setting-desc">开启后，AI 助手在每次回答末尾附带的文档溯源卡片将默认处于折叠状态，保持对话流清爽，点击可随时展开。</p>
           </div>
-        </div>
-        <div class="setting-control">
-          <el-switch
-            v-model="collapseRefs"
-            :active-value="1"
-            :inactive-value="0"
-            :loading="saving"
-            inline-prompt
-            active-text="开"
-            inactive-text="关"
-            @change="handleCollapseChange"
-          />
+          <div class="setting-control">
+            <el-switch
+              v-model="collapseRefs"
+              aria-label="默认折叠回答的引用"
+              :active-value="1"
+              :inactive-value="0"
+              :loading="saving"
+              inline-prompt
+              active-text="折叠"
+              inactive-text="展开"
+              @change="handleCollapseChange"
+            />
+          </div>
         </div>
       </div>
     </section>
@@ -97,38 +106,55 @@ const handleCollapseChange = async (val) => {
 .settings-page {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  max-width: 960px;
+  gap: clamp(14px, 1.8vw, 24px);
+  width: 100%;
 }
 
-/* 组 19：组标题 + 组间留白（10px 页内间距 + 标题自带下距）大于组内留白 */
-.group-title {
-  font-size: var(--text-muted);
-  font-weight: 600;
-  color: var(--t3);
-  letter-spacing: 0.03em;
-  margin: 10px 2px 0;
-}
-
-.settings-card {
+.settings-head {
   display: flex;
   flex-direction: column;
 }
 
-.setting-item {
+.head-title {
+  margin: 0;
+  font-size: var(--text-heading);
+  font-weight: 700;
+  color: var(--t1);
+}
+
+.settings-group {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding: 20px 24px;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.group-title {
+  margin: 0;
+  font-size: var(--text-body);
+  font-weight: 700;
+  color: var(--brand);
+  letter-spacing: 0.02em;
+}
+
+.settings-card {
   background: var(--card);
+  border: 1px solid var(--line);
   border-radius: var(--r1);
   box-shadow: var(--shadow-card);
-  transition: box-shadow 0.2s ease-out;
+  overflow: hidden;
+}
+
+.setting-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: clamp(16px, 1.8vw, 22px);
+  transition: background 0.15s ease;
 }
 
 .setting-item:hover {
-  box-shadow: var(--shadow-card-hover);
+  background: var(--bg);
 }
 
 .setting-main {
@@ -136,20 +162,20 @@ const handleCollapseChange = async (val) => {
   min-width: 0;
 }
 
-.setting-title-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 .setting-title {
-  font-size: var(--text-heading);
+  font-size: var(--text-body);
   font-weight: 600;
   color: var(--t1);
 }
 
+.setting-desc {
+  margin: 6px 0 0;
+  font-size: var(--text-body);
+  color: var(--t3);
+  line-height: 1.5;
+}
+
 .setting-control {
-  padding-top: 2px;
   flex-shrink: 0;
 }
 </style>
