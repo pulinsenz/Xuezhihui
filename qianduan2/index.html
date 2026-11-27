@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>界面索引 · 学智汇</title>
+  <link rel="icon" href="./assets/logo.png" type="image/png">
+  <link rel="stylesheet" href="./assets/interface.css">
+  <style>
+    .page-index { width: min(100% - 32px, 900px); margin-inline: auto; padding-block: 48px; }
+    .page-index header { display: flex; gap: 16px; align-items: center; margin-bottom: 24px; }
+    .page-index img { width: 48px; height: 48px; border-radius: var(--r2); }
+    .page-index h1 { font-size: var(--text-title); }
+    .page-index p { margin-top: 4px; color: var(--t3); font-size: var(--text-body); }
+    .page-index section + section { margin-top: 24px; }
+    .page-index h2 { margin-bottom: 12px; font-size: var(--text-heading); }
+    .page-index ul { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); gap: 12px; list-style: none; }
+    .page-index a { display: flex; min-height: 48px; align-items: center; padding: 8px 16px; background: var(--card); border-radius: var(--r3); box-shadow: var(--shadow-card); font-size: var(--text-body); }
+    .page-index a:hover { background: var(--tint); color: var(--brand-hover); }
+    .page-index a:active { color: var(--brand-pressed); }
+  </style>
+</head>
+<body>
+  <main class="page-index">
+    <header>
+      <img src="./assets/logo.png" alt="">
+      <div><h1>学智汇界面索引</h1><p>选择页面离线查看。页面中的账号、文档和对话均为示例数据。</p></div>
+    </header>
+    <section>
+      <h2>用户界面</h2>
+      <ul>
+        <li><a href="./login.html">登录</a></li>
+        <li><a href="./register.html">注册</a></li>
+        <li><a href="./dashboard.html">仪表盘</a></li>
+        <li><a href="./chat.html">AI 对话</a></li>
+        <li><a href="./chat-session.html">AI 对话 · 历史会话</a></li>
+        <li><a href="./knowledge.html">我的知识库</a></li>
+        <li><a href="./knowledge-detail.html">知识库详情</a></li>
+        <li><a href="./wiki.html">AI Wiki</a></li>
+        <li><a href="./public-knowledge.html">公开知识库</a></li>
+        <li><a href="./public-knowledge-detail.html">公开知识库详情</a></li>
+        <li><a href="./messages.html">消息通知</a></li>
+        <li><a href="./profile.html">个人资料</a></li>
+        <li><a href="./settings.html">系统设置</a></li>
+        <li><a href="./404.html">页面不存在</a></li>
+      </ul>
+    </section>
+    <section>
+      <h2>平台管理</h2>
+      <ul>
+        <li><a href="./admin-users.html">用户管理</a></li>
+        <li><a href="./admin-knowledge.html">全局知识库</a></li>
+        <li><a href="./admin-knowledge-detail.html">全局知识库详情</a></li>
+      </ul>
+    </section>
+  </main>
+</body>
+</html>

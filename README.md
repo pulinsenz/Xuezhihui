@@ -28,10 +28,13 @@ Vue3 + SpringBoot + FastAPI/LangGraph 前后端分离架构。LangGraph 状态�
 除问答外，提供完整的知识库管理闭环：
 
 - **我的知识库**：新建 / 编辑 / 删除、封面上传、文档上传与批量向量化入库
+- **检索测试**：从侧边栏选择知识库，或在知识库详情打开检索测试，查看当前问答配置下的前五条切片、来源、关键词与向量排名、重排分和耗时。
 - **公开知识库**：浏览他人分享的知识库，收藏、一键复制为可编辑副本
-- **AI Wiki**：基于知识库文档由 LLM 自动生成结构化 Wiki（大纲规划 → 逐页撰写），页面可浏览/编辑，并回灌向量库提升 RAG 检索质量
+- **AI Wiki**：从侧边栏选择知识库，或从知识库详情进入 Wiki。基于知识库文档自动生成结构化章节，支持浏览和授权编辑，并回灌向量库提升 RAG 检索质量。
 - **历史对话**：会话列表、历史消息持久化到 MySQL（含回答属性、思考过程、参考文献）
-- **管理员后台**：用户禁用 / 恢复 / 角色管理；知识库与文档的彻底删除、恢复、向量删除与重入库（含重复文件哈希封禁）
+- **对话便捷功能**：按标题搜索会话、会话置顶、导出 Markdown / TXT（含参考来源）、对 AI 回答评价并可取消；输入草稿按账号和会话隔离，刷新/切换后恢复，成功发送后清除，失败保留，退出登录清理
+- **知识库常用问题**：作者在知识库详情页维护最多 8 个问题（每个 200 字以内）；对话页选择关联知识库后可一键提问，未配置时展示默认提问
+- **管理员后台**：用户禁用 / 恢复 / 角色管理（仅超级管理员）；知识库与文档的彻底删除、恢复、向量删除与重入库（含重复文件哈希封禁）
 
 ## 技术栈
 
@@ -163,7 +166,7 @@ SSE 流式返回前端
 4. SSE 接收前端，调用 Python SSE 接口，把 token 流式透传给前端；
 5. Feign 调用 Agent 普通接口；长耗时向量化任务写入 Redis List，Python worker 消费，前端轮询任务状态；
 6. **Python Agent 需要业务数据时，通过 `/internal/agent/*` 回调 Java，Java 校验 `AGENT_TOKEN`**；
-7. 管理员能力：用户禁用 / 恢复、角色管理，知识库与文档的彻底删除 / 恢复 / 清向量，重复文件哈希封禁。
+7. 管理员能力：用户禁用 / 恢复、角色管理（仅超级管理员），知识库与文档的彻底删除 / 恢复 / 清向量，重复文件哈希封禁。
 
 ### python-agent 职责
 
@@ -256,6 +259,15 @@ npm run dev
 
 ## 接口文档
 
+新增便捷功能接口（均需登录，沿用现有响应格式）：
+
+- `PUT /api/chat/sessions/{sessionId}/pin`：`{"pinned":true}` 置顶，`false` 取消；仅本人可操作，置顶不改变活跃时间。
+- `PUT /api/chat/sessions/{sessionId}/messages/{messageId}/feedback`：`{"feedback":1}` 有帮助、`-1` 没帮助、`0` 取消；仅本人会话内的 AI 回答可评价。历史接口新增字符串 `id`、整数 `feedback`，会话列表新增布尔 `pinned`。
+- `GET /api/knowledge/{id}/questions`：读取有权查看的知识库常用问题，返回字符串数组。
+- `PUT /api/knowledge/{id}/questions`：作者提交 `{"questions":["如何考核？"]}`，整体保存顺序；空数组清空，空白或重复问题会被拒绝。
+
+搜索与导出由前端完成，不增加模型调用；置顶和评价持久化到 MySQL。Java 启动时 `ChatConvenienceInitializer` 会自动为旧数据库补充 `chat_session.pinned`、`chat_message.feedback` 和 `knowledge_questions` 表；新部署仍使用 `sql/init.sql`。上线需重新构建 Java 和前端服务。
+
 ### Java 对外接口（前端调用，统一前缀 `/api`）
 
 **认证**
@@ -323,12 +335,14 @@ npm run dev
 | PUT | `/api/knowledge/{id}/wiki/{pageId}` | 手动编辑页面（标题/正文，作者/协作者） |
 | DELETE | `/api/knowledge/{id}/wiki` | 删除整个 Wiki（含 Milvus 中 wiki 向量清理） |
 
-**管理员（需管理员角色）**
+**管理后台（管理员和超级管理员）**
+
+只有超级管理员可以将其他用户在普通用户与管理员之间切换，不能通过接口授予超级管理员角色。新版 Java 后端启动时，会将原本为管理员且未删除的内置 `admin` 账号升级为超级管理员，不重置密码。新部署直接创建超级管理员 `admin`。
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
 | GET | `/api/admin/user/list` | 用户列表 |
-| PUT | `/api/admin/user/{id}/role` | 修改用户角色 |
+| PUT | `/api/admin/user/{id}/role` | 修改用户角色（仅超级管理员） |
 | DELETE / PUT | `/api/admin/user/{id}` 、 `/restore` | 禁用 / 恢复用户 |
 | GET | `/api/admin/knowledge/list`、`/api/admin/knowledge/{id}/docs` | 全局知识库 / 文档列表 |
 | DELETE / PUT | `/api/admin/knowledge/{id}` 、 `/restore` | 彻底删除 / 恢复知识库 |

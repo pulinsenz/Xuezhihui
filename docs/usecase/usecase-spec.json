@@ -1,0 +1,53 @@
+{
+  "diagramType": "use_case_diagram",
+  "output": "学智汇系统用例图.vsdx",
+  "page": { "widthIn": 15.5, "heightIn": 10 },
+  "title": "学智汇系统用例图",
+  "systemBoundary": {
+    "x1": 2.3, "y1": 0.4, "x2": 14.0, "y2": 8.8,
+    "label": "学智汇 — Agentic RAG 问答系统"
+  },
+  "actors": [
+    { "id": "user", "name": "普通用户", "x": 1.3, "y": 8.55 },
+    { "id": "admin", "name": "管理员", "x": 14.9, "y": 8.55 }
+  ],
+  "useCases": [
+    { "id": "register_login", "label": "注册与登录", "x": 4.0, "y": 8.0, "w": 1.6, "h": 0.5 },
+    { "id": "profile", "label": "维护个人资料", "x": 4.0, "y": 7.2, "w": 1.7, "h": 0.5 },
+    { "id": "chat", "label": "RAG 智能问答", "x": 4.0, "y": 6.4, "w": 2.0, "h": 0.5 },
+    { "id": "kb_manage", "label": "管理知识库", "x": 4.0, "y": 5.6, "w": 1.6, "h": 0.5 },
+    { "id": "doc_manage", "label": "上传与管理文档", "x": 4.0, "y": 4.8, "w": 1.9, "h": 0.5 },
+    { "id": "collab", "label": "协作共享知识库", "x": 4.0, "y": 4.0, "w": 1.9, "h": 0.5 },
+    { "id": "public_kb", "label": "浏览公开知识库", "x": 4.0, "y": 3.3, "w": 1.9, "h": 0.5 },
+    { "id": "wiki", "label": "生成 AI Wiki", "x": 4.0, "y": 2.5, "w": 2.0, "h": 0.5 },
+    { "id": "wiki_edit", "label": "编辑 Wiki 页面", "x": 4.0, "y": 1.55, "w": 2.1, "h": 0.5 },
+    { "id": "settings", "label": "偏好设置", "x": 4.0, "y": 0.8, "w": 1.4, "h": 0.5 },
+    { "id": "retrieve", "label": "检索知识库", "x": 7.1, "y": 6.4, "w": 1.6, "h": 0.5 },
+    { "id": "vectorize", "label": "文档向量化", "x": 7.1, "y": 4.8, "w": 1.6, "h": 0.5 },
+    { "id": "role_admin", "label": "调整用户角色", "x": 9.8, "y": 7.3, "w": 1.7, "h": 0.5 },
+    { "id": "doc_govern", "label": "文档与向量治理", "x": 9.8, "y": 5.2, "w": 1.9, "h": 0.5 },
+    { "id": "user_admin", "label": "管理用户", "x": 12.9, "y": 7.3, "w": 1.5, "h": 0.5 },
+    { "id": "restore_user", "label": "恢复已删除用户", "x": 12.9, "y": 6.35, "w": 1.9, "h": 0.5 },
+    { "id": "kb_govern", "label": "治理全局知识库", "x": 12.9, "y": 5.2, "w": 1.9, "h": 0.5 }
+  ],
+  "relationships": [
+    { "type": "associate", "actor": "user", "useCase": "register_login" },
+    { "type": "associate", "actor": "user", "useCase": "profile" },
+    { "type": "associate", "actor": "user", "useCase": "chat" },
+    { "type": "associate", "actor": "user", "useCase": "kb_manage" },
+    { "type": "associate", "actor": "user", "useCase": "doc_manage" },
+    { "type": "associate", "actor": "user", "useCase": "collab" },
+    { "type": "associate", "actor": "user", "useCase": "public_kb" },
+    { "type": "associate", "actor": "user", "useCase": "wiki" },
+    { "type": "associate", "actor": "user", "useCase": "settings" },
+    { "type": "associate", "actor": "admin", "useCase": "user_admin" },
+    { "type": "associate", "actor": "admin", "useCase": "kb_govern" },
+    { "type": "include", "from": "chat", "to": "retrieve" },
+    { "type": "include", "from": "doc_manage", "to": "vectorize" },
+    { "type": "include", "from": "user_admin", "to": "role_admin" },
+    { "type": "include", "from": "kb_govern", "to": "doc_govern" },
+    { "type": "extend", "from": "wiki_edit", "to": "wiki" },
+    { "type": "extend", "from": "restore_user", "to": "user_admin" },
+    { "type": "generalization", "from": "admin", "to": "user" }
+  ]
+}
