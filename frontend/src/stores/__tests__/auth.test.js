@@ -29,10 +29,21 @@ describe('auth store', () => {
     expect(store.token).toBe('token-1')
     expect(store.isLogin).toBe(true)
     expect(store.isAdmin).toBe(true)
+    expect(store.isSuperAdmin).toBe(false)
     expect(store.user.userAccount).toBe('admin')
     // localStorage 持久化，刷新后仍登录
     expect(localStorage.getItem('token')).toBe('token-1')
     expect(JSON.parse(localStorage.getItem('user')).userRole).toBe('admin')
+  })
+
+  it('刷新当前用户后使用服务器返回的超级管理员角色', async () => {
+    const store = useAuthStore()
+    store.setSession('token-1', { id: 1, userRole: 'admin' })
+    authApi.getCurrentUser.mockResolvedValue({ id: 1, userRole: 'super_admin' })
+    await store.fetchCurrentUser()
+    expect(store.isAdmin).toBe(true)
+    expect(store.isSuperAdmin).toBe(true)
+    expect(JSON.parse(localStorage.getItem('user')).userRole).toBe('super_admin')
   })
 
   it('login 普通用户 isAdmin 为 false', async () => {

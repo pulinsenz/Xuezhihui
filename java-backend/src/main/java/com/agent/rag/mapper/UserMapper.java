@@ -17,6 +17,14 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface UserMapper extends BaseMapper<User> {
 
+    @Update("UPDATE `user` SET userRole = #{newRole} "
+            + "WHERE userAccount = #{account} AND userRole = #{oldRole} AND isDelete = 0")
+    int upgradeBuiltInAdmin(@Param("account") String account, @Param("oldRole") String oldRole,
+                            @Param("newRole") String newRole);
+
+    @Select("SELECT COUNT(*) FROM `user` WHERE userAccount = #{account}")
+    long countByAccountIncludingDeleted(@Param("account") String account);
+
     /**
      * 分页查询用户，手动控制逻辑删除条件
      * <p>

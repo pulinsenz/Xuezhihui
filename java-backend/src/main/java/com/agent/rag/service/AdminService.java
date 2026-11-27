@@ -22,7 +22,7 @@ public interface AdminService {
     Page<AdminUserVO> listUsers(UserQueryRequest request);
 
     /**
-     * 修改用户角色（校验角色合法、不能操作自己）
+     * 超级管理员调整普通用户与管理员的角色（不能操作自己）
      */
     void updateUserRole(Long userId, UpdateUserRoleRequest request);
 

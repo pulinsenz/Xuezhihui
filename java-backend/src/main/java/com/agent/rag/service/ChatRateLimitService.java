@@ -45,11 +45,11 @@ public class ChatRateLimitService {
      * 消耗一次对话配额
      *
      * @param userId 当前用户 id
-     * @param role   当前用户角色（admin 不限流）
+     * @param role   当前用户角色（管理员与超级管理员不限流）
      * @return true=允许对话；false=本窗口配额已耗尽应拦截。Redis 故障时 fail-open 返回 true
      */
     public boolean consume(Long userId, String role) {
-        if (RoleConstant.ADMIN.equals(role)) {
+        if (RoleConstant.isAdministrator(role)) {
             return true;
         }
         if (userId == null) {

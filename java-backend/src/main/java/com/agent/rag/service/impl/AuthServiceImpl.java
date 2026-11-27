@@ -3,6 +3,7 @@ package com.agent.rag.service.impl;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.digest.BCrypt;
 import com.agent.rag.common.ErrorCode;
+import com.agent.rag.common.RoleConstant;
 import com.agent.rag.config.JwtProperties;
 import com.agent.rag.config.LoginSecurityProperties;
 import com.agent.rag.dto.req.LoginRequest;
@@ -99,6 +100,10 @@ public class AuthServiceImpl implements AuthService {
         if (!captchaService.verify(request.getCaptchaId(), request.getCaptchaAnswer())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "验证码错误或已过期，请刷新后重试");
         }
+        // 内置账号保留给部署者，不能通过公开注册占用。
+        if (RoleConstant.BUILT_IN_ADMIN_ACCOUNT.equalsIgnoreCase(userAccount)) {
+            throw new BusinessException(ErrorCode.ACCOUNT_EXIST);
+        }
         // 账号唯一校验
         Long count = userMapper.selectCount(new LambdaQueryWrapper<User>()
                 .eq(User::getUserAccount, userAccount));
@@ -111,7 +116,7 @@ public class AuthServiceImpl implements AuthService {
         user.setUserPassword(BCrypt.hashpw(userPassword));
         String userName = StrUtil.trim(request.getUserName());
         user.setUserName(StrUtil.isBlank(userName) ? userAccount : userName);
-        user.setUserRole("user");
+        user.setUserRole(RoleConstant.USER);
         user.setEditTime(LocalDateTime.now());
         userMapper.insert(user);
         log.info("注册成功: userId={}, userAccount={}", user.getId(), userAccount);

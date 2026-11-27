@@ -26,7 +26,7 @@ class ChatRequest(BaseModel):
     query: str
     knowledge_id: Optional[str] = None
     user_id: Optional[str] = None  # 受信身份：Java 从 JWT 解析后注入，前端/外部不可伪造
-    user_role: Optional[str] = None  # 受信角色：user/admin，Java 从 JWT 解析后注入，决定用哪个 LLM
+    user_role: Optional[str] = None  # 受信角色：user/admin/super_admin，Java 从当前登录用户注入，决定用哪个 LLM
 
 
 class ChatResponse(BaseModel):
@@ -39,7 +39,7 @@ class ChatResponse(BaseModel):
 def _pick_llm(user_role: str = None):
     """按角色选 LLM：管理员走 DeepSeek，普通用户走 USER_API_KEY 的独立 LLM。
     user_llm 未配置（无 USER_API_KEY）时回退 DeepSeek。"""
-    if user_role == "admin":
+    if user_role in ("admin", "super_admin"):
         return runtime.llm
     if runtime.user_llm is not None:
         return runtime.user_llm
@@ -158,7 +158,7 @@ class StreamRequest(BaseModel):
     query: str
     knowledge_id: Optional[str] = None
     user_id: Optional[str] = None  # 受信身份：Java 从 JWT 解析后注入
-    user_role: Optional[str] = None  # 受信角色：user/admin，Java 从 JWT 解析后注入，决定用哪个 LLM
+    user_role: Optional[str] = None  # 受信角色：user/admin/super_admin，Java 从当前登录用户注入，决定用哪个 LLM
 
 
 @router.post("/stream")

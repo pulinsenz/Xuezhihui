@@ -108,6 +108,10 @@ public class AdminServiceImpl implements AdminService {
 
     @Override
     public void updateUserRole(Long userId, UpdateUserRoleRequest request) {
+        User operator = UserContext.getUser();
+        if (operator == null || !RoleConstant.SUPER_ADMIN.equals(operator.getUserRole())) {
+            throw new BusinessException(ErrorCode.NO_AUTH, "仅超级管理员可以修改用户角色");
+        }
         if (userId == null || request == null || StrUtil.isBlank(request.getUserRole())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数错误");
         }
@@ -116,12 +120,15 @@ public class AdminServiceImpl implements AdminService {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "角色只能是 user 或 admin");
         }
         // 不能操作自己，防止误降级管理员
-        if (userId.equals(UserContext.getUser().getId())) {
+        if (userId.equals(operator.getId())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "不能修改自己的角色");
         }
         User target = userMapper.selectById(userId);
         if (target == null) {
             throw new BusinessException(ErrorCode.USER_NOT_EXIST);
+        }
+        if (RoleConstant.SUPER_ADMIN.equals(target.getUserRole())) {
+            throw new BusinessException(ErrorCode.NO_AUTH, "不能修改超级管理员的角色");
         }
         User update = new User();
         update.setId(userId);
@@ -141,6 +148,9 @@ public class AdminServiceImpl implements AdminService {
         User target = userMapper.selectById(userId);
         if (target == null) {
             throw new BusinessException(ErrorCode.USER_NOT_EXIST);
+        }
+        if (RoleConstant.SUPER_ADMIN.equals(target.getUserRole())) {
+            throw new BusinessException(ErrorCode.NO_AUTH, "不能删除超级管理员");
         }
         userMapper.deleteById(userId);
         // 清理该用户全部登录 token，强制下线

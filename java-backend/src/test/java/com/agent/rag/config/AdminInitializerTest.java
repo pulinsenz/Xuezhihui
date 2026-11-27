@@ -14,11 +14,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * AdminInitializer 单测：admin 已存在不重置；不存在时用 ADMIN_PASSWORD 创建；
+ * AdminInitializer 单测：现有管理员仅升级角色；不存在时用 ADMIN_PASSWORD 创建；
  * 未配置则生成强随机密码。仓库内不再出现管理员凭据。
  *
  * @author pulinsenz
@@ -37,30 +38,36 @@ class AdminInitializerTest {
     }
 
     @Test
-    void adminExists_doesNothing() {
-        when(userMapper.selectCount(any())).thenReturn(1L);
+    void legacyAdmin_upgradesOnlyRole() {
+        when(userMapper.upgradeBuiltInAdmin("admin", "admin", "super_admin")).thenReturn(1);
+        initializer("whatever").run(null);
+        verify(userMapper).upgradeBuiltInAdmin("admin", "admin", "super_admin");
+        verifyNoMoreInteractions(userMapper);
+    }
+
+    @Test
+    void nonUpgradeableAccount_isNotRecreated() {
+        when(userMapper.countByAccountIncludingDeleted("admin")).thenReturn(1L);
         initializer("whatever").run(null);
         verify(userMapper, never()).insert(any(User.class));
     }
 
     @Test
     void adminMissing_createsWithConfiguredPassword() {
-        when(userMapper.selectCount(any())).thenReturn(0L);
         initializer("S3cureAdminPass!").run(null);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userMapper).insert(captor.capture());
         User admin = captor.getValue();
         assertEquals("admin", admin.getUserAccount());
-        assertEquals("管理员", admin.getUserName());
-        assertEquals("admin", admin.getUserRole());
+        assertEquals("超级管理员", admin.getUserName());
+        assertEquals("super_admin", admin.getUserRole());
         assertTrue(BCrypt.checkpw("S3cureAdminPass!", admin.getUserPassword()),
                 "密码应以 BCrypt 落库且与 ADMIN_PASSWORD 一致");
     }
 
     @Test
     void adminMissing_generatesStrongRandomWhenNoPassword() {
-        when(userMapper.selectCount(any())).thenReturn(0L);
         initializer("").run(null);
 
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);

@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS `user`
     `userName`     varchar(256) DEFAULT NULL COMMENT '用户昵称',
     `userAvatar`   varchar(1024) DEFAULT NULL COMMENT '用户头像',
     `userProfile`  varchar(512)  DEFAULT NULL COMMENT '用户简介',
-    `userRole`     varchar(256) NOT NULL DEFAULT 'user' COMMENT '用户角色：user/admin',
+    `userRole`     varchar(256) NOT NULL DEFAULT 'user' COMMENT '用户角色：user/admin/super_admin',
     `defaultVectorize` tinyint NOT NULL DEFAULT 1 COMMENT '上传文档是否默认入库: 1=是 0=否',
     `collapseRefs` tinyint NOT NULL DEFAULT 1 COMMENT '参考文献默认折叠: 1=折叠 0=展开',
     `editTime`     datetime     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '编辑时间',

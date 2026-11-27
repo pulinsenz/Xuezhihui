@@ -1,5 +1,7 @@
 package com.agent.rag.common.annotation;
 
+import com.agent.rag.common.RoleConstant;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -21,5 +23,5 @@ public @interface RequireRole {
     /**
      * 要求的角色，默认管理员
      */
-    String value() default "admin";
+    String value() default RoleConstant.ADMIN;
 }

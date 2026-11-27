@@ -73,6 +73,7 @@ class ChatRateLimitServiceTest {
         // admin 不限流：消耗远超阈值仍放行
         for (int i = 0; i < 10; i++) {
             assertTrue(chatRateLimitService.consume(userId, RoleConstant.ADMIN), "admin 第 " + (i + 1) + " 次应放行");
+            assertTrue(chatRateLimitService.consume(userId, RoleConstant.SUPER_ADMIN), "超级管理员也不限流");
         }
     }
 

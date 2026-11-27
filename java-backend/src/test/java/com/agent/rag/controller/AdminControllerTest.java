@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * 管理员接口集成测试（MockMvc + 真实 MySQL/Redis）
  * <p>
- * 覆盖：admin 用户管理全链路（列表/改角色/删除+强制下线）；
+ * 覆盖：超级管理员用户管理全链路（列表/改角色/删除+强制下线）；
  * 普通 user 访问管理接口被拒；未登录被拦截。测试自清理。
  *
  * @author pulinsenz
@@ -122,10 +122,14 @@ class AdminControllerTest {
 
     /** 注册一个普通用户并提权为 admin，返回登录 token */
     private String createAdminAndLogin() throws Exception {
+        return createAdminAndLogin("admin");
+    }
+
+    private String createAdminAndLogin(String role) throws Exception {
         String account = "admin_" + System.currentTimeMillis();
         String pass = "pass12345";
         long uid = registerUser(account, pass);
-        jdbcTemplate.update("UPDATE user SET userRole='admin' WHERE id=?", uid);
+        jdbcTemplate.update("UPDATE user SET userRole=? WHERE id=?", role, uid);
         return login(account, pass);
     }
 
@@ -174,8 +178,8 @@ class AdminControllerTest {
     }
 
     @Test
-    void admin_canManageUsers() throws Exception {
-        String adminToken = createAdminAndLogin();
+    void superAdmin_canManageUsers() throws Exception {
+        String adminToken = createAdminAndLogin("super_admin");
 
         // 用户列表（至少含自己）
         String list = mockMvc.perform(get("/admin/user/list").header("Authorization", "Bearer " + adminToken))

@@ -2,6 +2,7 @@ package com.agent.rag.interceptor;
 
 import cn.hutool.core.util.StrUtil;
 import com.agent.rag.common.ErrorCode;
+import com.agent.rag.common.RoleConstant;
 import com.agent.rag.common.annotation.RequireRole;
 import com.agent.rag.config.JwtProperties;
 import com.agent.rag.entity.User;
@@ -71,17 +72,17 @@ public class LoginInterceptor implements HandlerInterceptor {
         if (user == null) {
             throw new BusinessException(ErrorCode.NOT_LOGIN, "用户不存在");
         }
-        UserContext.setUser(user);
         // 4. 角色权限校验：方法/类上的 @RequireRole 注解
         if (handler instanceof HandlerMethod handlerMethod) {
             RequireRole requireRole = handlerMethod.getMethodAnnotation(RequireRole.class);
             if (requireRole == null) {
                 requireRole = handlerMethod.getBeanType().getAnnotation(RequireRole.class);
             }
-            if (requireRole != null && !requireRole.value().equals(user.getUserRole())) {
+            if (requireRole != null && !RoleConstant.satisfies(user.getUserRole(), requireRole.value())) {
                 throw new BusinessException(ErrorCode.NO_AUTH, "无权限，需要角色: " + requireRole.value());
             }
         }
+        UserContext.setUser(user);
         return true;
     }
 

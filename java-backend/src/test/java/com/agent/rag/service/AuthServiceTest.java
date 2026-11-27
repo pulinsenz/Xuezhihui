@@ -161,6 +161,16 @@ class AuthServiceTest {
     }
 
     @Test
+    void register_cannotClaimBuiltInAdmin() {
+        RegisterRequest req = validRegister();
+        req.setUserAccount(" ADMIN ");
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> authService.register(req, "127.0.0.1"));
+        assertEquals(ErrorCode.ACCOUNT_EXIST.getCode(), e.getCode());
+        verify(userMapper, never()).insert(any(User.class));
+    }
+
+    @Test
     void register_passwordTooShort_throwsParamsError() {
         RegisterRequest req = validRegister();
         req.setUserPassword("123");

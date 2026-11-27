@@ -50,6 +50,7 @@ def test_pick_llm_admin_uses_deepseek(monkeypatch):
     monkeypatch.setattr(chat_api.runtime, "llm", deepseek)
     monkeypatch.setattr(chat_api.runtime, "user_llm", _FakeLLM("user"))
     assert chat_api._pick_llm("admin").name == "deepseek"
+    assert chat_api._pick_llm("super_admin").name == "deepseek"
 
 
 def test_pick_llm_user_uses_user_llm(monkeypatch):

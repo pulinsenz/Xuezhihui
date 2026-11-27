@@ -1,4 +1,5 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
+import { ROLE } from '../utils/roles'
 import { resetAuthExpiredNotice } from '../api/request'
 import {
   login as apiLogin,
@@ -18,7 +19,10 @@ export const useAuthStore = defineStore('auth', {
   }),
   getters: {
     isLogin: (state) => !!state.token,
-    isAdmin: (state) => state.user?.userRole === 'admin',
+    isSuperAdmin: (state) => state.user?.userRole === ROLE.SUPER_ADMIN,
+    isAdmin() {
+      return this.isSuperAdmin || this.user?.userRole === ROLE.ADMIN
+    },
   },
   actions: {
     setSession(token, user) {

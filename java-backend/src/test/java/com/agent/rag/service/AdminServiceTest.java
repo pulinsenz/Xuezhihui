@@ -104,7 +104,7 @@ class AdminServiceTest {
 
         User admin = new User();
         admin.setId(1L);
-        admin.setUserRole(RoleConstant.ADMIN);
+        admin.setUserRole(RoleConstant.SUPER_ADMIN);
         UserContext.setUser(admin);
     }
 
@@ -147,7 +147,7 @@ class AdminServiceTest {
     @Test
     void updateUserRole_invalidRole_throws() {
         UpdateUserRoleRequest req = new UpdateUserRoleRequest();
-        req.setUserRole("superadmin");
+        req.setUserRole(RoleConstant.SUPER_ADMIN);
         BusinessException e = assertThrows(BusinessException.class,
                 () -> adminService.updateUserRole(2L, req));
         assertEquals(ErrorCode.PARAMS_ERROR.getCode(), e.getCode());
@@ -188,6 +188,30 @@ class AdminServiceTest {
         assertEquals(RoleConstant.ADMIN, captor.getValue().getUserRole());
     }
 
+    @Test
+    void updateUserRole_adminCannotChangeRole() {
+        UserContext.getUser().setUserRole(RoleConstant.ADMIN);
+        UpdateUserRoleRequest req = new UpdateUserRoleRequest();
+        req.setUserRole(RoleConstant.ADMIN);
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> adminService.updateUserRole(2L, req));
+        assertEquals(ErrorCode.NO_AUTH.getCode(), e.getCode());
+        verify(userMapper, never()).updateById(any(User.class));
+    }
+
+    @Test
+    void updateUserRole_cannotDemoteAnotherSuperAdmin() {
+        User target = new User();
+        target.setUserRole(RoleConstant.SUPER_ADMIN);
+        when(userMapper.selectById(2L)).thenReturn(target);
+        UpdateUserRoleRequest req = new UpdateUserRoleRequest();
+        req.setUserRole(RoleConstant.USER);
+        BusinessException e = assertThrows(BusinessException.class,
+                () -> adminService.updateUserRole(2L, req));
+        assertEquals(ErrorCode.NO_AUTH.getCode(), e.getCode());
+        verify(userMapper, never()).updateById(any(User.class));
+    }
+
     // ---------- 删除用户 ----------
 
     @Test
@@ -201,6 +225,17 @@ class AdminServiceTest {
         when(userMapper.selectById(99L)).thenReturn(null);
         BusinessException e = assertThrows(BusinessException.class, () -> adminService.deleteUser(99L));
         assertEquals(ErrorCode.USER_NOT_EXIST.getCode(), e.getCode());
+    }
+
+    @Test
+    void deleteUser_adminCannotDeleteSuperAdmin() {
+        UserContext.getUser().setUserRole(RoleConstant.ADMIN);
+        User target = new User();
+        target.setUserRole(RoleConstant.SUPER_ADMIN);
+        when(userMapper.selectById(7L)).thenReturn(target);
+        BusinessException e = assertThrows(BusinessException.class, () -> adminService.deleteUser(7L));
+        assertEquals(ErrorCode.NO_AUTH.getCode(), e.getCode());
+        verify(userMapper, never()).deleteById(7L);
     }
 
     @Test

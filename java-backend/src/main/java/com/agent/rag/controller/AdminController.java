@@ -1,6 +1,7 @@
 package com.agent.rag.controller;
 
 import com.agent.rag.common.Result;
+import com.agent.rag.common.RoleConstant;
 import com.agent.rag.common.annotation.RequireRole;
 import com.agent.rag.dto.req.BatchDocRequest;
 import com.agent.rag.dto.req.UpdateUserRoleRequest;
@@ -23,13 +24,13 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 /**
- * 管理员接口（全部需要 admin 角色，由 @RequireRole 注解在拦截器校验）
+ * 管理员接口；修改用户角色仅限超级管理员。
  *
  * @author pulinsenz
  */
 @RestController
 @RequestMapping("/admin")
-@RequireRole("admin")
+@RequireRole(RoleConstant.ADMIN)
 public class AdminController {
 
     @Resource
@@ -46,6 +47,7 @@ public class AdminController {
     /**
      * 修改用户角色
      */
+    @RequireRole(RoleConstant.SUPER_ADMIN)
     @PutMapping("/user/{id}/role")
     public Result<Boolean> updateRole(@PathVariable Long id, @RequestBody UpdateUserRoleRequest request) {
         adminService.updateUserRole(id, request);
