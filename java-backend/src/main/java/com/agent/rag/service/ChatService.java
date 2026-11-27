@@ -44,5 +44,9 @@ public interface ChatService {
      * 重命名会话（仅本人）
      */
     void renameSession(String sessionId, String title);
+
+    void pinSession(String sessionId, Boolean pinned);
+
+    void rateMessage(String sessionId, Long messageId, Integer feedback);
 }
 

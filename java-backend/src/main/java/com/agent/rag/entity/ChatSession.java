@@ -33,6 +33,8 @@ public class ChatSession implements Serializable {
      */
     private String title;
 
+    private Boolean pinned;
+
     /**
      * 创建时间
      */

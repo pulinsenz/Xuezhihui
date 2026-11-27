@@ -15,6 +15,10 @@ import java.util.Map;
 @Data
 public class HistoryMessageVO implements Serializable {
 
+    private String id;
+
+    private Integer feedback;
+
     private String role;
 
     private String content;

@@ -1,5 +1,8 @@
 import request from './request'
 
+export const listKnowledgeQuestions = (id) => request.get(`/knowledge/${id}/questions`)
+export const saveKnowledgeQuestions = (id, questions) => request.put(`/knowledge/${id}/questions`, { questions })
+
 /** 创建知识库 */
 export const createKnowledge = (data) => request.post('/knowledge/create', data)
 

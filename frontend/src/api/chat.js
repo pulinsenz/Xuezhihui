@@ -1,5 +1,9 @@
 import request from './request'
 
+export const pinSession = (sessionId, pinned) => request.put(`/chat/sessions/${sessionId}/pin`, { pinned })
+export const rateMessage = (sessionId, messageId, feedback) =>
+  request.put(`/chat/sessions/${sessionId}/messages/${messageId}/feedback`, { feedback })
+
 /** 当前用户的会话列表（对话历史侧栏） */
 export const listSessions = () => request.get('/chat/sessions')
 

@@ -1,5 +1,6 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
 import { ROLE } from '../utils/roles'
+import { clearInputDrafts } from '../utils/chatConvenience'
 import { resetAuthExpiredNotice } from '../api/request'
 import {
   login as apiLogin,
@@ -41,7 +42,9 @@ export const useAuthStore = defineStore('auth', {
       await apiRegister({ userAccount: account, userPassword: password, checkPassword, userName, captchaId, captchaAnswer })
     },
     async fetchCurrentUser() {
+      const token = this.token
       const user = await getCurrentUser()
+      if (this.token !== token) return
       this.user = user
       localStorage.setItem('user', JSON.stringify(user))
     },
@@ -59,6 +62,7 @@ export const useAuthStore = defineStore('auth', {
       this.clear()
     },
     clear() {
+      clearInputDrafts(this.user?.id)
       this.token = ''
       this.user = null
       localStorage.removeItem('token')

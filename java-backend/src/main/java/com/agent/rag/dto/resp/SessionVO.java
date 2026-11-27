@@ -18,6 +18,8 @@ public class SessionVO implements Serializable {
 
     private String title;
 
+    private Boolean pinned;
+
     @JsonProperty("update_time")
     private Long updateTime;
 

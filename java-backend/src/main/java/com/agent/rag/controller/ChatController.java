@@ -3,6 +3,8 @@ package com.agent.rag.controller;
 import com.agent.rag.common.Result;
 import com.agent.rag.dto.req.ChatRequest;
 import com.agent.rag.dto.req.RenameSessionRequest;
+import com.agent.rag.dto.req.PinSessionRequest;
+import com.agent.rag.dto.req.MessageFeedbackRequest;
 import com.agent.rag.dto.resp.ChatResponse;
 import com.agent.rag.dto.resp.HistoryMessageVO;
 import com.agent.rag.dto.resp.SessionVO;
@@ -34,6 +36,19 @@ public class ChatController {
 
     @Resource
     private ChatService chatService;
+
+    @PutMapping("/sessions/{sessionId}/pin")
+    public Result<Boolean> pin(@PathVariable String sessionId, @RequestBody PinSessionRequest request) {
+        chatService.pinSession(sessionId, request.getPinned());
+        return Result.success(true);
+    }
+
+    @PutMapping("/sessions/{sessionId}/messages/{messageId}/feedback")
+    public Result<Boolean> feedback(@PathVariable String sessionId, @PathVariable Long messageId,
+                                    @RequestBody MessageFeedbackRequest request) {
+        chatService.rateMessage(sessionId, messageId, request.getFeedback());
+        return Result.success(true);
+    }
 
     /**
      * 普通对话（非流式）

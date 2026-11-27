@@ -173,6 +173,16 @@ public class ChatServiceImpl implements ChatService {
         chatHistoryService.renameSession(sessionId, requireUserId(), title);
     }
 
+    @Override
+    public void pinSession(String sessionId, Boolean pinned) {
+        chatHistoryService.pinSession(sessionId, requireUserId(), pinned);
+    }
+
+    @Override
+    public void rateMessage(String sessionId, Long messageId, Integer feedback) {
+        chatHistoryService.rateMessage(sessionId, messageId, requireUserId(), feedback);
+    }
+
     private void validate(ChatRequest request) {
         if (request == null || StrUtil.isBlank(request.getQuery())) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "问题内容不能为空");
@@ -192,7 +202,7 @@ public class ChatServiceImpl implements ChatService {
     }
 
     /**
-     * 注入受信用户身份与角色：userId / userRole 只能来自登录态（JWT → ThreadLocal），
+     * 注入受信用户身份与角色：userId / userRole 只能来自登录态（数据库用户 → ThreadLocal），
      * 前端传的 user_id / user_role 一律以当前登录用户为准，杜绝身份伪造（Python 侧据此选 LLM）
      */
     private void fillUserId(ChatRequest request) {

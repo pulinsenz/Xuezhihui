@@ -1,5 +1,5 @@
 import { defineStore, acceptHMRUpdate } from 'pinia'
-import { listSessions, getSessionHistory, deleteSession, renameSession as renameSessionApi } from '../api/chat'
+import { listSessions, getSessionHistory, deleteSession, renameSession as renameSessionApi, pinSession as pinSessionApi, rateMessage as rateMessageApi } from '../api/chat'
 
 /**
  * 生成会话 ID（UUID v4）。
@@ -36,6 +36,61 @@ export const useChatStore = defineStore('chat', {
     sending: false, // 流式回复中，禁用切换/新建/删除
   }),
   actions: {
+    async pinSession(id, pinned) {
+      await pinSessionApi(id, pinned)
+      const session = this.sessions.find((s) => s.session_id === id)
+      if (session) session.pinned = pinned
+    },
+
+    async syncMessageIds() {
+      const sessionId = this.activeSessionId
+      const history = await getSessionHistory(sessionId)
+      if (this.activeSessionId !== sessionId) return
+      // 中断轮次可能没落库，也可能保存了部分回答；先完整核对再赋 ID，不能仅凭数组位置评价。
+      const local = this.messages
+      const isTurn = (list, i) => list[i]?.role === 'user' && list[i + 1]?.role === 'assistant'
+      if (local.length % 2 || history.length % 2) return
+      let successful = 0
+      for (let i = 0; i < local.length; i += 2) {
+        if (!isTurn(local, i)) return
+        if (!local[i + 1].failed && !local[i + 1].stopped) successful++
+      }
+      let interrupted = history.length / 2 - successful
+      if (interrupted < 0) return
+      const matched = []
+      let cursor = 0
+      for (let i = 0; i < local.length; i += 2) {
+        const answer = local[i + 1]
+        const sameQuestion = isTurn(history, cursor) && local[i].content === history[cursor].content
+        if (answer.failed || answer.stopped) {
+          if (interrupted > 0 && sameQuestion && history[cursor + 1].content.startsWith(answer.content || '')) {
+            interrupted--
+            cursor += 2
+          }
+          continue
+        }
+        if (!sameQuestion || answer.content !== history[cursor + 1].content) return
+        for (let offset = 0; offset < 2; offset++) {
+          if (local[i + offset].id && local[i + offset].id !== history[cursor + offset].id) return
+          matched.push([local[i + offset], history[cursor + offset]])
+        }
+        cursor += 2
+      }
+      if (cursor !== history.length || interrupted) return
+      matched.forEach(([message, saved]) => {
+        message.id = saved.id
+        message.feedback = saved.feedback ?? 0
+      })
+    },
+
+    async rateMessage(message, feedback) {
+      const sessionId = this.activeSessionId
+      if (!message.id) await this.syncMessageIds()
+      if (!message.id || this.activeSessionId !== sessionId) throw new Error('回答尚未保存，请稍后重试')
+      await rateMessageApi(sessionId, message.id, feedback)
+      message.feedback = feedback
+    },
+
     async loadSessions() {
       this.sessions = await listSessions()
     },
@@ -52,8 +107,7 @@ export const useChatStore = defineStore('chat', {
       }
     },
 
-    newSession() {
-      const id = generateSessionId()
+    newSession(id = generateSessionId()) {
       this.activeSessionId = id
       this.messages = []
       localStorage.setItem('chat_session_id', id)
@@ -101,7 +155,7 @@ export const useChatStore = defineStore('chat', {
       const cur = this.messages[this.messages.length - 1]
       if (cur && cur.thinking) cur.thinking.push(text)
     },
-    async finishStream({ answer = '', route = '', sources = [], knowledge_id = '' } = {}) {
+    async finishStream({ answer = '', route = '', sources = [], knowledge_id = '' } = {}, keepSending = false) {
       const cur = this.messages[this.messages.length - 1]
       if (cur) {
         cur.streaming = false
@@ -110,7 +164,7 @@ export const useChatStore = defineStore('chat', {
         cur.sources = sources || []
         cur.knowledge_id = knowledge_id
       }
-      this.sending = false
+      this.sending = keepSending
       // 刷新面板标题/条数/排序
       try {
         await this.loadSessions()

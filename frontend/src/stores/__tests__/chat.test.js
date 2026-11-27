@@ -8,6 +8,8 @@ vi.mock('../../api/chat', () => ({
   getSessionHistory: vi.fn(),
   deleteSession: vi.fn(),
   renameSession: vi.fn(),
+  pinSession: vi.fn(),
+  rateMessage: vi.fn(),
 }))
 
 describe('chat store', () => {
@@ -25,6 +27,66 @@ describe('chat store', () => {
     await store.loadSessions()
     expect(store.sessions).toHaveLength(1)
     expect(store.sessions[0].session_id).toBe('s1')
+  })
+
+  it('置顶成功后更新状态，失败保持原值', async () => {
+    const store = useChatStore()
+    store.sessions = [{ session_id: 's1', pinned: false }]
+    await store.pinSession('s1', true)
+    expect(chatApi.pinSession).toHaveBeenCalledWith('s1', true)
+    expect(store.sessions[0].pinned).toBe(true)
+    chatApi.pinSession.mockRejectedValueOnce(new Error('offline'))
+    await expect(store.pinSession('s1', false)).rejects.toThrow('offline')
+    expect(store.sessions[0].pinned).toBe(true)
+  })
+
+  it('评价即时回答前核对已保存消息 ID，可取消评价', async () => {
+    const store = useChatStore()
+    store.activeSessionId = 's1'
+    store.messages = [{ role: 'user', content: '问题' }, { role: 'assistant', content: '回答' }]
+    chatApi.getSessionHistory.mockResolvedValue([{ role: 'user', content: '问题', id: '9001' }, { role: 'assistant', content: '回答', id: '9002' }])
+    await store.rateMessage(store.messages[1], 1)
+    expect(chatApi.rateMessage).toHaveBeenCalledWith('s1', '9002', 1)
+    expect(store.messages[1].feedback).toBe(1)
+    await store.rateMessage(store.messages[1], 0)
+    expect(store.messages[1].feedback).toBe(0)
+  })
+
+  it('内容不一致时拒绝把评价写到其他消息', async () => {
+    const store = useChatStore()
+    store.activeSessionId = 's1'
+    store.messages = [{ role: 'assistant', content: '当前回答' }]
+    chatApi.getSessionHistory.mockResolvedValue([{ role: 'assistant', content: '旧回答', id: '1' }])
+    await expect(store.rateMessage(store.messages[0], -1)).rejects.toThrow('尚未保存')
+    expect(chatApi.rateMessage).not.toHaveBeenCalled()
+  })
+
+  it('请求期间切换会话不能给新会话关联旧 ID', async () => {
+    const store = useChatStore()
+    store.activeSessionId = 's1'
+    store.messages = [{ role: 'assistant', content: '回答' }]
+    let resolve
+    chatApi.getSessionHistory.mockImplementationOnce(() => new Promise((done) => { resolve = done }))
+    const pending = store.syncMessageIds()
+    store.activeSessionId = 's2'
+    resolve([{ role: 'assistant', content: '回答', id: '1' }])
+    await pending
+    expect(store.messages[0].id).toBeUndefined()
+  })
+
+  it.each([true, false])('中断轮次保存状态为 %s 时后续回答仍能正确评价', async (savedInterrupted) => {
+    const store = useChatStore()
+    store.activeSessionId = 's1'
+    store.messages = [
+      { role: 'user', content: '先前问题' }, { role: 'assistant', content: '部分', stopped: true },
+      { role: 'user', content: '新问题' }, { role: 'assistant', content: '完整回答' },
+    ]
+    chatApi.getSessionHistory.mockResolvedValue([
+      ...(savedInterrupted ? [{ role: 'user', content: '先前问题', id: '1' }, { role: 'assistant', content: '部分回答', id: '2' }] : []),
+      { role: 'user', content: '新问题', id: '3' }, { role: 'assistant', content: '完整回答', id: '4' },
+    ])
+    await store.rateMessage(store.messages[3], 1)
+    expect(chatApi.rateMessage).toHaveBeenCalledWith('s1', '4', 1)
   })
 
   it('openSession 加载历史并记录当前会话', async () => {

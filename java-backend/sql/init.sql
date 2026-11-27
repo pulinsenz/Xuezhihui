@@ -84,6 +84,7 @@ CREATE TABLE IF NOT EXISTS `chat_session`
     `sessionId`  varchar(64) NOT NULL COMMENT '会话id(UUID)',
     `userId`     bigint      NOT NULL COMMENT '所属用户id',
     `title`      varchar(64) NOT NULL COMMENT '会话标题(首条用户消息截断，Java 写入)',
+    `pinned`     tinyint NOT NULL DEFAULT 0 COMMENT '是否置顶',
     `createTime` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updateTime` datetime    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`sessionId`),
@@ -100,6 +101,7 @@ CREATE TABLE IF NOT EXISTS `chat_message`
     `userId`      bigint      NOT NULL COMMENT '所属用户id',
     `role`        varchar(16) NOT NULL COMMENT '角色: user/assistant',
     `content`     text        NOT NULL COMMENT '消息内容',
+    `feedback`    tinyint NOT NULL DEFAULT 0 COMMENT '评价: -1没帮助/0未评价/1有帮助',
     `route`       varchar(16) DEFAULT NULL COMMENT '回答属性: kb/business/chitchat/other',
     `knowledgeId` varchar(64) DEFAULT NULL COMMENT '使用的知识库id(回答属性为kb时)',
     `thinking`    longtext    DEFAULT NULL COMMENT '思考过程(JSON数组)',
@@ -257,5 +259,11 @@ CREATE TABLE IF NOT EXISTS `wiki_page`
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4
   COLLATE = utf8mb4_unicode_ci COMMENT ='AI Wiki 页面';
+
+-- 知识库常用问题；旧库由 ChatConvenienceInitializer 自动补表和置顶/评价列。
+CREATE TABLE IF NOT EXISTS knowledge_questions (
+    knowledgeId bigint NOT NULL PRIMARY KEY,
+    questions text NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

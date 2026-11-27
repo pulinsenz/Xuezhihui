@@ -46,6 +46,9 @@ public class ChatMessage implements Serializable {
      */
     private String content;
 
+    /** 0=未评价，1=有帮助，-1=没帮助。 */
+    private Integer feedback;
+
     /**
      * 回答属性：kb/business/chitchat/other
      */

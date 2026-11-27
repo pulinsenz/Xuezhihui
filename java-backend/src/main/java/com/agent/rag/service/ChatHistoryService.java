@@ -44,6 +44,10 @@ public interface ChatHistoryService {
      */
     void renameSession(String sessionId, Long userId, String title);
 
+    void pinSession(String sessionId, Long userId, Boolean pinned);
+
+    void rateMessage(String sessionId, Long messageId, Long userId, Integer feedback);
+
     /**
      * 写侧越权防护：会话已存在但属主不是该用户 → 抛 NO_AUTH；会话不存在（新会话）放行
      */

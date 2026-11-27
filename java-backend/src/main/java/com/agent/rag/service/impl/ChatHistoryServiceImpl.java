@@ -12,6 +12,7 @@ import com.agent.rag.mapper.ChatSessionMapper;
 import com.agent.rag.service.ChatHistoryService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.Resource;
@@ -89,6 +90,7 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
         }
         List<ChatSession> sessions = chatSessionMapper.selectList(new LambdaQueryWrapper<ChatSession>()
                 .eq(ChatSession::getUserId, userId)
+                .orderByDesc(ChatSession::getPinned)
                 .orderByDesc(ChatSession::getUpdateTime));
         if (sessions.isEmpty()) {
             return List.of();
@@ -107,6 +109,7 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
             SessionVO vo = new SessionVO();
             vo.setSessionId(session.getSessionId());
             vo.setTitle(session.getTitle());
+            vo.setPinned(Boolean.TRUE.equals(session.getPinned()));
             vo.setUpdateTime(session.getUpdateTime() == null
                     ? null
                     : session.getUpdateTime().atZone(ZoneId.systemDefault()).toEpochSecond());
@@ -123,6 +126,8 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
                 .orderByAsc(ChatMessage::getId));
         return messages.stream().map(m -> {
             HistoryMessageVO vo = HistoryMessageVO.of(m.getRole(), m.getContent());
+            vo.setId(String.valueOf(m.getId()));
+            vo.setFeedback(m.getFeedback() == null ? 0 : m.getFeedback());
             vo.setRoute(m.getRoute());
             vo.setKnowledgeId(m.getKnowledgeId());
             vo.setThinking(parseStringList(m.getThinking()));
@@ -199,6 +204,36 @@ public class ChatHistoryServiceImpl implements ChatHistoryService {
             throw new BusinessException(ErrorCode.NOT_FOUND, "会话不存在");
         }
         return session;
+    }
+
+    @Override
+    public void pinSession(String sessionId, Long userId, Boolean pinned) {
+        if (pinned == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "pinned 必须为 true 或 false");
+        }
+        requireOwned(sessionId, userId);
+        // SQL 自赋值保留最近活跃时间，也避免与保存新消息并发时回写旧时间。
+        chatSessionMapper.update(null, new LambdaUpdateWrapper<ChatSession>()
+                .eq(ChatSession::getSessionId, sessionId).eq(ChatSession::getUserId, userId)
+                .set(ChatSession::getPinned, pinned).setSql("updateTime = updateTime"));
+    }
+
+    @Override
+    public void rateMessage(String sessionId, Long messageId, Long userId, Integer feedback) {
+        if (feedback == null || feedback < -1 || feedback > 1) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "feedback 仅支持 -1、0、1");
+        }
+        requireOwned(sessionId, userId);
+        ChatMessage message = messageId == null ? null : chatMessageMapper.selectById(messageId);
+        if (message == null || !sessionId.equals(message.getSessionId()) || !userId.equals(message.getUserId())) {
+            throw new BusinessException(ErrorCode.NOT_FOUND, "消息不存在");
+        }
+        if (!"assistant".equals(message.getRole())) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "只能评价 AI 回答");
+        }
+        chatMessageMapper.update(null, new LambdaUpdateWrapper<ChatMessage>()
+                .eq(ChatMessage::getId, messageId).eq(ChatMessage::getUserId, userId)
+                .eq(ChatMessage::getSessionId, sessionId).set(ChatMessage::getFeedback, feedback));
     }
 
     private void insertMessage(String sessionId, Long userId, String role, String content, LocalDateTime now,
