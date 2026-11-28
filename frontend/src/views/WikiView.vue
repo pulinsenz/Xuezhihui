@@ -1,71 +1,90 @@
 <template>
-  <div class="wiki-page">
+  <div ref="wikiPage" class="wiki-page" :class="{ 'wiki-page--tool': toolLayout }">
     <header class="header-card">
       <div class="header-left">
         <el-button v-if="!props.knowledgeId" :icon="ArrowLeft" circle class="back-btn" aria-label="返回知识库" @click="goBack" />
         <div class="head-info">
           <div class="title-row">
-            <h2>AI Wiki · {{ knowledge?.name || "知识库" }}</h2>
-            <span class="status-pill pill-ai">LLM 深度生成</span>
+            <h2 ref="wikiTitle" tabindex="-1">{{ toolLayout ? '' : 'AI Wiki · ' }}{{ knowledge?.name || '知识库' }}</h2>
             <span v-if="knowledge?.isPublic === 1" class="status-pill pill-public">公开</span>
           </div>
           <div class="meta-row">
-            <span class="stat"><el-icon><Document /></el-icon>{{ pages.length }} 个章节页面</span>
-            <span class="dot-sep">·</span>
-            <span class="meta-tip">由多篇知识库源文档经规划与逐页精修生成，已同步回灌向量库</span>
+            <span>{{ pages.length }} 个章节</span>
           </div>
         </div>
       </div>
       <div class="actions">
-        <el-button :icon="Refresh" :disabled="generating" @click="loadAll">刷新</el-button>
-        <template v-if="canManage">
-          <el-button
-            type="primary"
-            class="generate-btn"
-            :icon="MagicStick"
-            :loading="generating"
-            @click="handleGenerate"
-          >{{ pages.length ? "重新生成 Wiki" : "生成 AI Wiki" }}</el-button>
-          <el-button
-            v-if="pages.length"
-            type="danger"
-            plain
-            :icon="Delete"
-            :disabled="generating"
-            @click="handleDeleteWiki"
-          >删除 Wiki</el-button>
-        </template>
+        <el-button v-if="!toolLayout" :icon="Refresh" :disabled="generating" @click="loadAll()">刷新</el-button>
+        <el-button
+          v-if="canManage"
+          type="primary"
+          class="generate-btn"
+          :icon="toolLayout ? undefined : MagicStick"
+          :loading="generating"
+          @click="handleGenerate"
+        >{{ pages.length ? '重新生成 Wiki' : toolLayout ? '生成 Wiki' : '生成 AI Wiki' }}</el-button>
+        <el-dropdown v-if="toolLayout" trigger="click" @command="handleToolCommand">
+          <el-button :disabled="generating" :icon="ArrowDown">更多</el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="refresh">刷新章节</el-dropdown-item>
+              <el-dropdown-item v-if="canManage && pages.length" command="delete" divided>删除 Wiki</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button
+          v-else-if="canManage && pages.length"
+          type="danger"
+          plain
+          :icon="Delete"
+          :disabled="generating"
+          @click="handleDeleteWiki"
+        >删除 Wiki</el-button>
       </div>
     </header>
 
     <!-- 主阅读与大纲区域：弹性双栏，大缩放下高度自适应 -->
-    <div v-loading="loading" class="wiki-main-card">
+    <div ref="readingCard" v-loading="loading" class="wiki-main-card">
       <template v-if="pages.length">
-        <aside class="page-list custom-scroll">
-          <div class="outline-head">
-            <span>章节目录 ({{ pages.length }})</span>
+        <aside class="wiki-sidebar" aria-label="章节目录">
+          <div ref="outline" class="page-list custom-scroll">
+            <div class="outline-head">
+              <span>章节目录{{ toolLayout ? '' : ` (${pages.length})` }}</span>
+            </div>
+            <ol class="chapter-list" role="list">
+              <li v-for="page in pages" :key="page.id">
+                <button
+                  type="button"
+                  class="page-item"
+                  :class="{ active: String(currentId) === String(page.id) }"
+                  :aria-current="String(currentId) === String(page.id) ? 'true' : undefined"
+                  @click="navigatePage(page.id)"
+                >
+                  <span class="page-order">{{ page.sortOrder }}</span>
+                  <span class="page-title" :title="page.title">{{ page.title }}</span>
+                  <el-tag v-if="page.status === 'FAILED'" size="small" type="danger">失败</el-tag>
+                </button>
+              </li>
+            </ol>
           </div>
-          <button
-            v-for="page in pages"
-            :key="page.id"
-            type="button"
-            class="page-item"
-            :class="{ active: String(currentId) === String(page.id) }"
-            :aria-current="String(currentId) === String(page.id) ? 'true' : undefined"
-            @click="selectPage(page.id)"
-          >
-            <span class="page-order">{{ page.sortOrder }}</span>
-            <span class="page-title" :title="page.title">{{ page.title }}</span>
-            <el-tag v-if="page.status === 'FAILED'" size="small" type="danger">失败</el-tag>
-          </button>
+          <div class="outline-actions">
+            <el-button
+              v-show="outlinePinned"
+              :icon="Top"
+              class="back-to-top"
+              aria-label="返回最上"
+              title="返回最上"
+              @click="backToTop"
+            />
+          </div>
         </aside>
 
         <section class="page-content custom-scroll" aria-label="Wiki 正文">
           <template v-if="current">
             <div class="content-header">
               <div class="title-wrap">
-                <span class="chapter-badge">Chapter {{ current.sortOrder }}</span>
-                <h3>{{ current.title }}</h3>
+                <span v-if="!toolLayout" class="chapter-badge">Chapter {{ current.sortOrder }}</span>
+                <h3 ref="chapterTitle" tabindex="-1">{{ current.title }}</h3>
               </div>
               <el-button
                 v-if="canManage && current.status !== 'FAILED'"
@@ -78,29 +97,25 @@
 
             <p v-if="current.summary" class="content-summary">{{ current.summary }}</p>
 
-            <div v-if="sourceNames.length" class="content-sources">
-              <el-icon><Collection /></el-icon>
-              <span>知识参考来源：{{ sourceNames.join("、") }}</span>
-            </div>
-
             <el-alert
               v-if="current.status === 'FAILED'"
               type="warning"
               :closable="false"
               :title="`该页生成失败：${current.errorMsg || '未知原因'}，可尝试重新生成整个 Wiki`"
             />
-            <div v-else class="md-body" v-html="rendered" />
+            <div v-else class="md-body" @click="followWikiLink" v-html="rendered" />
+            <p v-if="sourceNames.length" class="content-sources">来源文档：{{ sourceNames.join('、') }}</p>
           </template>
         </section>
       </template>
 
       <el-empty v-else-if="!loading" description="尚未生成 Wiki 知识大纲" class="wiki-empty">
-        <template v-if="canManage">
+        <template v-if="canManage && !toolLayout">
           <el-button type="primary" class="generate-btn" :icon="MagicStick" :loading="generating" @click="handleGenerate">
             基于知识库文档生成 Wiki
           </el-button>
         </template>
-        <p v-else class="empty-tip">知识库作者尚未生成 Wiki，请稍后访问</p>
+        <p v-else-if="!canManage" class="empty-tip">知识库作者尚未生成 Wiki，请稍后访问</p>
       </el-empty>
     </div>
 
@@ -128,12 +143,12 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { ArrowLeft, Collection, Delete, Document, Edit, MagicStick, Refresh } from '@element-plus/icons-vue'
-import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { ArrowDown, ArrowLeft, Delete, Edit, MagicStick, Refresh, Top } from '@element-plus/icons-vue'
+import { renderWikiMarkdown } from '../utils/wikiMarkdown'
+import { markKnowledgeChanged, useTabRefresh } from '../utils/tabRefresh'
 import {
   deleteWiki,
   generateWiki,
@@ -147,7 +162,7 @@ import {
 
 const route = useRoute()
 const router = useRouter()
-const props = defineProps({ knowledgeId: String })
+const props = defineProps({ knowledgeId: String, toolLayout: Boolean })
 const knowledgeId = props.knowledgeId ?? route.params.id
 
 const knowledge = ref(null)
@@ -158,6 +173,48 @@ const currentId = ref(null)
 const current = ref(null)
 const docNameMap = ref({})
 
+const wikiPage = ref(null)
+const wikiTitle = ref(null)
+const chapterTitle = ref(null)
+const readingCard = ref(null)
+const outline = ref(null)
+const outlinePinned = ref(false)
+const active = ref(true)
+
+const syncOutline = () => {
+  if (!outline.value) return
+  // 目录吸顶后，阅读卡顶部仍会随正文向上移动。
+  const cardTop = readingCard.value.getBoundingClientRect().top + readingCard.value.clientTop
+  outlinePinned.value = outline.value.getBoundingClientRect().top - cardTop > 1
+}
+
+const backToTop = () => {
+  const scrollContainer = wikiPage.value?.closest('.page-body')
+  const scroller = scrollContainer?.scrollTop > 0 ? scrollContainer : window
+  const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth'
+  wikiTitle.value?.focus({ preventScroll: true })
+  scroller.scrollTo({ top: 0, behavior })
+}
+
+watch([outline, active], ([element, isActive], _, onCleanup) => {
+  outlinePinned.value = false
+  if (!element || !isActive) return
+
+  const scrollContainer = wikiPage.value?.closest('.page-body')
+  scrollContainer?.addEventListener('scroll', syncOutline, { passive: true })
+  window.addEventListener('scroll', syncOutline, { passive: true })
+  const resizeObserver = new ResizeObserver(syncOutline)
+  resizeObserver.observe(wikiPage.value)
+  if (scrollContainer) resizeObserver.observe(scrollContainer)
+  syncOutline()
+
+  onCleanup(() => {
+    resizeObserver.disconnect()
+    scrollContainer?.removeEventListener('scroll', syncOutline)
+    window.removeEventListener('scroll', syncOutline)
+  })
+}, { flush: 'post' })
+
 const isOwner = computed(() => knowledge.value?.isOwner === true)
 const isMember = computed(() => knowledge.value?.isMember === true)
 const canManage = computed(() => isOwner.value || isMember.value)
@@ -166,10 +223,22 @@ const editDialogVisible = ref(false)
 const editing = ref(false)
 const editForm = ref({ title: '', content: '' })
 
-// LLM 内容渲染前必须净化（延续项目 XSS 防护风格），Markdown → 安全 HTML
+onActivated(() => { active.value = true })
+onDeactivated(() => {
+  active.value = false
+  editDialogVisible.value = false
+})
+
+const wikiPageLocation = (pageId) => ({
+  name: 'KnowledgeWiki',
+  params: { id: knowledgeId },
+  query: { page: String(pageId) },
+})
+
 const rendered = computed(() => {
   if (!current.value?.content) return ''
-  return DOMPurify.sanitize(marked.parse(current.value.content))
+  return renderWikiMarkdown(current.value.content, pages.value, currentId.value,
+    (pageId) => router.resolve(wikiPageLocation(pageId)).href)
 })
 
 const sourceNames = computed(() => {
@@ -183,73 +252,118 @@ const sourceNames = computed(() => {
 
 const goBack = () => router.push(`/knowledge/${knowledgeId}`)
 
-const loadKnowledge = async () => {
-  knowledge.value = await getKnowledge(knowledgeId)
+const loadKnowledge = async (isCurrent) => {
+  const result = await getKnowledge(knowledgeId)
+  if (isCurrent()) knowledge.value = result
 }
 
-const loadPages = async () => {
-  pages.value = await listWikiPages(knowledgeId)
-  // 默认选中第一页（或保持当前选中）
-  const keep = pages.value.find((p) => String(p.id) === String(currentId.value))
-  await selectPage((keep || pages.value[0])?.id)
+const findPage = (pageId) => pages.value.find((page) => String(page.id) === String(pageId))
+
+let pageRequest = 0
+let pageListRequest = 0
+let requestedPageId
+
+const loadPages = async (isCurrent) => {
+  const request = ++pageListRequest
+  const result = await listWikiPages(knowledgeId)
+  if (!isCurrent() || request !== pageListRequest) return
+  pages.value = result
+  if (!findPage(currentId.value)) {
+    current.value = null
+    currentId.value = null
+  }
+  const requested = props.knowledgeId ? requestedPageId : route.query?.page
+  return selectPage((findPage(requested) || pages.value[0])?.id)
 }
 
-const loadDocNames = async () => {
+const loadDocNames = async (isCurrent) => {
   try {
     const docs = await listDocs(knowledgeId, 0, 'all')
-    const map = {}
-    docs.forEach((d) => {
-      map[String(d.id)] = d.name
-    })
-    docNameMap.value = map
+    if (isCurrent()) docNameMap.value = Object.fromEntries(docs.map((doc) => [String(doc.id), doc.name]))
   } catch {
     // 文档名仅用于来源展示，失败不阻塞页面
   }
 }
 
-const loadAll = async () => {
-  loading.value = true
+const loadAll = useTabRefresh(async (quiet, isCurrent) => {
+  loading.value = !quiet
   try {
-    await Promise.all([loadKnowledge(), loadPages(), loadDocNames()])
+    const results = await Promise.allSettled([loadKnowledge(isCurrent), loadPages(isCurrent), loadDocNames(isCurrent)])
+    return results.every((result) => result.status === 'fulfilled' && result.value !== false)
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
-}
+}, ['list', 'docs', 'wiki'])
 
-const selectPage = async (pageId) => {
+const selectPage = async (pageId, focus = false) => {
+  const request = ++pageRequest
+  requestedPageId = pageId
   if (!pageId) {
     current.value = null
     currentId.value = null
     return
   }
+  let page
+  try {
+    page = await getWikiPage(knowledgeId, pageId)
+  } catch {
+    // 请求层已展示失败提示，保留正在阅读的章节。
+    return false
+  }
+  if (disposed || request !== pageRequest) return
   currentId.value = pageId
-  current.value = await getWikiPage(knowledgeId, pageId)
+  current.value = page
+  if (focus) {
+    await nextTick()
+    if (active.value && request === pageRequest) chapterTitle.value?.focus()
+  }
 }
+
+const navigatePage = (pageId, focus = false) => {
+  if (props.knowledgeId || String(route.query?.page) === String(pageId)) {
+    return selectPage(pageId, focus)
+  }
+  return router.push(wikiPageLocation(pageId))
+}
+
+const followWikiLink = (event) => {
+  const pageId = event.target.closest?.('a[data-wiki-page]')?.dataset.wikiPage
+  if (!pageId || event.defaultPrevented || event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+  event.preventDefault()
+  return navigatePage(pageId, true)
+}
+
+watch(() => route.query?.page, (pageId) => {
+  if (props.knowledgeId || route.name !== 'KnowledgeWiki' || !pages.value.length) return
+  return selectPage((findPage(pageId) || pages.value[0]).id, true)
+})
 
 let pollTimer = null
 let disposed = false
 
 const startPolling = (taskId) => {
   generating.value = true
-  pollTimer = setInterval(async () => {
+  const timer = setInterval(async () => {
     try {
       const task = await getTask(taskId)
-      if (disposed) return
+      if (disposed || pollTimer !== timer) return
       if (task.status === 'SUCCESS' || task.status === 'FAILED') {
-        clearInterval(pollTimer)
+        clearInterval(timer)
         pollTimer = null
         generating.value = false
         if (task.status === 'SUCCESS') {
+          markKnowledgeChanged('wiki')
           ElMessage.success('Wiki 生成完成')
+          await loadAll(true)
         } else {
           ElMessage.error(task.message || 'Wiki 生成失败，原有内容已保留')
         }
-        await loadPages()
       }
     } catch {
       // 任务过期等瞬时错误：下轮重试
     }
   }, 2000)
+  pollTimer = timer
 }
 
 const handleGenerate = async () => {
@@ -287,10 +401,12 @@ const handleDeleteWiki = async () => {
   }
   await deleteWiki(knowledgeId)
   ElMessage.success('Wiki 已删除')
-  current.value = null
-  currentId.value = null
+  pageListRequest++
   pages.value = []
+  await selectPage()
 }
+
+const handleToolCommand = (command) => command === 'refresh' ? loadAll() : handleDeleteWiki()
 
 const openEditDialog = () => {
   editForm.value = { title: current.value?.title || '', content: current.value?.content || '' }
@@ -303,7 +419,7 @@ const handleSaveEdit = async () => {
     await updateWikiPage(knowledgeId, currentId.value, editForm.value)
     ElMessage.success('已保存')
     editDialogVisible.value = false
-    await loadPages()
+    await loadAll(true)
   } finally {
     editing.value = false
   }
@@ -375,12 +491,6 @@ onBeforeUnmount(() => {
   border-radius: var(--r-pill);
 }
 
-.pill-ai {
-  background: color-mix(in srgb, var(--el-color-warning) 12%, transparent);
-  color: var(--el-color-warning-dark-2);
-  border: 1px solid color-mix(in srgb, var(--el-color-warning) 30%, transparent);
-}
-
 .pill-public {
   background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
   color: var(--el-color-success-dark-2);
@@ -395,9 +505,6 @@ onBeforeUnmount(() => {
   font-size: var(--text-muted);
   flex-wrap: wrap;
 }
-
-.dot-sep { opacity: 0.6; }
-.meta-tip { color: var(--t4); }
 
 .actions {
   display: flex;
@@ -424,20 +531,65 @@ onBeforeUnmount(() => {
   border-radius: var(--r1);
   min-height: min(calc(100dvh - 220px), 720px);
   display: flex;
-  overflow: hidden;
+  /* 保留圆角裁切，让目录相对主内容区吸顶。 */
+  overflow: clip;
   box-shadow: var(--shadow-card);
 }
 
-.page-list {
+.wiki-sidebar {
+  --outline-action-size: 40px;
+  --outline-action-gap: 8px;
   width: clamp(230px, 19vw, 300px);
   flex-shrink: 0;
-  border-right: 1px solid var(--line);
-  padding: 14px 10px;
-  overflow-y: auto;
+  border-inline-end: 1px solid var(--line);
   background: var(--bg);
   display: flex;
   flex-direction: column;
+}
+
+.page-list {
+  position: sticky;
+  top: 0;
+  max-height: calc(
+    100dvh - var(--topbar-height, 0px) - var(--page-body-padding-top, 0px) - var(--page-body-padding-bottom, 0px)
+    - var(--outline-action-size) - var(--outline-action-gap)
+  );
+  padding: 14px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
+}
+
+.outline-actions {
+  position: sticky;
+  bottom: calc(20px - var(--page-body-padding-bottom, 0px));
+  align-self: center;
+  flex-shrink: 0;
+  height: var(--outline-action-size);
+  margin-block: auto var(--outline-action-gap);
+}
+
+.back-to-top {
+  --el-button-bg-color: var(--card);
+  --el-button-border-color: var(--line);
+  --el-button-text-color: var(--t2);
+  --el-button-hover-bg-color: var(--tint);
+  --el-button-hover-border-color: var(--brand);
+  --el-button-hover-text-color: var(--brand-hover);
+  --el-button-active-bg-color: var(--tint-strong);
+  --el-button-active-border-color: var(--brand-pressed);
+  --el-button-active-text-color: var(--brand-pressed);
+  width: var(--outline-action-size);
+  height: var(--outline-action-size);
+  padding: 0;
+  border-radius: var(--r3);
+  font-size: var(--text-heading);
+}
+
+.back-to-top:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .outline-head {
@@ -447,9 +599,16 @@ onBeforeUnmount(() => {
   color: var(--t3);
 }
 
+.chapter-list {
+  list-style: none;
+  display: grid;
+  gap: 4px;
+}
+
 .page-item {
   display: flex;
   align-items: center;
+  flex-shrink: 0;
   gap: 8px;
   padding: 10px 12px;
   border-radius: var(--r3);
@@ -573,6 +732,20 @@ onBeforeUnmount(() => {
   margin: 0 0 14px;
 }
 
+.md-body :deep(a[data-wiki-page]) {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.md-body :deep(a[data-wiki-page]:hover) {
+  color: var(--brand-hover);
+}
+
+.md-body :deep(a[data-wiki-page]:focus-visible) {
+  outline: 2px solid var(--brand);
+}
+
 .md-body :deep(pre) {
   background: var(--t1);
   color: var(--bg);
@@ -629,20 +802,113 @@ onBeforeUnmount(() => {
   text-align: start;
 }
 
+.wiki-page--tool {
+  gap: 0;
+}
+
+.wiki-page--tool .header-card,
+.wiki-page--tool .wiki-main-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.wiki-page--tool .header-card {
+  padding: clamp(14px, 2vw, 20px);
+  border-block-end: 1px solid var(--line);
+}
+
+.wiki-page--tool .header-left { flex: 1 1 160px; }
+.wiki-page--tool .actions .el-button,
+.wiki-page--tool .edit-btn { min-height: 40px; }
+.wiki-page--tool .wiki-main-card { min-height: 0; }
+
+.wiki-page--tool .wiki-sidebar {
+  width: clamp(150px, 30%, 220px);
+  background: var(--card);
+}
+
+.wiki-page--tool .outline-head {
+  color: var(--t1);
+  font-size: var(--text-heading);
+}
+
+.wiki-page--tool .page-order,
+.wiki-page--tool .page-item.active .page-order {
+  width: auto;
+  color: var(--t3);
+  background: transparent;
+}
+
+.wiki-page--tool .page-item {
+  min-height: 40px;
+  border: 1px solid transparent;
+}
+
+.wiki-page--tool .page-item:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.wiki-page--tool .page-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.wiki-page--tool .page-content { padding: clamp(14px, 2vw, 20px); }
+.wiki-page--tool .content-header { flex-wrap: wrap; border: 0; padding: 0; }
+.wiki-page--tool .content-header h3 { overflow-wrap: anywhere; }
+.wiki-page--tool .content-summary { color: var(--t2); }
+
+.wiki-page--tool .content-sources {
+  display: block;
+  margin: 16px 0 0;
+  border: 0;
+  border-block-start: 1px solid var(--line);
+  border-radius: 0;
+  padding: 12px 0 0;
+  background: transparent;
+  overflow-wrap: anywhere;
+}
+
 @container (max-width: 680px) {
   .wiki-main-card {
     flex-direction: column;
   }
 
-  .page-list {
+  .wiki-sidebar {
+    position: sticky;
+    top: var(--wiki-outline-top, 0px);
+    z-index: 1;
     width: 100%;
-    max-height: 240px;
     border-inline-end: 0;
     border-block-end: 1px solid var(--line);
+  }
+
+  .page-list {
+    position: static;
+    max-height: min(240px, 35dvh);
+  }
+
+  .outline-head {
+    min-height: var(--outline-action-size);
+    padding-inline-end: calc(var(--outline-action-size) + 8px);
+  }
+
+  .outline-actions {
+    position: absolute;
+    inset: 8px 10px auto auto;
+    margin: 0;
   }
 
   .page-content {
     width: 100%;
   }
+}
+
+@container knowledge-work (max-width: 680px) {
+  .wiki-page--tool .wiki-sidebar { width: 100%; }
+  .wiki-page--tool .outline-head { min-height: 0; }
 }
 </style>

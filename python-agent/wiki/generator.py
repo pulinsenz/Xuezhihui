@@ -33,6 +33,8 @@ OUTLINE_SYSTEM = (
 PAGE_SYSTEM = (
     "你是学智汇平台的 Wiki 页面撰写器，负责把知识库文档内容整理为结构严谨的 Markdown 百科页面。"
     "要求：只依据给定资料撰写，忠实原文、不编造；用 Markdown 标题/列表/表格组织内容，"
+    "正文提到有独立章节的相关主题时，从可链接章节清单复制对应 Markdown 链接，放在首次提及处。"
+    "仅链接相关章节，不编造链接，也不要为了添加链接引入参考资料之外的事实。"
     "结尾用「## 来源」小节列出引用的文档名。直接输出 Markdown 正文。"
 )
 
@@ -90,7 +92,7 @@ def process_wiki_generate(knowledge_id: str, docs: List[dict]) -> dict:
             context = _build_context(entry, usable, settings.wiki_page_context_chars)
             content = llm.chat(
                 [{"role": "system", "content": PAGE_SYSTEM},
-                 {"role": "user", "content": _page_user(entry, context)}],
+                 {"role": "user", "content": _page_user(entry, context, outline, idx)}],
                 max_tokens=4096).strip()
             if not content:
                 raise WikiGenerationError("页面内容为空")
@@ -188,9 +190,16 @@ def _build_context(entry: dict, usable: List[dict], budget: int) -> List[tuple]:
     return selected
 
 
-def _page_user(entry: dict, context: List[tuple]) -> str:
-    """页面撰写用户消息：标题 + 摘要 + 带文档名标注的资料"""
-    parts = [f"页面标题：{entry['title']}", f"页面摘要：{entry['summary']}", "", "参考资料："]
+def _page_user(entry: dict, context: List[tuple], outline: List[dict], current_order: int) -> str:
+    parts = [f"页面标题：{entry['title']}", f"页面摘要：{entry['summary']}"]
+    if len(outline) > 1:
+        parts.extend(["", "可链接章节："])
+        # Java 按大纲顺序保存章节；正文用序号引用，改标题后仍指向同一页。
+        for order, page in enumerate(outline, start=1):
+            if order != current_order:
+                title = re.sub(r"([\\\[\]])", r"\\\1", page["title"])
+                parts.append(f"- [{title}](#wiki-page-{order})")
+    parts.extend(["", "参考资料："])
     for name, chunk in context:
         parts.append(f"【{name}】\n{chunk}\n")
     return "\n".join(parts)

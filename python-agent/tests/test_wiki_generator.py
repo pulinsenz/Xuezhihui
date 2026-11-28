@@ -69,7 +69,7 @@ class FakeWikiLLM:
 
     def chat(self, messages, temperature=0.3, max_tokens=None):
         system = messages[0]["content"]
-        self.calls.append(system)
+        self.calls.append(messages)
         if "Wiki 大纲规划器" in system:
             if self.outline_raw is not None:
                 return self.outline_raw
@@ -128,6 +128,11 @@ def test_process_wiki_generate_success_flow(wiki_env, monkeypatch):
         assert page["content"]
     assert len(wiki_env.added) == 2, "每个成功页面都应回灌一次"
     assert wiki_env.added[0][0] == "k1"
+    first_page_prompt, second_page_prompt = (call[1]["content"] for call in llm.calls[1:])
+    assert "[计算机网络](#wiki-page-2)" in first_page_prompt
+    assert "#wiki-page-1" not in first_page_prompt
+    assert "[机器学习](#wiki-page-1)" in second_page_prompt
+    assert "#wiki-page-2" not in second_page_prompt
 
 
 def test_process_wiki_generate_outline_failure_degrades_to_overview(wiki_env, monkeypatch):
@@ -137,6 +142,7 @@ def test_process_wiki_generate_outline_failure_degrades_to_overview(wiki_env, mo
     assert result["status"] == "SUCCESS", "大纲失败应降级单页总览而非整任务失败"
     assert len(result["pages"]) == 1
     assert result["pages"][0]["title"] == "知识库总览"
+    assert "可链接章节" not in llm.calls[1][1]["content"]
 
 
 def test_process_wiki_generate_partial_page_failure(wiki_env, monkeypatch):
