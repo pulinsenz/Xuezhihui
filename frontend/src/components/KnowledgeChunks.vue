@@ -5,10 +5,12 @@
       <p v-if="!docsLoading && !docsFailed" class="tool-meta">{{ docs.length }} 份已入库文档</p>
     </header>
 
-    <section class="tool-section" aria-labelledby="chunk-doc-heading">
+    <section class="tool-section" aria-labelledby="chunk-heading">
       <div class="tool-section-heading">
-        <h3 id="chunk-doc-heading">文档列表</h3>
-        <span v-if="docs.length" class="tool-meta">切片数</span>
+        <h3 id="chunk-heading">{{ selectedDoc?.name || '切片正文' }}</h3>
+        <span v-if="!chunksLoading && !chunksFailed && chunks.length" class="tool-meta" role="status">
+          第 {{ pageStart + 1 }}–{{ pageStart + visibleChunks.length }} 条，共 {{ chunks.length }} 条
+        </span>
       </div>
       <p v-if="docsLoading" class="tool-status" role="status">正在加载文档…</p>
       <div v-else-if="docsFailed" class="status-actions">
@@ -16,27 +18,7 @@
         <el-button @click="loadDocs()">重试</el-button>
       </div>
       <p v-else-if="!docs.length" class="tool-status" role="status">这个知识库暂无已入库的文档。</p>
-      <ul v-else class="doc-list" role="list">
-        <li v-for="doc in docs" :key="doc.id">
-          <button type="button" class="tool-row" :aria-pressed="String(doc.id) === docId" @click="docId = String(doc.id)">
-            <el-icon aria-hidden="true"><Document /></el-icon>
-            <span class="tool-row-name">{{ doc.name }}</span>
-            <span v-if="String(doc.id) === docId && !chunksLoading && !chunksFailed" class="tool-meta">{{ chunks.length }} 条</span>
-            <span v-else class="tool-meta" aria-hidden="true">—</span>
-            <el-icon class="tool-row-chevron" aria-hidden="true"><ArrowRight /></el-icon>
-          </button>
-        </li>
-      </ul>
-    </section>
-
-    <section v-if="docId && !docsLoading && !docsFailed" class="tool-section" aria-labelledby="chunk-heading">
-      <div class="tool-section-heading">
-        <h3 id="chunk-heading">切片正文</h3>
-        <span v-if="chunks.length" class="tool-meta" role="status">
-          第 {{ pageStart + 1 }}–{{ pageStart + visibleChunks.length }} 条，共 {{ chunks.length }} 条
-        </span>
-      </div>
-      <p v-if="chunksLoading" class="tool-status" role="status">正在读取切片…</p>
+      <p v-else-if="chunksLoading" class="tool-status" role="status">正在读取切片…</p>
       <div v-else-if="chunksFailed" class="status-actions">
         <p class="tool-status" role="alert">切片读取失败。</p>
         <el-button @click="chunkAttempt++">重试</el-button>
@@ -65,7 +47,6 @@
 
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
-import { ArrowRight, Document } from '@element-plus/icons-vue'
 import { getDocChunks, listDocs } from '../api/knowledge'
 import { useTabRefresh } from '../utils/tabRefresh'
 
@@ -78,6 +59,7 @@ const docs = ref([])
 const docsLoading = ref(true)
 const docsFailed = ref(false)
 const docId = ref('')
+const selectedDoc = computed(() => docs.value.find((doc) => String(doc.id) === docId.value))
 const chunks = ref([])
 const chunksLoading = ref(false)
 const chunksFailed = ref(false)
@@ -144,20 +126,24 @@ watch([docId, chunkAttempt], ([id], _, onCleanup) => {
   loadChunks(id, false, () => current)
 })
 
+const directory = computed(() => ({
+  entries: docs.value.map((doc) => ({
+    id: String(doc.id),
+    label: doc.name,
+    count: String(doc.id) === docId.value && !chunksLoading.value && !chunksFailed.value ? chunks.value.length : null,
+  })),
+  selectedId: docId.value,
+  loading: docsLoading.value,
+  failed: docsFailed.value,
+  retry: () => loadDocs(),
+  select: (id) => { docId.value = id },
+}))
+defineExpose({ directory })
+
 onMounted(loadDocs)
 </script>
 
 <style scoped>
-.doc-list {
-  display: grid;
-  gap: 4px;
-  list-style: none;
-  max-height: 320px;
-  overflow: auto;
-}
-
-.doc-list .tool-meta { white-space: nowrap; }
-
 .status-actions {
   display: flex;
   flex-wrap: wrap;
@@ -207,8 +193,13 @@ onMounted(loadDocs)
 
 .chunk p {
   color: var(--t2);
+  font-size: var(--text-body);
   line-height: 1.6;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+@container knowledge-work (max-width: 370px) {
+  .chunk { grid-template-columns: minmax(0, 1fr); gap: 4px; }
 }
 </style>

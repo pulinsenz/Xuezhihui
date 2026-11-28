@@ -1,34 +1,34 @@
 ﻿<template>
   <el-container class="app-shell">
-    <el-aside class="sidebar" :width="collapsed ? '72px' : '200px'">
+    <el-aside class="sidebar" :class="{ 'sidebar--compact': compactNavigation && sidebarCollapsed }" :width="sidebarWidth">
       <div class="sidebar-brand">
         <img class="brand-logo" :src="logo" alt="学智汇" />
-        <div v-if="!collapsed" class="brand-copy">
+        <div v-if="!sidebarCollapsed" class="brand-copy">
           <div class="brand-name">学智汇</div>
         </div>
       </div>
 
       <el-menu
         :default-active="activeMenu"
-        :collapse="collapsed"
+        :collapse="sidebarCollapsed"
         class="side-menu"
         @select="handleMenuSelect"
       >
-        <el-menu-item index="/dashboard">
+        <el-menu-item index="/dashboard" aria-label="仪表盘">
           <el-icon><House /></el-icon>
-          <span>仪表盘</span>
+          <template #title>仪表盘</template>
         </el-menu-item>
-        <el-menu-item index="/chat">
+        <el-menu-item index="/chat" aria-label="AI 对话">
           <el-icon><ChatDotRound /></el-icon>
-          <span>AI 对话</span>
+          <template #title>AI 对话</template>
         </el-menu-item>
-        <el-menu-item index="/knowledge">
+        <el-menu-item index="/knowledge" aria-label="我的知识库">
           <el-icon><Folder /></el-icon>
-          <span>我的知识库</span>
+          <template #title>我的知识库</template>
         </el-menu-item>
-        <el-menu-item index="/public-knowledge">
+        <el-menu-item index="/public-knowledge" aria-label="公开知识库">
           <el-icon><Compass /></el-icon>
-          <span>公开知识库</span>
+          <template #title>公开知识库</template>
         </el-menu-item>
         <el-menu-item index="/vector-chunks" aria-label="切片查询">
           <el-icon><Document /></el-icon>
@@ -44,33 +44,37 @@
         </el-menu-item>
         <el-menu-item index="/messages" :aria-label="messagesLabel">
           <el-icon><Bell /></el-icon>
-          <span>消息通知</span>
-          <span v-if="messageStore.unreadCount > 0" class="menu-count" aria-hidden="true">
-            {{ messageStore.unreadCount > 99 ? '99+' : messageStore.unreadCount }}
-          </span>
+          <template #title>
+            <span>消息通知</span>
+            <span v-if="!sidebarCollapsed && messageStore.unreadCount > 0" class="menu-count" aria-hidden="true">
+              {{ messageStore.unreadCount > 99 ? '99+' : messageStore.unreadCount }}
+            </span>
+          </template>
         </el-menu-item>
-        <el-menu-item index="/settings">
+        <el-menu-item index="/settings" aria-label="系统设置">
           <el-icon><Setting /></el-icon>
-          <span>系统设置</span>
+          <template #title>系统设置</template>
         </el-menu-item>
         <template v-if="authStore.isAdmin">
-          <div v-if="!collapsed" class="menu-divider-label">平台管理</div>
-          <el-menu-item index="/admin/users">
+          <div v-if="!sidebarCollapsed" class="menu-divider-label">平台管理</div>
+          <el-menu-item index="/admin/users" aria-label="用户管理">
             <el-icon><User /></el-icon>
-            <span>用户管理</span>
+            <template #title>用户管理</template>
           </el-menu-item>
-          <el-menu-item index="/admin/knowledge">
+          <el-menu-item index="/admin/knowledge" aria-label="全局知识库">
             <el-icon><Collection /></el-icon>
-            <span>全局知识库</span>
+            <template #title>全局知识库</template>
           </el-menu-item>
         </template>
       </el-menu>
 
-      <el-tooltip :content="collapsed ? '展开侧栏' : '收起侧栏'" placement="top">
+      <el-tooltip :content="sidebarLabel" placement="top">
         <el-button
           class="collapse-btn"
           circle
-          :icon="collapsed ? Expand : Fold"
+          :icon="sidebarCollapsed ? Expand : Fold"
+          :aria-label="sidebarLabel"
+          :aria-expanded="!sidebarCollapsed"
           @click="toggleSidebar"
         />
       </el-tooltip>
@@ -162,6 +166,14 @@ const route = useRoute()
 const router = useRouter()
 
 const collapsed = ref(JSON.parse(localStorage.getItem('sidebar_collapsed') || 'false'))
+const compactExpanded = ref(false)
+const compactNavigation = computed(() => route.name === 'VectorChunks' || route.name === 'Wiki')
+const sidebarCollapsed = computed(() => compactNavigation.value ? !compactExpanded.value : collapsed.value)
+const sidebarWidth = computed(() => {
+  if (!sidebarCollapsed.value) return '200px'
+  return compactNavigation.value ? '56px' : '72px'
+})
+const sidebarLabel = computed(() => sidebarCollapsed.value ? '展开侧栏' : '收起侧栏')
 let refreshTimer = null
 
 const routeInfo = {
@@ -208,8 +220,11 @@ const avatarText = computed(() => {
 })
 
 const toggleSidebar = () => {
+  if (compactNavigation.value) {
+    compactExpanded.value = !compactExpanded.value
+    return
+  }
   collapsed.value = !collapsed.value
-  localStorage.setItem('sidebar_collapsed', JSON.stringify(collapsed.value))
 }
 
 const handleMenuSelect = (index) => {
@@ -252,6 +267,7 @@ watch(
 watch(collapsed, (value) => {
   localStorage.setItem('sidebar_collapsed', JSON.stringify(value))
 })
+watch(compactNavigation, () => { compactExpanded.value = false })
 
 onMounted(() => {
   if (authStore.isLogin) authStore.fetchCurrentUser().catch(() => {})
@@ -295,6 +311,12 @@ onUnmounted(() => {
   padding: 14px 16px;
   border-bottom: 1px solid var(--line);
 }
+
+.sidebar--compact .sidebar-brand { justify-content: center; padding-inline: 0; }
+.sidebar--compact .side-menu { width: 100%; }
+.sidebar--compact .side-menu :deep(.el-menu-item) { height: 40px; }
+.sidebar--compact .side-menu :deep(.el-menu-tooltip__trigger) { justify-content: center; padding-inline: 0; }
+.sidebar--compact .collapse-btn { left: 50%; transform: translateX(-50%); }
 
 .brand-logo {
   width: 34px;
@@ -527,7 +549,7 @@ onUnmounted(() => {
   --page-body-padding-bottom: 28px;
   min-width: 0;
   padding: var(--page-body-padding-top) 24px var(--page-body-padding-bottom);
-  container-type: inline-size;
+  container: page-body / inline-size;
 }
 
 @media (max-width: 1024px) {
@@ -543,9 +565,11 @@ onUnmounted(() => {
   .app-shell { height: auto; min-height: 100dvh; flex-direction: column; }
   .sidebar { width: 100%; height: auto; border-right: 0; border-bottom: 1px solid var(--line); }
   .sidebar-brand { min-height: 48px; padding-block: 6px; }
+  .sidebar--compact .sidebar-brand { justify-content: flex-start; padding-inline: 16px; }
   .side-menu { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 4px 0; }
   .menu-divider-label { grid-column: 1 / -1; padding-top: 8px; }
   .collapse-btn { top: 8px; right: 12px; bottom: auto; left: auto; }
+  .sidebar--compact .collapse-btn { left: auto; transform: none; }
   .side-menu.el-menu--collapse { display: none; }
   .user-copy strong { max-width: 88px; }
   .page-body:has(.wiki-page) {

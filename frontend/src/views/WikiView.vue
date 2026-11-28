@@ -46,10 +46,10 @@
     <!-- 主阅读与大纲区域：弹性双栏，大缩放下高度自适应 -->
     <div ref="readingCard" v-loading="loading" class="wiki-main-card">
       <template v-if="pages.length">
-        <aside class="wiki-sidebar" aria-label="章节目录">
+        <aside v-if="!toolLayout" class="wiki-sidebar" aria-label="章节目录">
           <div ref="outline" class="page-list custom-scroll">
             <div class="outline-head">
-              <span>章节目录{{ toolLayout ? '' : ` (${pages.length})` }}</span>
+              <span>章节目录 ({{ pages.length }})</span>
             </div>
             <ol class="chapter-list" role="list">
               <li v-for="page in pages" :key="page.id">
@@ -168,6 +168,8 @@ const knowledgeId = props.knowledgeId ?? route.params.id
 const knowledge = ref(null)
 const pages = ref([])
 const loading = ref(false)
+const directoryLoading = ref(true)
+const directoryFailed = ref(false)
 const generating = ref(false)
 const currentId = ref(null)
 const current = ref(null)
@@ -263,11 +265,21 @@ let pageRequest = 0
 let pageListRequest = 0
 let requestedPageId
 
-const loadPages = async (isCurrent) => {
+const loadPages = async (isCurrent, quiet) => {
   const request = ++pageListRequest
-  const result = await listWikiPages(knowledgeId)
-  if (!isCurrent() || request !== pageListRequest) return
-  pages.value = result
+  const isListCurrent = () => isCurrent() && request === pageListRequest
+  directoryLoading.value = !quiet
+  try {
+    const result = await listWikiPages(knowledgeId)
+    if (!isListCurrent()) return
+    pages.value = result
+    directoryFailed.value = false
+  } catch (error) {
+    if (isListCurrent() && !quiet) directoryFailed.value = true
+    throw error
+  } finally {
+    if (isListCurrent()) directoryLoading.value = false
+  }
   if (!findPage(currentId.value)) {
     current.value = null
     currentId.value = null
@@ -288,7 +300,7 @@ const loadDocNames = async (isCurrent) => {
 const loadAll = useTabRefresh(async (quiet, isCurrent) => {
   loading.value = !quiet
   try {
-    const results = await Promise.allSettled([loadKnowledge(isCurrent), loadPages(isCurrent), loadDocNames(isCurrent)])
+    const results = await Promise.allSettled([loadKnowledge(isCurrent), loadPages(isCurrent, quiet), loadDocNames(isCurrent)])
     return results.every((result) => result.status === 'fulfilled' && result.value !== false)
   } finally {
     if (isCurrent()) loading.value = false
@@ -325,6 +337,21 @@ const navigatePage = (pageId, focus = false) => {
   }
   return router.push(wikiPageLocation(pageId))
 }
+
+const directory = computed(() => ({
+  entries: pages.value.map((page) => ({
+    id: String(page.id),
+    label: page.title,
+    order: page.sortOrder,
+    failed: page.status === 'FAILED',
+  })),
+  selectedId: String(currentId.value ?? ''),
+  loading: directoryLoading.value,
+  failed: directoryFailed.value,
+  retry: () => loadAll(),
+  select: navigatePage,
+}))
+defineExpose({ directory })
 
 const followWikiLink = (event) => {
   const pageId = event.target.closest?.('a[data-wiki-page]')?.dataset.wikiPage
@@ -402,6 +429,8 @@ const handleDeleteWiki = async () => {
   await deleteWiki(knowledgeId)
   ElMessage.success('Wiki 已删除')
   pageListRequest++
+  directoryLoading.value = false
+  directoryFailed.value = false
   pages.value = []
   await selectPage()
 }
@@ -824,38 +853,6 @@ onBeforeUnmount(() => {
 .wiki-page--tool .edit-btn { min-height: 40px; }
 .wiki-page--tool .wiki-main-card { min-height: 0; }
 
-.wiki-page--tool .wiki-sidebar {
-  width: clamp(150px, 30%, 220px);
-  background: var(--card);
-}
-
-.wiki-page--tool .outline-head {
-  color: var(--t1);
-  font-size: var(--text-heading);
-}
-
-.wiki-page--tool .page-order,
-.wiki-page--tool .page-item.active .page-order {
-  width: auto;
-  color: var(--t3);
-  background: transparent;
-}
-
-.wiki-page--tool .page-item {
-  min-height: 40px;
-  border: 1px solid transparent;
-}
-
-.wiki-page--tool .page-item:focus-visible {
-  outline: 2px solid var(--brand);
-  outline-offset: -2px;
-}
-
-.wiki-page--tool .page-title {
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
 .wiki-page--tool .page-content { padding: clamp(14px, 2vw, 20px); }
 .wiki-page--tool .content-header { flex-wrap: wrap; border: 0; padding: 0; }
 .wiki-page--tool .content-header h3 { overflow-wrap: anywhere; }
@@ -907,8 +904,4 @@ onBeforeUnmount(() => {
   }
 }
 
-@container knowledge-work (max-width: 680px) {
-  .wiki-page--tool .wiki-sidebar { width: 100%; }
-  .wiki-page--tool .outline-head { min-height: 0; }
-}
 </style>

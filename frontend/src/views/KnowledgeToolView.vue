@@ -1,61 +1,58 @@
 <template>
-  <div class="knowledge-tool">
-    <aside class="tool-card tool-library" aria-labelledby="tool-library-title">
-      <div class="tool-library-heading">
-        <h2 id="tool-library-title">知识库</h2>
-        <span v-if="!loading && !failed && knowledgeList.length" class="tool-meta" role="status">{{ matchingKnowledge.length }} 个</span>
-      </div>
-      <p v-if="loading" class="tool-status" role="status">正在加载知识库…</p>
-      <div v-else-if="failed" class="tool-state">
-        <p class="tool-status" role="alert">知识库列表加载失败。</p>
-        <el-button @click="loadKnowledgeList()">重试</el-button>
-      </div>
-      <div v-else-if="!knowledgeList.length" class="tool-state">
-        <p class="tool-status">你还没有可选的知识库。</p>
-        <router-link class="tool-link" :to="{ name: 'KnowledgeList' }">前往我的知识库</router-link>
-      </div>
-      <template v-else>
-        <el-input
-          v-model="search"
-          class="tool-search"
-          type="search"
-          aria-label="按名称搜索知识库"
-          placeholder="搜索知识库"
-          :prefix-icon="Search"
-        />
-        <ul v-if="matchingKnowledge.length" class="tool-library-list" role="list">
-          <li v-for="item in matchingKnowledge" :key="item.id">
-            <button type="button" class="tool-row" :aria-pressed="String(item.id) === knowledgeId" @click="knowledgeId = String(item.id)">
-              <el-icon aria-hidden="true"><Folder /></el-icon>
-              <span class="tool-row-name">{{ item.name }}</span>
-              <el-icon class="tool-row-chevron" aria-hidden="true"><ArrowRight /></el-icon>
-            </button>
-          </li>
-        </ul>
-        <p v-else class="tool-status">没有匹配的知识库。</p>
-      </template>
+  <div class="knowledge-tool" :class="{ 'knowledge-tool--catalog': hasCatalog, 'knowledge-tool--with-content': hasCatalog && selectedKnowledge && !failed }">
+    <aside class="tool-card tool-directory" :aria-label="hasCatalog ? '知识库与目录' : '知识库'">
+      <KnowledgeToolDirectory
+        v-model:search="search"
+        v-bind="directoryProps"
+        @select-knowledge="selectKnowledge"
+        @select-entry="selectEntry"
+        @search="expanded = true"
+        @retry="loadKnowledgeList()"
+      />
     </aside>
 
-    <div v-if="selectedKnowledge" class="tool-card tool-work">
-      <template v-if="tool === 'retrieval'">
+    <div v-if="selectedKnowledge" ref="reader" class="tool-card tool-work">
+      <div v-if="hasCatalog" class="tool-mobile-directory">
+        <el-button :icon="List" aria-haspopup="dialog" @click="directoryOpen = true">知识库与目录</el-button>
+      </div>
+      <component
+        :is="tool === 'wiki' ? WikiView : KnowledgeChunks"
+        v-if="hasCatalog"
+        :key="knowledgeId"
+        ref="activeContent"
+        :knowledge-id="knowledgeId"
+        v-bind="tool === 'wiki' ? { toolLayout: true } : { knowledgeName: selectedKnowledge.name }"
+      />
+      <template v-else>
         <header class="tool-work-header"><h2>{{ selectedKnowledge.name }}</h2></header>
         <KnowledgeRetrievalTest :key="knowledgeId" :knowledge-id="knowledgeId" />
       </template>
-      <KnowledgeChunks v-else-if="tool === 'chunks'" :key="knowledgeId" :knowledge-id="knowledgeId" :knowledge-name="selectedKnowledge.name" />
-      <WikiView v-else :key="knowledgeId" :knowledge-id="knowledgeId" tool-layout />
     </div>
+
+    <el-drawer v-if="hasCatalog" v-model="directoryOpen" append-to-body class="tool-directory-drawer" title="知识库与目录" size="min(360px, 100%)">
+      <KnowledgeToolDirectory
+        v-if="directoryOpen"
+        v-model:search="search"
+        v-bind="directoryProps"
+        @select-knowledge="selectKnowledge"
+        @select-entry="selectEntry"
+        @search="expanded = true"
+        @retry="loadKnowledgeList()"
+      />
+    </el-drawer>
   </div>
 </template>
 
 <script setup>
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue'
-import { ArrowRight, Folder, Search } from '@element-plus/icons-vue'
+import { computed, defineAsyncComponent, onDeactivated, onMounted, ref } from 'vue'
+import { List } from '@element-plus/icons-vue'
 import { listMyKnowledge } from '../api/knowledge'
 import KnowledgeChunks from '../components/KnowledgeChunks.vue'
 import KnowledgeRetrievalTest from '../components/KnowledgeRetrievalTest.vue'
+import KnowledgeToolDirectory from '../components/KnowledgeToolDirectory.vue'
 import { useTabRefresh } from '../utils/tabRefresh'
 
-defineProps({
+const props = defineProps({
   tool: { type: String, required: true },
 })
 
@@ -65,11 +62,38 @@ const knowledgeList = ref([])
 const loading = ref(true)
 const failed = ref(false)
 const search = ref('')
-const matchingKnowledge = computed(() => {
-  const keyword = search.value.trim().toLocaleLowerCase()
-  return knowledgeList.value.filter((item) => item.name?.toLocaleLowerCase().includes(keyword))
-})
+const activeContent = ref(null)
+const reader = ref(null)
+const expanded = ref(true)
+const directoryOpen = ref(false)
+const hasCatalog = computed(() => props.tool !== 'retrieval')
+const directoryProps = computed(() => ({
+  tool: props.tool,
+  items: knowledgeList.value,
+  selectedId: knowledgeId.value,
+  expanded: expanded.value,
+  loading: loading.value,
+  failed: failed.value,
+  directory: activeContent.value?.directory,
+}))
 const selectedKnowledge = computed(() => knowledgeList.value.find((item) => String(item.id) === knowledgeId.value))
+
+const selectKnowledge = (id) => {
+  if (id === knowledgeId.value) {
+    if (hasCatalog.value) expanded.value = !expanded.value
+    return
+  }
+  knowledgeId.value = id
+  expanded.value = true
+}
+
+const selectEntry = (id) => {
+  const directory = activeContent.value?.directory
+  if (!directory) return
+  directory.select(id)
+  directoryOpen.value = false
+  reader.value?.scrollIntoView?.({ block: 'start' })
+}
 
 const loadKnowledgeList = useTabRefresh(async (quiet, isCurrent) => {
   loading.value = !quiet
@@ -79,7 +103,7 @@ const loadKnowledgeList = useTabRefresh(async (quiet, isCurrent) => {
     if (!isCurrent()) return
     knowledgeList.value = result
     if (!selectedKnowledge.value) {
-      knowledgeId.value = result.length ? String(result[0].id) : ''
+      selectKnowledge(result.length ? String(result[0].id) : '')
     }
   } catch {
     if (isCurrent()) failed.value = !quiet
@@ -90,6 +114,7 @@ const loadKnowledgeList = useTabRefresh(async (quiet, isCurrent) => {
 }, ['list'])
 
 onMounted(loadKnowledgeList)
+onDeactivated(() => { directoryOpen.value = false })
 </script>
 
 <style>
@@ -109,20 +134,43 @@ onMounted(loadKnowledgeList)
   box-shadow: var(--shadow-card);
 }
 
-.knowledge-tool .tool-library {
+.knowledge-tool--catalog {
+  grid-template-columns: clamp(204px, 24%, 256px) minmax(0, 1fr);
+}
+
+.knowledge-tool--catalog .tool-directory {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  flex-direction: column;
+  max-block-size: calc(100dvh - var(--topbar-height, 60px) - var(--page-body-padding-top, 18px) - var(--page-body-padding-bottom, 28px));
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.knowledge-tool .tool-library,
+.tool-directory-drawer .tool-library {
   display: grid;
   gap: 12px;
   padding: 16px 12px;
 }
 
-.knowledge-tool .tool-library-heading {
+.tool-directory-drawer .tool-library { padding: 0; }
+.knowledge-tool .tool-library--catalog,
+.tool-directory-drawer .tool-library--catalog {
+  display: flex;
+  flex-direction: column;
+}
+
+:is(.knowledge-tool, .tool-directory-drawer) .tool-library-heading {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-.knowledge-tool .tool-library-heading h2,
+:is(.knowledge-tool, .tool-directory-drawer) .tool-library-heading h2,
 .knowledge-tool .tool-work-header h2,
 .knowledge-tool .tool-section-heading h3 {
   font-size: var(--text-heading);
@@ -130,23 +178,23 @@ onMounted(loadKnowledgeList)
   overflow-wrap: anywhere;
 }
 
-.knowledge-tool .tool-meta {
+:is(.knowledge-tool, .tool-directory-drawer) .tool-meta {
   color: var(--t3);
   font-size: var(--text-muted);
 }
 
-.knowledge-tool .tool-status {
+:is(.knowledge-tool, .tool-directory-drawer) .tool-status {
   font-size: var(--text-body);
   color: var(--t2);
 }
 
-.knowledge-tool .tool-state {
+:is(.knowledge-tool, .tool-directory-drawer) .tool-state {
   display: grid;
   justify-items: start;
   gap: 8px;
 }
 
-.knowledge-tool .tool-link {
+:is(.knowledge-tool, .tool-directory-drawer) .tool-link {
   display: inline-flex;
   align-items: center;
   min-height: 40px;
@@ -154,12 +202,12 @@ onMounted(loadKnowledgeList)
   text-decoration: underline;
 }
 
-.knowledge-tool .tool-search .el-input__wrapper {
+:is(.knowledge-tool, .tool-directory-drawer) .tool-search .el-input__wrapper {
   min-height: 42px;
   border-radius: var(--r3);
 }
 
-.knowledge-tool .tool-library-list {
+:is(.knowledge-tool, .tool-directory-drawer) .tool-library-list {
   display: grid;
   gap: 4px;
   list-style: none;
@@ -167,7 +215,7 @@ onMounted(loadKnowledgeList)
   overflow: auto;
 }
 
-.knowledge-tool .tool-row {
+:is(.knowledge-tool, .tool-directory-drawer) .tool-row {
   position: relative;
   display: flex;
   align-items: center;
@@ -182,11 +230,11 @@ onMounted(loadKnowledgeList)
   cursor: pointer;
 }
 
-.knowledge-tool .tool-row:hover { background: var(--bg); }
-.knowledge-tool .tool-row:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
-.knowledge-tool .tool-row[aria-pressed='true'] { background: var(--tint); color: var(--brand); font-weight: 650; }
-.knowledge-tool .tool-row:active { background: var(--tint-strong); }
-.knowledge-tool .tool-row[aria-pressed='true']::before {
+:is(.knowledge-tool, .tool-directory-drawer) .tool-row:hover { background: var(--tint); }
+:is(.knowledge-tool, .tool-directory-drawer) .tool-row:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+:is(.knowledge-tool, .tool-directory-drawer) .tool-row:is([aria-pressed='true'], [aria-current='true']) { background: var(--tint); color: var(--brand); font-weight: 650; }
+:is(.knowledge-tool, .tool-directory-drawer) .tool-row:active { background: var(--tint-strong); }
+:is(.knowledge-tool, .tool-directory-drawer) .tool-row:is([aria-pressed='true'], [aria-current='true'])::before {
   content: '';
   position: absolute;
   inset: 10px auto 10px 0;
@@ -195,10 +243,12 @@ onMounted(loadKnowledgeList)
   border-radius: var(--r3);
 }
 
-.knowledge-tool .tool-row .el-icon { flex: none; }
-.knowledge-tool .tool-row-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+:is(.knowledge-tool, .tool-directory-drawer) .tool-row .el-icon { flex: none; }
+:is(.knowledge-tool, .tool-directory-drawer) .tool-row-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .knowledge-tool .tool-row-chevron { color: var(--t3); }
 .knowledge-tool .tool-work { container: knowledge-work / inline-size; }
+.knowledge-tool .tool-mobile-directory { display: none; }
+.knowledge-tool .tool-mobile-directory .el-button { min-height: 40px; }
 
 .knowledge-tool .tool-work-header,
 .knowledge-tool .tool-section {
@@ -217,8 +267,20 @@ onMounted(loadKnowledgeList)
   margin-bottom: 8px;
 }
 
-@container (max-width: 570px) {
+@container page-body (max-width: 570px) {
   .knowledge-tool { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-  .knowledge-tool .tool-library-list { max-height: 154px; }
+  .knowledge-tool:not(.knowledge-tool--catalog) .tool-library-list { max-height: 154px; }
+  .knowledge-tool--catalog .tool-directory { position: static; max-block-size: none; }
+  .knowledge-tool--with-content .tool-directory { display: none; }
+  .knowledge-tool--catalog .tool-work { scroll-margin-block-start: var(--topbar-height, 60px); }
+  .knowledge-tool .tool-mobile-directory {
+    display: block;
+    padding: 8px clamp(14px, 2vw, 20px);
+    border-block-end: 1px solid var(--line);
+  }
 }
+
+.tool-directory-drawer .el-drawer__header { margin-bottom: 0; }
+.tool-directory-drawer .el-drawer__body { padding: 12px 16px; }
+.tool-directory-drawer .tool-library--catalog .tool-library-list { max-height: none; }
 </style>
