@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>协作邀请列表 · HTML 原型</title>
+<style>
+/* 内联 frontend/src/style.css 的设计 token，供单文件预览使用。 */
+:root {
+  --brand: #0f766e;
+  --brand-hover: #0d5f58;
+  --brand-pressed: #0b4f49;
+  --tint: rgba(15, 118, 110, 0.08);
+  --tint-strong: rgba(15, 118, 110, 0.14);
+  --t1: #0f172a;
+  --t3: #64748b;
+  --line: rgba(15, 23, 42, 0.07);
+  --preview-card: #ffffff;
+  --el-color-success: #16a34a;
+  --el-color-warning: #f59e0b;
+  --el-color-danger: #ef4444;
+  --r1: 16px;
+  --r2: 12px;
+  --r3: 8px;
+  --r-pill: 999px;
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 4px 16px rgba(16, 24, 40, 0.05);
+  --text-heading: 16px;
+  --text-body: 14px;
+  --text-muted: 12px;
+}
+
+* { box-sizing: border-box; }
+html, body, main { background: transparent; }
+body {
+  margin: 0;
+  color: var(--foreground, var(--t1));
+  font: var(--text-body)/1.5 Inter, system-ui, "Microsoft YaHei", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+main { max-width: 1280px; margin: 16px auto; }
+.toolbar, .list-head, .actions, .people, .meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.toolbar { justify-content: space-between; margin-block-end: 16px; }
+.toolbar h1 { margin: 0; font-size: var(--text-heading); }
+.list {
+  padding: 16px;
+  border-radius: var(--r1);
+  background: var(--preview-card);
+  color: var(--t1);
+  box-shadow: var(--shadow-card);
+}
+.list-head { margin-block-end: 12px; }
+.list-head h2 { margin: 0; font-size: var(--text-body); }
+.count, .status {
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  font-size: var(--text-muted);
+  white-space: nowrap;
+}
+.count, .person { background: var(--tint); color: var(--brand); }
+.rows { display: grid; gap: 8px; padding: 0; margin: 0; list-style: none; }
+.row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r2);
+}
+.avatar {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+}
+.kb { background: var(--brand); color: var(--preview-card); }
+.arrow, time { color: var(--t3); }
+.meta, .actions { flex-wrap: wrap; }
+.meta strong, .copy p { overflow-wrap: anywhere; }
+.accepted { color: color-mix(in srgb, var(--el-color-success) 70%, var(--t1)); }
+.pending { color: color-mix(in srgb, var(--el-color-warning) 60%, var(--t1)); }
+.rejected { color: color-mix(in srgb, var(--el-color-danger) 70%, var(--t1)); }
+.copy p { margin: 4px 0 0; color: var(--t3); }
+.copy time { font-size: var(--text-muted); }
+.actions { justify-content: flex-end; }
+button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r3);
+  background: var(--preview-card);
+  color: var(--t1);
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+button:hover { background: color-mix(in srgb, var(--preview-card), var(--brand) 8%); }
+button:active { background: color-mix(in srgb, var(--preview-card), var(--brand) 14%); }
+button:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.primary {
+  border-color: transparent;
+  background: var(--brand);
+  color: var(--preview-card);
+  font-weight: 600;
+}
+.primary:hover { background: var(--brand-hover); }
+.primary:active { background: var(--brand-pressed); }
+svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+
+@media (max-width: 580px) {
+  .list { padding: 12px; }
+  .row { grid-template-columns: auto minmax(0, 1fr); gap: 8px; }
+  .people { gap: 4px; }
+  .avatar { width: 28px; height: 28px; }
+  .actions { grid-column: 2; justify-content: flex-start; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="toolbar"><h1>协作消息与邀请</h1><button type="button">↻ 刷新消息</button></header>
+  <section class="list" aria-labelledby="list-title">
+    <header class="list-head"><h2 id="list-title">协作邀请列表</h2><span class="count">3</span></header>
+    <ul class="rows">
+      <li class="row">
+        <div class="people" aria-label="发起人指向知识库"><span class="avatar person" title="管理员">管</span><span class="arrow" aria-hidden="true">→</span><span class="avatar kb" title="测试">测</span></div>
+        <div class="copy"><div class="meta"><strong>测试</strong><span class="status accepted">已接受</span></div><p>管理员邀请管理员2协作《测试》，已获得共同编辑权限。</p><time>08/30 04:40</time></div>
+        <div class="actions"><button type="button"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2h5l3 3v9H4zM9 2v4h3M6 8h4m-4 3h4"/></svg>打开知识库</button></div>
+      </li>
+      <li class="row">
+        <div class="people" aria-label="发起人指向知识库"><span class="avatar person" title="管理员2">管</span><span class="arrow" aria-hidden="true">→</span><span class="avatar kb" title="课程资料">课</span></div>
+        <div class="copy"><div class="meta"><strong>课程资料</strong><span class="status pending">待处理</span></div><p>管理员2邀请你协作《课程资料》，接受后可共同编辑。</p><time>08/29 16:20</time></div>
+        <div class="actions"><button type="button" class="primary">接受邀请</button><button type="button">拒绝邀请</button></div>
+      </li>
+      <li class="row">
+        <div class="people" aria-label="发起人指向知识库"><span class="avatar person" title="管理员">管</span><span class="arrow" aria-hidden="true">→</span><span class="avatar kb" title="学习笔记">学</span></div>
+        <div class="copy"><div class="meta"><strong>学习笔记</strong><span class="status rejected">已拒绝</span></div><p>管理员发出的《学习笔记》协作邀请已被拒绝。</p><time>08/28 10:15</time></div>
+        <div class="actions"><button type="button">再次邀请</button></div>
+      </li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
