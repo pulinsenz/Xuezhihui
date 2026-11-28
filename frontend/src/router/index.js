@@ -18,7 +18,7 @@ const routes = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('../views/DashboardView.vue'),
-        meta: { title: '仪表盘' },
+        meta: { title: '仪表盘', keepTab: true },
       },
       { path: '', redirect: '/dashboard' },
       {
@@ -31,7 +31,7 @@ const routes = [
         path: 'knowledge',
         name: 'KnowledgeList',
         component: () => import('../views/KnowledgeListView.vue'),
-        meta: { title: '我的知识库' },
+        meta: { title: '我的知识库', keepTab: true },
       },
       {
         path: 'knowledge/:id',
@@ -46,24 +46,31 @@ const routes = [
         meta: { title: 'AI Wiki' },
       },
       {
+        path: 'vector-chunks',
+        name: 'VectorChunks',
+        component: () => import('../views/KnowledgeToolView.vue'),
+        props: { tool: 'chunks' },
+        meta: { title: '切片查询', keepTab: true },
+      },
+      {
         path: 'wiki',
         name: 'Wiki',
         component: () => import('../views/KnowledgeToolView.vue'),
         props: { tool: 'wiki' },
-        meta: { title: 'AI Wiki' },
+        meta: { title: 'AI Wiki', keepTab: true },
       },
       {
         path: 'retrieval-test',
         name: 'RetrievalTest',
         component: () => import('../views/KnowledgeToolView.vue'),
         props: { tool: 'retrieval' },
-        meta: { title: '检索测试' },
+        meta: { title: '检索测试', keepTab: true },
       },
       {
         path: 'public-knowledge',
         name: 'PublicKnowledge',
         component: () => import('../views/PublicKnowledgeView.vue'),
-        meta: { title: '公开知识库' },
+        meta: { title: '公开知识库', keepTab: true },
       },
       {
         path: 'messages',

@@ -3,10 +3,6 @@
     <!-- 欢迎横幅：弹性流式 clamp，适配 80%~150% 浏览器缩放 -->
     <header class="welcome-card">
       <div class="welcome-main">
-        <div class="welcome-badge">
-          <span class="live-dot" />
-          <span>学智汇学术 AI 平台</span>
-        </div>
         <h2 class="welcome-title">亲爱的<i>「{{ welcomeName }}」</i>，欢迎回来</h2>
         <p class="welcome-line">{{ greetingLine }}</p>
       </div>
@@ -144,6 +140,7 @@ import { listMyKnowledge } from '../api/knowledge'
 import { useAuthStore } from '../stores/auth'
 import { useChatStore } from '../stores/chat'
 import { useMessageStore } from '../stores/messages'
+import { useTabRefresh } from '../utils/tabRefresh'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -153,7 +150,7 @@ const messageStore = useMessageStore()
 const loading = ref(false)
 const knowledgeList = ref([])
 
-const loadOverview = async () => {
+const loadOverview = useTabRefresh(async (quiet, isCurrent) => {
   if (!authStore.isLogin) {
     knowledgeList.value = []
     chat.sessions = []
@@ -161,27 +158,24 @@ const loadOverview = async () => {
     return
   }
 
-  loading.value = true
+  loading.value = !quiet
   try {
-    await Promise.allSettled([chat.loadSessions(), messageStore.loadInvitations(), loadKnowledge()])
+    const results = await Promise.allSettled([
+      chat.loadSessions(),
+      messageStore.loadInvitations(),
+      listMyKnowledge().then((list) => {
+        if (isCurrent()) knowledgeList.value = list
+      }),
+    ])
+    return results.every((result) => result.status === 'fulfilled')
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
-}
-
-const loadKnowledge = async () => {
-  try {
-    knowledgeList.value = await listMyKnowledge()
-  } catch {
-    knowledgeList.value = []
-  }
-}
+}, ['list'])
 
 watch(
   () => authStore.isLogin,
-  () => {
-    loadOverview().catch(() => {})
-  },
+  () => loadOverview(),
   { immediate: true },
 )
 
@@ -279,26 +273,6 @@ const formatTime = (epochSec) => {
 
 .welcome-main {
   min-width: 0;
-}
-
-.welcome-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: var(--text-muted);
-  font-weight: 600;
-  color: var(--brand);
-  background: var(--tint);
-  padding: 2px 10px;
-  border-radius: var(--r-pill);
-  margin-bottom: 6px;
-}
-
-.live-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--el-color-success);
 }
 
 .welcome-title {

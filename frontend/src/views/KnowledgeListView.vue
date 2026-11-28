@@ -1,12 +1,8 @@
 <template>
   <div class="kb-list-page">
-    <div class="page-header">
-      <div class="header-left">
-        <h2 class="page-title">我的知识库</h2>
-      </div>
-      <!-- 空态时隐藏右上按钮，避免与空态"立即创建"同屏双主按钮 -->
+    <!-- 空态时隐藏右上按钮，避免与空态"立即创建"同屏双主按钮 -->
+    <div v-if="loading || list.length > 0" class="page-header">
       <el-button
-        v-if="loading || list.length > 0"
         type="primary"
         :icon="Plus"
         class="create-btn"
@@ -148,7 +144,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { onDeactivated, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete, Edit, Plus, Star, View } from '@element-plus/icons-vue'
@@ -161,6 +157,7 @@ import {
   updateKnowledge,
   uploadCover,
 } from '../api/knowledge'
+import { useTabRefresh } from '../utils/tabRefresh'
 
 const router = useRouter()
 const route = useRoute()
@@ -175,14 +172,15 @@ const editDialogVisible = ref(false)
 const editing = ref(false)
 const editForm = reactive({ id: null, name: '', description: '', cover: '', isPublic: 0 })
 
-const loadList = async () => {
-  loading.value = true
+const loadList = useTabRefresh(async (quiet, isCurrent) => {
+  loading.value = !quiet
   try {
-    list.value = await listMyKnowledge()
+    const result = await listMyKnowledge()
+    if (isCurrent()) list.value = result
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
-}
+}, ['list'])
 
 const openCreateDialog = () => {
   createForm.name = ''
@@ -272,14 +270,22 @@ const handleDelete = async (kb) => {
 
 const goDetail = (id) => router.push(`/knowledge/${id}`)
 
-// 仪表盘"新建知识库"磁贴经 ?new=1 直达：自动弹新建框并清掉 query，刷新后不重复弹
-onMounted(() => {
-  loadList()
-  if (route.query.new) {
+onMounted(loadList)
+onDeactivated(() => {
+  createDialogVisible.value = false
+  editDialogVisible.value = false
+})
+
+// 仪表盘的快捷入口也可能进入已经挂载的知识库页。
+watch(
+  () => route.name === 'KnowledgeList' && route.query.new,
+  (open) => {
+    if (!open) return
     openCreateDialog()
     router.replace({ path: '/knowledge' })
-  }
-})
+  },
+  { immediate: true },
+)
 </script>
 
 <style scoped>
@@ -292,22 +298,7 @@ onMounted(() => {
 
 .page-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.header-left {
-  display: flex;
-  flex-direction: column;
-}
-
-.page-title {
-  margin: 0;
-  font-size: var(--text-heading);
-  font-weight: 700;
-  color: var(--t1);
+  justify-content: flex-end;
 }
 
 .create-btn {

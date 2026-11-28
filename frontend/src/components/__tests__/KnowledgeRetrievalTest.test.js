@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { flushPromises, shallowMount } from '@vue/test-utils'
 import KnowledgeRetrievalTest from '../KnowledgeRetrievalTest.vue'
 import { testKnowledgeRetrieval } from '../../api/knowledge'
@@ -6,15 +6,8 @@ import { testKnowledgeRetrieval } from '../../api/knowledge'
 vi.mock('../../api/knowledge', () => ({ testKnowledgeRetrieval: vi.fn() }))
 
 let wrapper
-beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', class {
-    observe() {}
-    disconnect() {}
-  })
-})
 afterEach(() => {
   wrapper?.unmount()
-  vi.unstubAllGlobals()
   vi.resetAllMocks()
 })
 
@@ -25,7 +18,6 @@ function mountRetrieval() {
     global: {
       stubs: {
         ElButton: false,
-        ElEmpty: true,
         ElInput: {
           props: ['modelValue'],
           emits: ['update:modelValue'],
@@ -54,7 +46,12 @@ it('提交当前库的问题，展示同文不同来源及其排名', async () =
 
   expect(testKnowledgeRetrieval).toHaveBeenCalledWith('12', '奖学金条件')
   expect(wrapper.get('[role="status"]').text()).toContain('命中 2 条')
-  expect(wrapper.findAll('li').map((hit) => hit.get('h3').text())).toEqual(['现行办法.pdf', '历史办法.pdf'])
+  expect(wrapper.findAll('.retrieval-source').map((source) => source.text())).toEqual(['现行办法.pdf', '历史办法.pdf'])
+  const [firstResult, secondResult] = wrapper.findAll('details')
+  expect(firstResult.element.open).toBe(true)
+  expect(secondResult.element.open).toBe(false)
+  await secondResult.get('summary').trigger('click')
+  expect(secondResult.element.open).toBe(true)
   expect(wrapper.text()).toContain('关键词第 1 名')
   expect(wrapper.text()).toContain('向量第 2 名')
 })

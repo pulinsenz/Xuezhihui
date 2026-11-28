@@ -363,6 +363,7 @@ import {
   uploadCover,
   uploadDoc,
 } from '../api/knowledge'
+import { markKnowledgeChanged } from '../utils/tabRefresh'
 
 const route = useRoute()
 const router = useRouter()
@@ -606,6 +607,7 @@ const handleReVectorize = async (row) => {
         const done = task?.status === 'SUCCESS' || task?.status === 'FAILED'
         if (done) {
           clearInterval(pollTimer)
+          if (task.status === 'SUCCESS') markKnowledgeChanged('docs')
           await loadDocs()
           if (task.status === 'FAILED') {
             ElMessage.warning('向量化失败：' + (task.message || '未知原因'))
@@ -709,10 +711,11 @@ const pollTasks = (taskIds) =>
       for (const id of [...remaining]) {
         try {
           const task = await getTask(id)
-          if (task?.status === 'SUCCESS' || task?.status === 'FAILED') {
-            remaining.delete(id)
+          if ((task?.status === 'SUCCESS' || task?.status === 'FAILED') && remaining.delete(id)) {
             if (task.status === 'FAILED')
               failed.push(task.message || '未知原因')
+            else
+              markKnowledgeChanged('docs')
           }
         } catch {
           remaining.delete(id)

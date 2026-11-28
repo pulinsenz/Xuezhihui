@@ -30,6 +30,10 @@
           <el-icon><Compass /></el-icon>
           <span>公开知识库</span>
         </el-menu-item>
+        <el-menu-item index="/vector-chunks" aria-label="切片查询">
+          <el-icon><Document /></el-icon>
+          <template #title>切片查询</template>
+        </el-menu-item>
         <el-menu-item index="/wiki" aria-label="AI Wiki">
           <el-icon><Reading /></el-icon>
           <template #title>AI Wiki</template>
@@ -91,7 +95,6 @@
                 </el-avatar>
                 <span class="user-copy">
                   <strong>{{ authStore.user?.userName || authStore.user?.userAccount }}</strong>
-                  <small>{{ roleLabel(authStore.user?.userRole) }}</small>
                 </span>
                 <el-icon class="chevron"><ArrowDown /></el-icon>
               </span>
@@ -113,7 +116,16 @@
       </el-header>
 
       <el-main class="page-body">
-        <router-view />
+        <router-view v-slot="{ Component, route: pageRoute }">
+          <KeepAlive v-if="authStore.isLogin" :key="authStore.user?.id" :max="6">
+            <component :is="Component" v-if="pageRoute.meta.keepTab" :key="pageRoute.name" />
+          </KeepAlive>
+          <component
+            :is="Component"
+            v-if="!pageRoute.meta.keepTab"
+            :key="pageRoute.name === 'KnowledgeWiki' ? pageRoute.params.id : undefined"
+          />
+        </router-view>
       </el-main>
     </el-container>
   </el-container>
@@ -129,6 +141,7 @@ import {
   ChatDotRound,
   Collection,
   Compass,
+  Document,
   Expand,
   Fold,
   Folder,
@@ -140,7 +153,6 @@ import {
   User,
 } from '@element-plus/icons-vue'
 import { useAuthStore } from '../stores/auth'
-import { roleLabel } from '../utils/roles'
 import { useMessageStore } from '../stores/messages'
 import logo from '../assets/logo.png'
 
@@ -157,6 +169,7 @@ const routeInfo = {
   '/chat': { title: 'AI 对话' },
   '/knowledge': { title: '我的知识库' },
   '/public-knowledge': { title: '公开知识库' },
+  '/vector-chunks': { title: '切片查询' },
   '/wiki': { title: 'AI Wiki' },
   '/retrieval-test': { title: '检索测试' },
   '/messages': { title: '消息通知' },
@@ -178,6 +191,7 @@ const activeMenu = computed(() => {
   if (path.startsWith('/public-knowledge')) return '/public-knowledge'
   if (path.startsWith('/settings')) return '/settings'
   if (path.startsWith('/chat')) return '/chat'
+  if (route.name === 'VectorChunks') return '/vector-chunks'
   if (route.name === 'Wiki') return '/wiki'
   if (route.name === 'RetrievalTest') return '/retrieval-test'
   return '/dashboard'
@@ -399,6 +413,7 @@ onUnmounted(() => {
 }
 
 .content-shell {
+  --topbar-height: 60px;
   min-width: 0;
 }
 
@@ -407,7 +422,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   gap: 20px;
-  height: 60px;
+  height: var(--topbar-height);
   padding: 0 20px;
   background: var(--card);
   border-bottom: 1px solid var(--line);
@@ -487,12 +502,6 @@ onUnmounted(() => {
   color: var(--t1);
 }
 
-.user-copy small {
-  margin-top: 2px;
-  font-size: var(--text-muted);
-  color: var(--t3);
-}
-
 .chevron {
   color: var(--t4);
   font-size: 12px;
@@ -514,14 +523,20 @@ onUnmounted(() => {
 }
 
 .page-body {
+  --page-body-padding-top: 18px;
+  --page-body-padding-bottom: 28px;
   min-width: 0;
-  padding: 18px 24px 28px;
+  padding: var(--page-body-padding-top) 24px var(--page-body-padding-bottom);
   container-type: inline-size;
 }
 
 @media (max-width: 1024px) {
   .topbar { gap: 8px; padding-inline: 12px; }
-  .page-body { padding: 14px 12px 20px; }
+  .page-body {
+    --page-body-padding-top: 14px;
+    --page-body-padding-bottom: 20px;
+    padding-inline: 12px;
+  }
 }
 
 @media (max-width: 640px) {
@@ -533,5 +548,9 @@ onUnmounted(() => {
   .collapse-btn { top: 8px; right: 12px; bottom: auto; left: auto; }
   .side-menu.el-menu--collapse { display: none; }
   .user-copy strong { max-width: 88px; }
+  .page-body:has(.wiki-page) {
+    --wiki-outline-top: var(--topbar-height);
+    overflow: visible;
+  }
 }
 </style>

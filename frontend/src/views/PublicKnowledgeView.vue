@@ -1,9 +1,6 @@
 <template>
   <div class="public-kb-page">
     <div class="page-header">
-      <div class="header-left">
-        <h2 class="page-title">公开知识广场</h2>
-      </div>
       <div class="header-tools">
         <el-input
           v-model="keyword"
@@ -102,31 +99,39 @@ import { ElMessage } from 'element-plus'
 import { CopyDocument, Refresh, Search, Star, View } from '@element-plus/icons-vue'
 import KnowledgeCover from '../components/KnowledgeCover.vue'
 import { copyKnowledge, favoriteKnowledge, listPublicKnowledge, unfavoriteKnowledge } from '../api/knowledge'
+import { useTabRefresh } from '../utils/tabRefresh'
 
 const router = useRouter()
 const list = ref([])
 const loading = ref(false)
 const keyword = ref('')
+let submittedKeyword
 
-const loadList = async () => {
-  loading.value = true
+const refreshList = useTabRefresh(async (quiet, isCurrent) => {
+  loading.value = !quiet
   try {
-    list.value = await listPublicKnowledge(keyword.value.trim() || undefined)
+    const result = await listPublicKnowledge(submittedKeyword)
+    if (isCurrent()) list.value = result
   } finally {
-    loading.value = false
+    if (isCurrent()) loading.value = false
   }
+}, ['list'])
+
+const loadList = () => {
+  submittedKeyword = keyword.value.trim() || undefined
+  return refreshList()
 }
 
 const handleFavorite = async (kb) => {
   await favoriteKnowledge(kb.id)
   ElMessage.success('已收藏，可在「知识库」列表中查看')
-  loadList()
+  refreshList(true)
 }
 
 const handleUnfavorite = async (kb) => {
   await unfavoriteKnowledge(kb.id)
   ElMessage.success('已取消收藏')
-  loadList()
+  refreshList(true)
 }
 
 const handleCopy = async (kb) => {
@@ -154,22 +159,7 @@ onMounted(loadList)
 
 .page-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.header-left {
-  display: flex;
-  flex-direction: column;
-}
-
-.page-title {
-  margin: 0;
-  font-size: var(--text-heading);
-  font-weight: 700;
-  color: var(--t1);
+  justify-content: flex-end;
 }
 
 .header-tools {
